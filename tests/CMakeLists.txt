@@ -17,6 +17,7 @@ target_sources(DevilDJTests PRIVATE
     matcher/MatcherSmokeTests.cpp
     ui/UiSmokeTests.cpp
     util/GarbageQueueTests.cpp
+    util/RealtimeGuardTests.cpp
     util/SpscQueueTests.cpp
     util/TripleBufferTests.cpp
     util/UtilSmokeTests.cpp)

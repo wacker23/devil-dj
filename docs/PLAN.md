@@ -78,7 +78,7 @@ Goal: a repository where an empty JUCE window builds locally and in CI, with the
   `SpscQueue<T, Capacity>` (power-of-two ring, acquire/release atomics, `tryPush`, `tryPop`), `TripleBuffer<T>` (writer publishes, reader gets latest without blocking), `GarbageQueue` (audio thread pushes pointers to release; a timer thread frees them).
   Done when: unit tests incl. a 2-thread stress test (10M items, no loss, no reorder) pass in Release.
 
-- [ ] **P0-09 RealtimeGuard** (`src/util/RealtimeGuard.*`)
+- [x] **P0-09 RealtimeGuard** (`src/util/RealtimeGuard.*`)
   Debug-only global `operator new/delete` override that checks a `thread_local bool inRealtimeContext` and calls `jassertfalse` + logs a stack trace once. `ScopedRealtimeContext` RAII sets the flag.
   Done when: a test that allocates inside the scope triggers the guard; normal code is unaffected; Release builds compile it out.
 
