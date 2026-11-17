@@ -1,19 +1,29 @@
+# app_core: app code that tests also use. INTERFACE library = compiled into each executable that links it
+# (JUCE modules can only be compiled once per executable; see src/engine/CMakeLists.txt).
+add_library(devildj_app_core INTERFACE)
+add_library(devildj::app_core ALIAS devildj_app_core)
+target_sources(devildj_app_core INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/Settings.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Settings.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SettingsKeys.h")
+target_include_directories(devildj_app_core INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(devildj_app_core INTERFACE juce::juce_data_structures)
+
 juce_add_gui_app(DevilDJ
     PRODUCT_NAME "Devil-DJ"
     COMPANY_NAME "Devil-DJ"
     VERSION ${PROJECT_VERSION})
 
 target_sources(DevilDJ PRIVATE
-    DebugMenu.cpp
-    DebugMenu.h
+    AppMenu.cpp
+    AppMenu.h
+    AudioSettingsWindow.cpp
+    AudioSettingsWindow.h
     Main.cpp
     MainComponent.cpp
     MainComponent.h
     MainWindow.cpp
-    MainWindow.h
-    Settings.cpp
-    Settings.h
-    SettingsKeys.h)
+    MainWindow.h)
 
 target_compile_definitions(DevilDJ PRIVATE
     JUCE_WEB_BROWSER=0
@@ -23,7 +33,10 @@ target_compile_definitions(DevilDJ PRIVATE
 
 target_link_libraries(DevilDJ
     PRIVATE
+        devildj::app_core
+        devildj::engine
         juce::juce_gui_basics
+        juce::juce_audio_utils
         TagLib::tag
         devildj::util
         devildj::compile_options

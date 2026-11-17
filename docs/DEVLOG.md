@@ -11,6 +11,12 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-18 · P1-01 Audio device manager
+- What changed: `engine/AudioDeviceService` owns `juce::AudioDeviceManager`: lists device types (on this PC: Windows Audio, Windows Audio (Exclusive Mode), Windows Audio (Low Latency Mode), DirectSound), devices, sample rates, buffer sizes; `setDeviceType/OutputDevice/SampleRate/BufferSize` apply live and reject unsupported values; state saved/restored as XML (falls back to the default device if the saved one is gone or the XML is unreadable); `getStatus()` with buffer/driver/total latency in ms, xruns (JUCE: driver count, or callbacks over the buffer time) and audio CPU load; every change logged. `setAudioCallback()` is where the engine plugs in (P1-02). App: always-visible **Options → Audio settings…** opens a temporary dialog (JUCE device selector + live latency/xrun/CPU line; full page in P1-19); the choice is stored in the new `audioDeviceState` setting. Debug menu moved into `AppMenu`.
+- Build: engine and app_core are now INTERFACE libraries whose sources compile into each executable (app, tests), because JUCE modules can only be compiled once per executable. Replaces the P0-11 workaround of listing Settings.cpp in the tests.
+- Tests / measurements: 8 tests against a fake device type (no hardware needed; CI-safe): default device, live switching while audio flows to the same callback, invalid choices rejected, save/restore, fallback, latency maths, xruns counted when the callback overruns (12 ms in a 5.3 ms buffer), status text keeps non-ASCII names. Repeated 10×. ctest 83/83 Debug, 77/77 Release, 0 warnings. Manual on this PC: dialog shows Realtek speakers, 48 kHz, 512 samples, 21.3 ms total latency, 0 xruns; switched to Low Latency Mode live; restart reopened Low Latency Mode (owner's setting reset to default afterwards).
+- Notes / follow-ups: fixed a bug found while testing: `juce::String::formatted("%s", utf8)` garbles text on Windows (it uses wide printf) — don't use `%s` with `formatted`. Realtek's driver offers only 512 samples in Low Latency Mode. With a dropdown open, JUCE treats the window's close button as "dismiss the dropdown" (expected).
+
 ## 2026-11-18 · Phase 0 gate passed
 - CI green on `main` (run 44159622127). The CI-built Release exe (artifact from 6cb119d) opens its window on the owner's laptop, showing JUCE 8.0.15 | TagLib 2.3.1.
 - Next: Phase 1, task P1-01 (audio device manager). Needed soon: D4 laptop specs for the P1-08 / P1-20 measurements.

@@ -11,11 +11,10 @@ target_sources(DevilDJTests PRIVATE
     analysis/TestSignalTests.cpp
     app/AppSmokeTests.cpp
     app/SettingsTests.cpp
-    # App code under test, compiled in directly (JUCE modules can't be linked into two targets; see DEVLOG P0-11).
-    ${PROJECT_SOURCE_DIR}/src/app/Settings.cpp
     beatmaker/BeatMakerSmokeTests.cpp
     codebeat/CodeBeatSmokeTests.cpp
     dsp/DspSmokeTests.cpp
+    engine/AudioDeviceServiceTests.cpp
     engine/EngineSmokeTests.cpp
     library/LibrarySmokeTests.cpp
     matcher/MatcherSmokeTests.cpp
@@ -29,9 +28,7 @@ target_sources(DevilDJTests PRIVATE
     util/TripleBufferTests.cpp
     util/UtilSmokeTests.cpp)
 
-target_include_directories(DevilDJTests PRIVATE
-    "${PROJECT_SOURCE_DIR}/src/app"
-    "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(DevilDJTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 
 set(DEVILDJ_TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/generated")
 
@@ -42,6 +39,8 @@ target_compile_definitions(DevilDJTests PRIVATE
 
 target_link_libraries(DevilDJTests PRIVATE
     Catch2::Catch2WithMain
+    devildj::app_core
+    devildj::engine
     juce::juce_core
     juce::juce_data_structures
     juce::juce_audio_formats

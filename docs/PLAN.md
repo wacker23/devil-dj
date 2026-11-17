@@ -108,7 +108,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
 
 ### Audio I/O and engine core
 
-- [ ] **P1-01 Audio device manager**
+- [x] **P1-01 Audio device manager**
   `engine/AudioDeviceService` wrapping `juce::AudioDeviceManager`: lists device types (Windows Audio, Windows Audio Exclusive, Low Latency, DirectSound), sample rate, buffer size; saves/restores the choice; reports xruns (callback time > buffer time) and current latency.
   Done when: settings page can switch devices without restart; selected device persists.
 

@@ -1,8 +1,10 @@
-#include "DebugMenu.h"
+#include "AppMenu.h"
+#include "AudioSettingsWindow.h"
 #include "MainWindow.h"
 #include "Settings.h"
 #include "SettingsKeys.h"
 
+#include "engine/AudioDeviceService.h"
 #include "util/CrashHandler.h"
 #include "util/Log.h"
 
@@ -44,13 +46,13 @@ public:
 
         mainWindow = std::make_unique<MainWindow>(getApplicationName(), *settings);
 
+        startAudio();
+
         const bool showDebugMenu =
             kDebugBuild || commandLine.contains("--debug-menu") || settings->get(keys::showDebugMenu);
-        if (showDebugMenu)
-        {
-            debugMenu = std::make_unique<DebugMenu>(logDirectory());
-            mainWindow->setMenuBar(debugMenu.get());
-        }
+        menu = std::make_unique<AppMenu>(logDirectory(), showDebugMenu);
+        menu->onAudioSettings = [this] { showAudioSettingsWindow(*audio, mainWindow.get()); };
+        mainWindow->setMenuBar(menu.get());
     }
 
     void shutdown() override
@@ -58,7 +60,8 @@ public:
         if (mainWindow != nullptr)
             mainWindow->setMenuBar(nullptr);
         mainWindow = nullptr;
-        debugMenu = nullptr;
+        menu = nullptr;
+        audio = nullptr;
         settings = nullptr;
         juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
 
@@ -98,10 +101,23 @@ private:
             util::logWarning("Diagnostics incomplete: log={} crashHandler={}", logging, crashHandler);
     }
 
+    // Opens the saved audio device (or the default one) and saves the user's choice whenever it changes.
+    void startAudio()
+    {
+        audio = std::make_unique<engine::AudioDeviceService>();
+        audio->initialise(settings->get(keys::audioDeviceState));
+        audio->onDeviceChanged = [this]
+        {
+            if (const auto state = audio->getStateXml(); state.isNotEmpty())
+                settings->set(keys::audioDeviceState, state);
+        };
+    }
+
     juce::LookAndFeel_V4 lookAndFeel;
     std::unique_ptr<Settings> settings;
+    std::unique_ptr<engine::AudioDeviceService> audio;
     std::unique_ptr<MainWindow> mainWindow;
-    std::unique_ptr<DebugMenu> debugMenu;
+    std::unique_ptr<AppMenu> menu;
 };
 
 } // namespace devildj::app
