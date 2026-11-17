@@ -50,11 +50,11 @@ Goal: a repository where an empty JUCE window builds locally and in CI, with the
   Create the folder layout from `CLAUDE.md`, `.gitignore` (build/, out/, .vs/, *.user), `.gitattributes` (LF for text, binary for audio), `.clang-format`, `.editorconfig`, `README.md`, `docs/DEVLOG.md`.
   Done when: tree matches `CLAUDE.md`; clang-format runs clean on an example file.
 
-- [ ] **P0-02 CMake + presets**
-  Top-level `CMakeLists.txt` (C++20, MSVC flags `/W4 /permissive- /utf-8 /MP`), `CMakePresets.json` with configure preset `windows-x64` (generator "Visual Studio 17 2022", arch x64, binaryDir `build/windows-x64`) and build/test presets `windows-x64-debug` / `windows-x64-release`. `cmake/Dependencies.cmake` pulls JUCE with `FetchContent` pinned to the latest JUCE 8.0.x release tag.
+- [x] **P0-02 CMake + presets**
+  Top-level `CMakeLists.txt` (C++20, MSVC flags `/W4 /permissive- /utf-8 /MP`), `CMakePresets.json` with configure preset `windows-x64` (generator "Visual Studio 18 2026" — owner has VS 2026, arch x64, binaryDir `build/windows-x64`) and build/test presets `windows-x64-debug` / `windows-x64-release`. `cmake/Dependencies.cmake` pulls JUCE with `FetchContent` pinned to the latest JUCE 8.0.x release tag.
   Done when: `cmake --preset windows-x64` and both build presets succeed on a clean machine.
 
-- [ ] **P0-03 App target**
+- [x] **P0-03 App target**
   `src/app/Main.cpp` with `juce::JUCEApplication`, `juce_add_gui_app(DevilDJ ...)` (PRODUCT_NAME "Devil-DJ"), a resizable `MainWindow` with an empty `MainComponent`, dark default look and feel, window size/position persisted.
   Done when: the exe opens a window, remembers its size after restart.
 

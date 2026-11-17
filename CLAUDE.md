@@ -30,7 +30,7 @@ Everything must be playable **without a DJ controller**: keyboard, mouse, touchs
 5. Tick the checkbox in `docs/PLAN.md`, append to `docs/DEVLOG.md`, commit with message `P1-07: <summary>`.
 6. Stop and ask the owner before: adding a dependency, changing a public interface in `ARCHITECTURE.md`, changing the threading model, or anything listed under "Open decisions" in `PLAN.md`.
 
-## Build and test (Windows, Visual Studio 2022)
+## Build and test (Windows, Visual Studio 2026)
 
 ```powershell
 # configure (first time or after CMake changes)
@@ -46,7 +46,7 @@ cd js/codebeat; node --test
 .\build\windows-x64\src\app\DevilDJ_artefacts\Debug\Devil-DJ.exe
 ```
 
-Requirements: Visual Studio 2022 (Desktop C++ workload), CMake ≥ 3.25, Git, Node.js ≥ 20 (only for JS tests). Dependencies come from CMake `FetchContent` and vcpkg manifest mode (`vcpkg.json`).
+Requirements: Visual Studio 2026 (Desktop C++ workload; its bundled CMake 4.2+ is needed for the "Visual Studio 18 2026" generator), Git, Node.js ≥ 20 (only for JS tests). Dependencies come from CMake `FetchContent` and vcpkg manifest mode (`vcpkg.json`).
 
 ## Repository map
 

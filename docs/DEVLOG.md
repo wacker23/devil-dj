@@ -11,6 +11,16 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-18 · P0-03 App target
+- What changed: `src/app/` Main.cpp (JUCEApplication, single instance, dark LookAndFeel_V4), MainWindow (resizable, native title bar, min 960×600, saves/restores window state), MainComponent (empty, draws the name). Window state lives in `%APPDATA%\Devil-DJ\settings.xml` via a plain `juce::PropertiesFile` until P0-11 wraps it.
+- Tests / measurements: launched Debug exe, resized to 1100×700 at (150,120), closed, relaunched → restored at 1100×699 (1 px frame rounding). Exits with code 0.
+- Notes / follow-ups: exe path matches CLAUDE.md: `build\windows-x64\srcpp\DevilDJ_artefacts\Debug\Devil-DJ.exe`.
+
+## 2026-11-18 · P0-02 CMake + presets
+- What changed: top-level CMakeLists (C++20, `devildj::compile_options` with `/W4 /permissive- /utf-8 /MP`, `DEVILDJ_WARNINGS_AS_ERRORS` option for CI), CMakePresets (configure `windows-x64`, build + test presets debug/release), `cmake/Dependencies.cmake` with JUCE 8.0.15 via FetchContent (shallow).
+- Tests / measurements: configure 95 s first time (JUCE download + juceaide). Debug and Release build with 0 warnings. MSVC 19.50 (VS 2026 Community), CMake 4.1.1 bundled, Windows SDK 10.0.26100.
+- Notes / follow-ups: generator is "Visual Studio 18 2026" instead of 2022 (owner's machine). CI (P0-06) needs a runner image with VS 2026, or a second preset for 2022. VS's CMake isn't on PATH by default; use a Developer PowerShell or add `...\Common7\IDE\CommonExtensions\Microsoft\CMake\CMakein`.
+
 ## 2026-11-18 · P0-01 Repository skeleton
 - What changed: folder tree from CLAUDE.md (src/*, js/codebeat, tests, tools, installer, cmake, docs/reports; empty folders hold `.gitkeep`), `.gitignore`, `.gitattributes` (LF text, binary audio), `.editorconfig`, `.clang-format` (LLVM base, Allman braces, 4-space, 120 cols), `src/util/StyleExample.h`.
 - Tests / measurements: `clang-format --dry-run --Werror src/util/StyleExample.h` passes (clang-format 23.1.5 from `pip install --user clang-format`; dev tool only, not shipped).
