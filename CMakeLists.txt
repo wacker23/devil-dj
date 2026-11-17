@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.25)
 
+# Link the MSVC C++ runtime statically (/MT, /MTd) so Devil-DJ.exe runs on machines without the
+# Visual C++ Redistributable. Must match the vcpkg triplet (x64-windows-static) and be set before project().
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 project(DevilDJ VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)

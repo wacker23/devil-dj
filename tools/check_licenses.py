@@ -143,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parent.parent,
                         help="repository root (default: parent of tools/)")
     parser.add_argument("--vcpkg-installed", type=Path, default=None,
-                        help="vcpkg installed tree for the target triplet, e.g. build/windows-x64/vcpkg_installed/x64-windows-static-md")
+                        help="vcpkg installed tree for the target triplet, e.g. build/windows-x64/vcpkg_installed/x64-windows-static")
     args = parser.parse_args(argv)
 
     try:

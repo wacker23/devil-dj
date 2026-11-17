@@ -11,6 +11,11 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-18 · P0-06 fix: exe didn't start on the owner's laptop
+- Cause: the exe used the dynamic MSVC runtime (MSVCP140.dll, VCRUNTIME140.dll, VCRUNTIME140_1.dll, UCRT). The dev PC has them via Visual Studio; a normal laptop may not, or has an older version than the VS 2026 toolset needs, so Windows refused to load the exe before any code (and logging) ran.
+- Fix: static runtime everywhere — `CMAKE_MSVC_RUNTIME_LIBRARY = MultiThreaded$<$<CONFIG:Debug>:Debug>` and vcpkg triplet `x64-windows-static`. Release exe now imports only Windows system DLLs; 5.4 MB (was 4.9 MB). New CI step fails if the exe imports msvcp/vcruntime/concrt/ucrtbase/api-ms-win-crt-*.
+- Tests / measurements: fresh configure with warnings as errors; Debug + Release 0 warnings; ctest 75/75 and 69/69; Release exe launches and logs.
+
 ## 2026-11-18 · P0-06 CI
 - What changed: `.github/workflows/windows.yml` on `windows-latest` for pushes to `main`, PRs and manual runs: Python 3.11 + numpy/soundfile, vcpkg cloned at the manifest's `builtin-baseline` with a cached binary cache, cached FetchContent dir (JUCE), configure with the `windows-x64` preset (generator picked from the installed Visual Studio via vswhere: VS 2026 or 2022) and `DEVILDJ_WARNINGS_AS_ERRORS=ON`, build Debug + Release, ctest both (generates test signals, runs licence check), explicit `tools/check_licenses.py`, upload `Devil-DJ.exe` (Release) as an artifact.
 - Tests / measurements: first run on `main` (5066f11, run 44156795064) green in 7 min 36 s including building all vcpkg ports from scratch; artifact `Devil-DJ-<sha>-windows-x64` 2.3 MB zip.

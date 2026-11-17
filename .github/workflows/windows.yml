@@ -83,7 +83,20 @@ jobs:
         run: ctest --preset windows-x64-release
 
       - name: Licence check
-        run: python tools/check_licenses.py --vcpkg-installed build/windows-x64/vcpkg_installed/x64-windows-static-md
+        run: python tools/check_licenses.py --vcpkg-installed build/windows-x64/vcpkg_installed/x64-windows-static
+
+      - name: Exe runs without the VC++ Redistributable
+        shell: pwsh
+        run: |
+          # Static CRT: the exe must not import the MSVC runtime DLLs (MSVCP140, VCRUNTIME140*, UCRT api-ms-win-crt-*).
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $dumpbin = Get-ChildItem (Join-Path $vs 'VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe') | Select-Object -First 1
+          $deps = & $dumpbin.FullName /nologo /dependents 'build\windows-x64\src\app\DevilDJ_artefacts\Release\Devil-DJ.exe' |
+            ForEach-Object { $_.Trim() } | Where-Object { $_ -match '\.dll$' }
+          $deps | ForEach-Object { Write-Host "  imports $_" }
+          $bad = $deps | Where-Object { $_ -match '^(msvcp|vcruntime|concrt|ucrtbase|api-ms-win-crt-)' }
+          if ($bad) { throw "Devil-DJ.exe needs the VC++ Redistributable: $($bad -join ', ')" }
 
       - name: Upload Release exe
         uses: actions/upload-artifact@v4
