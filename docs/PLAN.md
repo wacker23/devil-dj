@@ -86,7 +86,7 @@ Goal: a repository where an empty JUCE window builds locally and in CI, with the
   `util/Log` (async file logger to `%LOCALAPPDATA%\Devil-DJ\logs`, rotating, never called from audio thread), unhandled exception filter that writes a minidump (`MiniDumpWriteDump`) next to the logs.
   Done when: a debug menu "Crash test" produces a `.dmp` and a log line.
 
-- [ ] **P0-11 Settings store**
+- [x] **P0-11 Settings store**
   `app/Settings` wrapping `juce::PropertiesFile` in `%APPDATA%\Devil-DJ\settings.xml`, typed getters/setters, change listeners.
   Done when: values survive restart; unit test for defaults.
 

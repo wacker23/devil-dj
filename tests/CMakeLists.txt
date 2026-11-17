@@ -9,6 +9,9 @@ juce_add_console_app(DevilDJTests
 target_sources(DevilDJTests PRIVATE
     analysis/AnalysisSmokeTests.cpp
     app/AppSmokeTests.cpp
+    app/SettingsTests.cpp
+    # App code under test, compiled in directly (JUCE modules can't be linked into two targets; see DEVLOG P0-11).
+    ${PROJECT_SOURCE_DIR}/src/app/Settings.cpp
     beatmaker/BeatMakerSmokeTests.cpp
     codebeat/CodeBeatSmokeTests.cpp
     dsp/DspSmokeTests.cpp
@@ -24,6 +27,8 @@ target_sources(DevilDJTests PRIVATE
     util/TripleBufferTests.cpp
     util/UtilSmokeTests.cpp)
 
+target_include_directories(DevilDJTests PRIVATE "${PROJECT_SOURCE_DIR}/src/app")
+
 target_compile_definitions(DevilDJTests PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0)
@@ -31,6 +36,7 @@ target_compile_definitions(DevilDJTests PRIVATE
 target_link_libraries(DevilDJTests PRIVATE
     Catch2::Catch2WithMain
     juce::juce_core
+    juce::juce_data_structures
     unofficial::sqlite3::sqlite3
     xxHash::xxhash
     devildj::util

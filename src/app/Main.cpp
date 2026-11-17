@@ -1,5 +1,7 @@
 #include "DebugMenu.h"
 #include "MainWindow.h"
+#include "Settings.h"
+#include "SettingsKeys.h"
 
 #include "util/CrashHandler.h"
 #include "util/Log.h"
@@ -37,18 +39,13 @@ public:
         lookAndFeel.setColourScheme(juce::LookAndFeel_V4::getDarkColourScheme());
         juce::LookAndFeel::setDefaultLookAndFeel(&lookAndFeel);
 
-        // Temporary settings file until P0-11 wraps it in app/Settings. Location: %APPDATA%\Devil-DJ\settings.xml
-        juce::PropertiesFile::Options options;
-        options.applicationName = "settings";
-        options.folderName = "Devil-DJ";
-        options.filenameSuffix = "xml";
-        options.storageFormat = juce::PropertiesFile::storeAsXML;
-        options.osxLibrarySubFolder = "Application Support";
-        settings = std::make_unique<juce::PropertiesFile>(options);
+        settings = std::make_unique<Settings>();
+        util::logInfo("Settings: {}", settings->getFile().getFullPathName().toStdString());
 
         mainWindow = std::make_unique<MainWindow>(getApplicationName(), *settings);
 
-        const bool showDebugMenu = kDebugBuild || commandLine.contains("--debug-menu");
+        const bool showDebugMenu =
+            kDebugBuild || commandLine.contains("--debug-menu") || settings->get(keys::showDebugMenu);
         if (showDebugMenu)
         {
             debugMenu = std::make_unique<DebugMenu>(logDirectory());
@@ -102,7 +99,7 @@ private:
     }
 
     juce::LookAndFeel_V4 lookAndFeel;
-    std::unique_ptr<juce::PropertiesFile> settings;
+    std::unique_ptr<Settings> settings;
     std::unique_ptr<MainWindow> mainWindow;
     std::unique_ptr<DebugMenu> debugMenu;
 };

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Settings.h"
+
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace devildj::app
@@ -9,7 +11,7 @@ namespace devildj::app
 class MainWindow final : public juce::DocumentWindow
 {
 public:
-    MainWindow(const juce::String& name, juce::PropertiesFile& settings);
+    MainWindow(const juce::String& name, Settings& settings);
     ~MainWindow() override;
 
     void closeButtonPressed() override;
@@ -17,7 +19,7 @@ public:
 private:
     void saveWindowState();
 
-    juce::PropertiesFile& settings;
+    Settings& settings;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainWindow)
 };

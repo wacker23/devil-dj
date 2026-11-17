@@ -10,7 +10,10 @@ target_sources(DevilDJ PRIVATE
     MainComponent.cpp
     MainComponent.h
     MainWindow.cpp
-    MainWindow.h)
+    MainWindow.h
+    Settings.cpp
+    Settings.h
+    SettingsKeys.h)
 
 target_compile_definitions(DevilDJ PRIVATE
     JUCE_WEB_BROWSER=0

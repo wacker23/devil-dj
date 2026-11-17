@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 
 #include "MainComponent.h"
+#include "SettingsKeys.h"
 
 #include <memory>
 
@@ -9,24 +10,23 @@ namespace devildj::app
 
 namespace
 {
-constexpr const char* kWindowStateKey = "mainWindowState";
 constexpr int kMinWidth = 960;
 constexpr int kMinHeight = 600;
 } // namespace
 
-MainWindow::MainWindow(const juce::String& name, juce::PropertiesFile& settingsFile)
+MainWindow::MainWindow(const juce::String& name, Settings& settingsStore)
     : DocumentWindow(
           name,
           juce::Desktop::getInstance().getDefaultLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId),
           DocumentWindow::allButtons)
-    , settings(settingsFile)
+    , settings(settingsStore)
 {
     setUsingNativeTitleBar(true);
     setContentOwned(std::make_unique<MainComponent>().release(), true);
     setResizable(true, true);
     setResizeLimits(kMinWidth, kMinHeight, 16384, 16384);
 
-    const auto state = settings.getValue(kWindowStateKey);
+    const auto state = settings.get(keys::mainWindowState);
     if (state.isEmpty() || !restoreWindowStateFromString(state))
         centreWithSize(getWidth(), getHeight());
 
@@ -45,8 +45,8 @@ void MainWindow::closeButtonPressed()
 
 void MainWindow::saveWindowState()
 {
-    settings.setValue(kWindowStateKey, getWindowStateAsString());
-    settings.saveIfNeeded();
+    settings.set(keys::mainWindowState, getWindowStateAsString());
+    settings.save();
 }
 
 } // namespace devildj::app
