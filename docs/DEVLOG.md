@@ -11,6 +11,11 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-18 · P0-04 vcpkg manifest
+- What changed: `vcpkg.json` (catch2, sqlite3 with fts5, taglib, xxhash; baseline 0df93a05), preset uses `$env{VCPKG_ROOT}` toolchain with triplet `x64-windows-static-md` (static libs, no DLLs to ship). `find_package` calls in `cmake/Dependencies.cmake`. `tests/DevilDJTests` links Catch2 + SQLite + xxHash; the app links `TagLib::tag` and shows the TagLib version in a temporary build-info line.
+- Tests / measurements: 3 test cases / 7 assertions pass in Debug and Release (SQLite in-memory query, FTS5 compiled in, xxHash determinism). Debug + Release build with 0 warnings. vcpkg package build added ~2 min to the first configure.
+- Notes / follow-ups: vcpkg cloned to `C:\devcpkg`, `VCPKG_ROOT` set for the user. TagLib pulls in zlib (Zlib) and utfcpp (BSL-1.0); both added to LICENSES.md. Tests aren't registered with ctest yet (P0-05).
+
 ## 2026-11-18 · P0-03 App target
 - What changed: `src/app/` Main.cpp (JUCEApplication, single instance, dark LookAndFeel_V4), MainWindow (resizable, native title bar, min 960×600, saves/restores window state), MainComponent (empty, draws the name). Window state lives in `%APPDATA%\Devil-DJ\settings.xml` via a plain `juce::PropertiesFile` until P0-11 wraps it.
 - Tests / measurements: launched Debug exe, resized to 1100×700 at (150,120), closed, relaunched → restored at 1100×699 (1 px frame rounding). Exits with code 0.

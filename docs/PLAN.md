@@ -58,7 +58,7 @@ Goal: a repository where an empty JUCE window builds locally and in CI, with the
   `src/app/Main.cpp` with `juce::JUCEApplication`, `juce_add_gui_app(DevilDJ ...)` (PRODUCT_NAME "Devil-DJ"), a resizable `MainWindow` with an empty `MainComponent`, dark default look and feel, window size/position persisted.
   Done when: the exe opens a window, remembers its size after restart.
 
-- [ ] **P0-04 vcpkg manifest**
+- [x] **P0-04 vcpkg manifest**
   `vcpkg.json` with `sqlite3`, `taglib`, `catch2`, `xxhash`. CMake toolchain wiring via `CMAKE_TOOLCHAIN_FILE` in the preset (vcpkg as a submodule or `VCPKG_ROOT`).
   Done when: a test target links Catch2 and SQLite; TagLib links into the app.
 

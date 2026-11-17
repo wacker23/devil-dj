@@ -19,6 +19,7 @@ target_compile_definitions(DevilDJ PRIVATE
 target_link_libraries(DevilDJ
     PRIVATE
         juce::juce_gui_basics
+        TagLib::tag
         devildj::compile_options
     PUBLIC
         juce::juce_recommended_config_flags

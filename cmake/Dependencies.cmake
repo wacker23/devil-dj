@@ -12,3 +12,9 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
     GIT_PROGRESS TRUE)
 FetchContent_MakeAvailable(juce)
+
+# vcpkg manifest packages (vcpkg.json). Triplet x64-windows-static-md: static libraries, dynamic CRT.
+find_package(unofficial-sqlite3 CONFIG REQUIRED) # SQLite: public domain
+find_package(TagLib CONFIG REQUIRED)             # TagLib: MPL-1.1 (used unmodified); pulls in zlib + utfcpp
+find_package(xxHash CONFIG REQUIRED)             # xxHash: BSD-2-Clause
+find_package(Catch2 3 CONFIG REQUIRED)           # Catch2 v3: BSL-1.0, tests only

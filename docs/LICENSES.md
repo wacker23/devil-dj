@@ -23,6 +23,8 @@ GPL (any version), AGPL, LGPL used via static linking (unless an alternative lic
 | TagLib | Tag reading | LGPL-2.1 **or** MPL-1.1 | Use under MPL-1.1, unmodified; notices file |
 | Catch2 v3 | Tests (not shipped) | BSL-1.0 | — |
 | xxHash | Content hashing | BSD-2-Clause | Notices file |
+| zlib (transitive, via TagLib) | Compression inside TagLib | Zlib | Notices file |
+| utfcpp (transitive, via TagLib, header-only) | UTF-8 handling inside TagLib | BSL-1.0 | Notices file |
 | Windows Media Foundation | MP3/AAC/M4A decoding | Part of Windows | System component |
 | ONNX Runtime (Phase 6) | ML inference, DirectML | MIT | Notices file |
 | Beat This! weights (Phase 6, optional) | Beat tracking | MIT (code and published weights, per model cards) | Re-verify at integration time |
