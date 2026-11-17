@@ -16,6 +16,9 @@ target_sources(DevilDJTests PRIVATE
     library/LibrarySmokeTests.cpp
     matcher/MatcherSmokeTests.cpp
     ui/UiSmokeTests.cpp
+    util/GarbageQueueTests.cpp
+    util/SpscQueueTests.cpp
+    util/TripleBufferTests.cpp
     util/UtilSmokeTests.cpp)
 
 target_compile_definitions(DevilDJTests PRIVATE
@@ -27,6 +30,7 @@ target_link_libraries(DevilDJTests PRIVATE
     juce::juce_core
     unofficial::sqlite3::sqlite3
     xxHash::xxhash
+    devildj::util
     devildj::compile_options
     juce::juce_recommended_config_flags)
 

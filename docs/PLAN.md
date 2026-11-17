@@ -74,7 +74,7 @@ Goal: a repository where an empty JUCE window builds locally and in CI, with the
   `tools/check_licenses.py`: reads `docs/LICENSES.md` allowlist and the dependency manifest (`cmake/Dependencies.cmake` + `vcpkg.json`), fails on any dependency not listed or with a forbidden licence.
   Done when: adding a fake GPL entry makes CI fail.
 
-- [ ] **P0-08 Lock-free primitives** (`src/util/`)
+- [x] **P0-08 Lock-free primitives** (`src/util/`)
   `SpscQueue<T, Capacity>` (power-of-two ring, acquire/release atomics, `tryPush`, `tryPop`), `TripleBuffer<T>` (writer publishes, reader gets latest without blocking), `GarbageQueue` (audio thread pushes pointers to release; a timer thread frees them).
   Done when: unit tests incl. a 2-thread stress test (10M items, no loss, no reorder) pass in Release.
 

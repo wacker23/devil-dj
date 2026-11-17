@@ -11,6 +11,11 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-18 · P0-08 Lock-free primitives
+- What changed: header-only `devildj::util` target with `SpscQueue<T, Capacity>` (power-of-two ring, monotonic acquire/release indices, cached opposite index, cache-line separated; `tryPush` copy/move, `tryPop(T&)` / `tryPop()` → optional), `TripleBuffer<T>` (3 slots, atomic middle index + fresh bit; `write`, `writeBuffer`+`publish`, `read`, `hasNewData`), `GarbageQueue<Capacity>` (audio thread queues `{deleter, ptr}` pairs via `tryRelease`/`tryReleaseWith`; housekeeping calls `collect()`; full queue → false + `failedReleases()` counter; destructor collects the rest). Removed the P0-01 `StyleExample.h`.
+- Tests / measurements: 16 new tests. SpscQueue stress 10M items over 2 threads, no loss/reorder: 0.02–0.04 s Release, 0.24 s Debug. TripleBuffer 2M publishes, no torn reads or going backwards. GarbageQueue 200k objects released/collected across threads, none leaked. Stress tests repeated 20× in Release: all pass. ctest 33/33 in Debug and Release, 0 warnings.
+- Notes / follow-ups: MSVC C4324 (padding from `alignas`) is disabled locally in SpscQueue.h because the padding is the point. Housekeeping timer that calls `collect()` comes with the engine (P1-02).
+
 ## 2026-11-18 · P0-07 License checker
 - What changed: `tools/check_licenses.py` (stdlib only) collects FetchContent names from `cmake/Dependencies.cmake`, `vcpkg.json` dependencies, and every port installed in the build's vcpkg tree (catches transitive zlib/utfcpp), then checks each against a new machine-readable "Manifest packages" table in `docs/LICENSES.md`. Fails on unlisted packages, forbidden families (GPL/AGPL/LGPL/NC/SSPL/...) or licences outside the allowed set. Registered in ctest as `tools.check_licenses` and `tools.check_licenses.unittests`.
 - Tests / measurements: 11 Python unit tests (incl. fake GPL row, unlisted vcpkg/FetchContent/transitive package, commented-out declaration). Manual: appending `fake-gpl-lib` to vcpkg.json makes `ctest` fail; restoring it passes. ctest 17/17 in Debug and Release.
