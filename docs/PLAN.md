@@ -82,7 +82,7 @@ Goal: a repository where an empty JUCE window builds locally and in CI, with the
   Debug-only global `operator new/delete` override that checks a `thread_local bool inRealtimeContext` and calls `jassertfalse` + logs a stack trace once. `ScopedRealtimeContext` RAII sets the flag.
   Done when: a test that allocates inside the scope triggers the guard; normal code is unaffected; Release builds compile it out.
 
-- [ ] **P0-10 Logging + crash dumps**
+- [x] **P0-10 Logging + crash dumps**
   `util/Log` (async file logger to `%LOCALAPPDATA%\Devil-DJ\logs`, rotating, never called from audio thread), unhandled exception filter that writes a minidump (`MiniDumpWriteDump`) next to the logs.
   Done when: a debug menu "Crash test" produces a `.dmp` and a log line.
 

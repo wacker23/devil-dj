@@ -4,6 +4,8 @@ juce_add_gui_app(DevilDJ
     VERSION ${PROJECT_VERSION})
 
 target_sources(DevilDJ PRIVATE
+    DebugMenu.cpp
+    DebugMenu.h
     Main.cpp
     MainComponent.cpp
     MainComponent.h
@@ -20,6 +22,7 @@ target_link_libraries(DevilDJ
     PRIVATE
         juce::juce_gui_basics
         TagLib::tag
+        devildj::util
         devildj::compile_options
     PUBLIC
         juce::juce_recommended_config_flags
