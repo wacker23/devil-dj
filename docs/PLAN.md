@@ -62,7 +62,7 @@ Goal: a repository where an empty JUCE window builds locally and in CI, with the
   `vcpkg.json` with `sqlite3`, `taglib`, `catch2`, `xxhash`. CMake toolchain wiring via `CMAKE_TOOLCHAIN_FILE` in the preset (vcpkg as a submodule or `VCPKG_ROOT`).
   Done when: a test target links Catch2 and SQLite; TagLib links into the app.
 
-- [ ] **P0-05 Test harness**
+- [x] **P0-05 Test harness**
   `tests/CMakeLists.txt`, Catch2 main, `ctest` integration, one smoke test per module folder.
   Done when: `ctest --preset windows-x64-debug` runs and passes.
 

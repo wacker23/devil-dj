@@ -11,6 +11,11 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-18 · P0-05 Test harness
+- What changed: `tests/` has one folder per src module (app, engine, dsp, analysis, library, beatmaker, codebeat, matcher, ui, util), each with a `*SmokeTests.cpp` tagged `[smoke][<module>]`. One `DevilDJTests` exe (`juce_add_console_app`, links Catch2WithMain + juce_core + SQLite + xxHash). `enable_testing()` + `catch_discover_tests(... DISCOVERY_MODE PRE_TEST)` registers each TEST_CASE with ctest. The P0-04 link tests moved into `tests/library/`.
+- Tests / measurements: `ctest --preset windows-x64-debug` and `-release`: 15/15 pass in ~0.5 s. 0 build warnings.
+- Notes / follow-ups: the smoke tests check assumptions later code relies on (lock-free atomics, trivially copyable command variant, seeded RNG, UTF-8 Korean strings, SQLite FTS5 + thread safety). Real module tests replace or join them as each module gets code.
+
 ## 2026-11-18 · P0-04 vcpkg manifest
 - What changed: `vcpkg.json` (catch2, sqlite3 with fts5, taglib, xxhash; baseline 0df93a05), preset uses `$env{VCPKG_ROOT}` toolchain with triplet `x64-windows-static-md` (static libs, no DLLs to ship). `find_package` calls in `cmake/Dependencies.cmake`. `tests/DevilDJTests` links Catch2 + SQLite + xxHash; the app links `TagLib::tag` and shows the TagLib version in a temporary build-info line.
 - Tests / measurements: 3 test cases / 7 assertions pass in Debug and Release (SQLite in-memory query, FTS5 compiled in, xxHash determinism). Debug + Release build with 0 warnings. vcpkg package build added ~2 min to the first configure.

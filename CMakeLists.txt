@@ -27,4 +27,6 @@ endif()
 include(cmake/Dependencies.cmake)
 
 add_subdirectory(src/app)
+
+enable_testing()
 add_subdirectory(tests)
