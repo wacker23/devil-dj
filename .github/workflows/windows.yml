@@ -1,0 +1,93 @@
+# P0-06: build Debug + Release on Windows, run all tests (incl. licence check and generated test signals),
+# and upload the Release exe.
+name: windows
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-binary-cache
+      FETCHCONTENT_DIR: ${{ github.workspace }}\.fetchcontent
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Python packages for tools (dev only)
+        run: python -m pip install numpy soundfile
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: vcpkg-binary-cache
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-${{ runner.os }}-
+
+      - name: Restore FetchContent cache (JUCE)
+        uses: actions/cache@v4
+        with:
+          path: .fetchcontent
+          key: fetchcontent-${{ runner.os }}-${{ hashFiles('cmake/Dependencies.cmake') }}
+
+      - name: vcpkg at the manifest baseline
+        shell: pwsh
+        run: |
+          $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+          git clone --quiet https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT
+          git -C $env:VCPKG_ROOT checkout --quiet $baseline
+          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          # The preset targets VS 2026; fall back to VS 2022 if that's what the runner image has.
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $line = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property catalog_productLineVersion
+          $generator = switch ($line) {
+            { $_ -in '18', '2026' } { 'Visual Studio 18 2026' }
+            '2022' { 'Visual Studio 17 2022' }
+            default { throw "Unsupported Visual Studio version: '$line'" }
+          }
+          Write-Host "Visual Studio $line -> generator '$generator'"
+          cmake --preset windows-x64 -G "$generator" `
+            -DDEVILDJ_WARNINGS_AS_ERRORS=ON `
+            "-DFETCHCONTENT_BASE_DIR=$env:FETCHCONTENT_DIR"
+
+      - name: Build Debug
+        run: cmake --build --preset windows-x64-debug
+
+      - name: Build Release
+        run: cmake --build --preset windows-x64-release
+
+      - name: Test Debug
+        run: ctest --preset windows-x64-debug
+
+      - name: Test Release
+        run: ctest --preset windows-x64-release
+
+      - name: Licence check
+        run: python tools/check_licenses.py --vcpkg-installed build/windows-x64/vcpkg_installed/x64-windows-static-md
+
+      - name: Upload Release exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: Devil-DJ-${{ github.sha }}-windows-x64
+          path: build/windows-x64/src/app/DevilDJ_artefacts/Release/Devil-DJ.exe
+          if-no-files-found: error
