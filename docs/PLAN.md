@@ -70,7 +70,7 @@ Goal: a repository where an empty JUCE window builds locally and in CI, with the
   `.github/workflows/windows.yml`: checkout, cache vcpkg + FetchContent, configure, build Debug + Release, run ctest, run `tools/check_licenses.py`, upload Release exe as an artifact.
   Done when: a push to `main` goes green and produces a downloadable zip.
 
-- [ ] **P0-07 License checker**
+- [x] **P0-07 License checker**
   `tools/check_licenses.py`: reads `docs/LICENSES.md` allowlist and the dependency manifest (`cmake/Dependencies.cmake` + `vcpkg.json`), fails on any dependency not listed or with a forbidden licence.
   Done when: adding a fake GPL entry makes CI fail.
 

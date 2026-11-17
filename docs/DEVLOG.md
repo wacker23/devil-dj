@@ -11,6 +11,11 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-18 · P0-07 License checker
+- What changed: `tools/check_licenses.py` (stdlib only) collects FetchContent names from `cmake/Dependencies.cmake`, `vcpkg.json` dependencies, and every port installed in the build's vcpkg tree (catches transitive zlib/utfcpp), then checks each against a new machine-readable "Manifest packages" table in `docs/LICENSES.md`. Fails on unlisted packages, forbidden families (GPL/AGPL/LGPL/NC/SSPL/...) or licences outside the allowed set. Registered in ctest as `tools.check_licenses` and `tools.check_licenses.unittests`.
+- Tests / measurements: 11 Python unit tests (incl. fake GPL row, unlisted vcpkg/FetchContent/transitive package, commented-out declaration). Manual: appending `fake-gpl-lib` to vcpkg.json makes `ctest` fail; restoring it passes. ctest 17/17 in Debug and Release.
+- Notes / follow-ups: CI (P0-06) was skipped for now (no GitHub repo yet, D3); since the check is a ctest test, CI picks it up automatically once it exists.
+
 ## 2026-11-18 · P0-05 Test harness
 - What changed: `tests/` has one folder per src module (app, engine, dsp, analysis, library, beatmaker, codebeat, matcher, ui, util), each with a `*SmokeTests.cpp` tagged `[smoke][<module>]`. One `DevilDJTests` exe (`juce_add_console_app`, links Catch2WithMain + juce_core + SQLite + xxHash). `enable_testing()` + `catch_discover_tests(... DISCOVERY_MODE PRE_TEST)` registers each TEST_CASE with ctest. The P0-04 link tests moved into `tests/library/`.
 - Tests / measurements: `ctest --preset windows-x64-debug` and `-release`: 15/15 pass in ~0.5 s. 0 build warnings.

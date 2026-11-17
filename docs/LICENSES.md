@@ -52,5 +52,20 @@ No rekordbox / AlphaTheta / Pioneer DJ names, logos, skins, fonts, sample packs 
 
 ## Mechanics
 
-- `tools/check_licenses.py` parses `cmake/Dependencies.cmake` and `vcpkg.json`, matches each dependency to this table, and fails CI on anything missing or forbidden.
+- `tools/check_licenses.py` parses `cmake/Dependencies.cmake` (`FetchContent_Declare` names) and `vcpkg.json`, plus the vcpkg ports actually installed in the build tree (so transitive packages are caught), matches each one to the **Manifest packages** table below, and fails on anything missing or with a forbidden licence. It runs as a ctest test (`tools.check_licenses`), so CI fails too.
+- Adding a dependency = add it to the manifest **and** a row here (after owner approval).
+
+### Manifest packages
+
+Machine-readable allowlist read by `tools/check_licenses.py`. `Package id` is the name used in `vcpkg.json` / the vcpkg port, or the `FetchContent_Declare` name. `Licence` is the licence we use it under (an SPDX id, or `JUCE-EULA` / `Public-Domain`).
+
+| Package id | Source | Licence | Shipped |
+| --- | --- | --- | --- |
+| juce | FetchContent | JUCE-EULA | yes |
+| sqlite3 | vcpkg | Public-Domain | yes |
+| taglib | vcpkg | MPL-1.1 | yes |
+| zlib | vcpkg (via taglib) | Zlib | yes |
+| utfcpp | vcpkg (via taglib) | BSL-1.0 | yes |
+| xxhash | vcpkg | BSD-2-Clause | yes |
+| catch2 | vcpkg | BSL-1.0 | no (tests) |
 - `THIRD_PARTY_NOTICES.txt` is generated from this table and installed with the app; the About box shows it.

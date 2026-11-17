@@ -33,3 +33,17 @@ target_link_libraries(DevilDJTests PRIVATE
 catch_discover_tests(DevilDJTests
     DISCOVERY_MODE PRE_TEST
     PROPERTIES TIMEOUT 120)
+
+# Python tool tests (P0-07): the licence check itself, and the checker's own unit tests.
+find_package(Python3 3.11 COMPONENTS Interpreter REQUIRED)
+
+set(devildj_license_args --repo "${PROJECT_SOURCE_DIR}")
+if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+    list(APPEND devildj_license_args --vcpkg-installed "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}")
+endif()
+
+add_test(NAME tools.check_licenses
+    COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/check_licenses.py" ${devildj_license_args})
+
+add_test(NAME tools.check_licenses.unittests
+    COMMAND Python3::Interpreter -m unittest discover -s "${PROJECT_SOURCE_DIR}/tools/tests" -v)
