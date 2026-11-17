@@ -46,7 +46,7 @@ Timeline assumes focused full-time work; at a part-time pace expect 9–12 month
 
 Goal: a repository where an empty JUCE window builds locally and in CI, with the utility classes every later phase relies on.
 
-- [ ] **P0-01 Repository skeleton**
+- [x] **P0-01 Repository skeleton**
   Create the folder layout from `CLAUDE.md`, `.gitignore` (build/, out/, .vs/, *.user), `.gitattributes` (LF for text, binary for audio), `.clang-format`, `.editorconfig`, `README.md`, `docs/DEVLOG.md`.
   Done when: tree matches `CLAUDE.md`; clang-format runs clean on an example file.
 

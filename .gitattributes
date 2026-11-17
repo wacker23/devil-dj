@@ -1,0 +1,21 @@
+# Text files use LF in the repo
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.iss text eol=crlf
+
+# Binary
+*.wav  binary
+*.aif  binary
+*.aiff binary
+*.flac binary
+*.mp3  binary
+*.m4a  binary
+*.ogg  binary
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.onnx binary
+*.dmp  binary
