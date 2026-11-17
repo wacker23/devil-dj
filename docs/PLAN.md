@@ -90,7 +90,7 @@ Goal: a repository where an empty JUCE window builds locally and in CI, with the
   `app/Settings` wrapping `juce::PropertiesFile` in `%APPDATA%\Devil-DJ\settings.xml`, typed getters/setters, change listeners.
   Done when: values survive restart; unit test for defaults.
 
-- [ ] **P0-12 Fraction type**
+- [x] **P0-12 Fraction type**
   `util/Fraction` (int64 numerator/denominator, normalized, +−×÷, comparison, floor, `toDouble`) — used by the beat clock and pattern engine bridge.
   Done when: property tests (random values) for arithmetic identities pass.
 

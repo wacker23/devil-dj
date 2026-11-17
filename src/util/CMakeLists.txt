@@ -10,6 +10,7 @@ target_sources(devildj_util PUBLIC
     BASE_DIRS "${PROJECT_SOURCE_DIR}/src"
     FILES
         CrashHandler.h
+        Fraction.h
         GarbageQueue.h
         Log.h
         RealtimeGuard.h
