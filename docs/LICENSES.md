@@ -30,6 +30,16 @@ GPL (any version), AGPL, LGPL used via static linking (unless an alternative lic
 | Beat This! weights (Phase 6, optional) | Beat tracking | MIT (code and published weights, per model cards) | Re-verify at integration time |
 | HTDemucs weights (Phase 6) | Stem separation | **Unclear** — sources disagree (MIT vs. non-commercial) | Owner decision before shipping; fall back to another model if not clearly commercial-friendly |
 
+## Development tools (never shipped)
+
+Used only to build, format or test; nothing from them ends up in the app or installer, so the shipping-licence rules above don't apply. Not checked by `tools/check_licenses.py`.
+
+| Tool | Use | Licence |
+| --- | --- | --- |
+| numpy | `tools/gen_test_signals.py` | BSD-3-Clause |
+| soundfile (bundles libsndfile) | `tools/gen_test_signals.py` writes WAVs | BSD-3-Clause (libsndfile: LGPL-2.1, used as a separate dev-time library) |
+| clang-format | Code formatting | Apache-2.0 with LLVM exception |
+
 ## Needs a decision before use
 
 | Item | Issue |

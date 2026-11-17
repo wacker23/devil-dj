@@ -94,7 +94,7 @@ Goal: a repository where an empty JUCE window builds locally and in CI, with the
   `util/Fraction` (int64 numerator/denominator, normalized, +−×÷, comparison, floor, `toDouble`) — used by the beat clock and pattern engine bridge.
   Done when: property tests (random values) for arithmetic identities pass.
 
-- [ ] **P0-13 Test signal generator**
+- [x] **P0-13 Test signal generator**
   `tools/gen_test_signals.py` (Python, no deps beyond numpy/soundfile): click tracks at 90/120/128/140/174 BPM with known first beat, sine sweeps, major/minor chord loops in all 24 keys, silence-padded files. Output to `tests/data/generated/` (git-ignored, generated in CI).
   Done when: CI generates the files before tests run.
 

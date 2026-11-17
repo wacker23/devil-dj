@@ -8,6 +8,7 @@ juce_add_console_app(DevilDJTests
 
 target_sources(DevilDJTests PRIVATE
     analysis/AnalysisSmokeTests.cpp
+    analysis/TestSignalTests.cpp
     app/AppSmokeTests.cpp
     app/SettingsTests.cpp
     # App code under test, compiled in directly (JUCE modules can't be linked into two targets; see DEVLOG P0-11).
@@ -28,9 +29,14 @@ target_sources(DevilDJTests PRIVATE
     util/TripleBufferTests.cpp
     util/UtilSmokeTests.cpp)
 
-target_include_directories(DevilDJTests PRIVATE "${PROJECT_SOURCE_DIR}/src/app")
+target_include_directories(DevilDJTests PRIVATE
+    "${PROJECT_SOURCE_DIR}/src/app"
+    "${CMAKE_CURRENT_SOURCE_DIR}")
+
+set(DEVILDJ_TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/generated")
 
 target_compile_definitions(DevilDJTests PRIVATE
+    DEVILDJ_TEST_DATA_DIR="${DEVILDJ_TEST_DATA_DIR}"
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0)
 
@@ -38,6 +44,7 @@ target_link_libraries(DevilDJTests PRIVATE
     Catch2::Catch2WithMain
     juce::juce_core
     juce::juce_data_structures
+    juce::juce_audio_formats
     unofficial::sqlite3::sqlite3
     xxHash::xxhash
     devildj::util
@@ -46,10 +53,16 @@ target_link_libraries(DevilDJTests PRIVATE
 
 catch_discover_tests(DevilDJTests
     DISCOVERY_MODE PRE_TEST
-    PROPERTIES TIMEOUT 120)
+    PROPERTIES TIMEOUT 120 FIXTURES_REQUIRED test_signals)
 
 # Python tool tests (P0-07): the licence check itself, and the checker's own unit tests.
 find_package(Python3 3.11 COMPONENTS Interpreter REQUIRED)
+
+# P0-13: generate the synthetic test signals before any C++ test runs (skipped when up to date).
+# Needs numpy + soundfile: python -m pip install numpy soundfile
+add_test(NAME tools.gen_test_signals
+    COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/gen_test_signals.py" --out "${DEVILDJ_TEST_DATA_DIR}")
+set_tests_properties(tools.gen_test_signals PROPERTIES FIXTURES_SETUP test_signals TIMEOUT 300)
 
 set(devildj_license_args --repo "${PROJECT_SOURCE_DIR}")
 if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
