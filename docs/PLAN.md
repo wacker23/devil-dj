@@ -34,7 +34,7 @@ Timeline assumes focused full-time work; at a part-time pace expect 9–12 month
 | --- | --- | --- |
 | D1 | Open source (AGPL) or closed/commercial? | Closed-capable: permissive dependencies only, own pattern engine |
 | D2 | Framework | **Decided: C++20 + JUCE 8** |
-| D3 | GitHub repo and CI | Private repo, GitHub Actions `windows-latest` |
+| D3 | GitHub repo and CI | **Repo: github.com/wacker23/devil-dj** (currently public — confirm), GitHub Actions `windows-latest` |
 | D4 | Owner's laptop specs | Target: 4-core CPU, 8 GB RAM, integrated GPU, built-in audio |
 | D5 | Name "Devil-DJ" trademark check (Korea + target markets) | Keep as working name |
 | D6 | JUCE licence tier | Starter (free up to $20k/yr revenue) or AGPL if D1 = open |
@@ -66,7 +66,7 @@ Goal: a repository where an empty JUCE window builds locally and in CI, with the
   `tests/CMakeLists.txt`, Catch2 main, `ctest` integration, one smoke test per module folder.
   Done when: `ctest --preset windows-x64-debug` runs and passes.
 
-- [ ] **P0-06 CI**
+- [x] **P0-06 CI**
   `.github/workflows/windows.yml`: checkout, cache vcpkg + FetchContent, configure, build Debug + Release, run ctest, run `tools/check_licenses.py`, upload Release exe as an artifact.
   Done when: a push to `main` goes green and produces a downloadable zip.
 

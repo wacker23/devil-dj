@@ -11,6 +11,11 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-18 · P0-06 CI
+- What changed: `.github/workflows/windows.yml` on `windows-latest` for pushes to `main`, PRs and manual runs: Python 3.11 + numpy/soundfile, vcpkg cloned at the manifest's `builtin-baseline` with a cached binary cache, cached FetchContent dir (JUCE), configure with the `windows-x64` preset (generator picked from the installed Visual Studio via vswhere: VS 2026 or 2022) and `DEVILDJ_WARNINGS_AS_ERRORS=ON`, build Debug + Release, ctest both (generates test signals, runs licence check), explicit `tools/check_licenses.py`, upload `Devil-DJ.exe` (Release) as an artifact.
+- Tests / measurements: first run on `main` (5066f11, run 44156795064) green in 7 min 36 s including building all vcpkg ports from scratch; artifact `Devil-DJ-<sha>-windows-x64` 2.3 MB zip.
+- Notes / follow-ups: repo is `github.com/wacker23/devil-dj` (D3). It is currently **public**; the plan's default was private — owner to confirm. Phase 0 gate: owner still has to launch the CI exe on the laptop.
+
 ## 2026-11-18 · P0-13 Test signal generator
 - What changed: `tools/gen_test_signals.py` (numpy + soundfile) writes 36 deterministic WAVs (44.1 kHz, 16-bit stereo, ~70 MB, ~2 s to generate) into git-ignored `tests/data/generated/`, plus `manifest.json` with ground truth per file: click tracks at 90/120/128/140/174 BPM (first beat 0.5 s = frame 22050, 2 kHz accented downbeat every 4 beats, 30 s); sines 440 Hz −6 dBFS and 1 kHz −6/−20 dBFS; 20 Hz–20 kHz log sweep; I–IV–V–I loops in all 24 keys (key index 0–23 as in the DB schema, Camelot code, harmonic-minor V); padded click/sine (2 s before, 3 s after) and 5 s silence. Skips when up to date (`--force` to redo). `tests/TestData.h` gives C++ tests the folder and manifest.
 - Tests / measurements: 11 Python tests (files/formats, click onsets ±1 frame and spacing, downbeat accents, padding, silence, sine frequency/level, tonic is the strongest pitch class in every key loop, Camelot codes vs MATCHER_SPEC §13, no clipping, byte-identical reruns, up-to-date skip). 2 C++ tests decode every file with JUCE and check sample rate/channels/length and click first-beat frames. ctest runs the generator as fixture `test_signals` before all C++ tests: from an empty folder, 75/75 Debug, 69/69 Release, 0 warnings.
