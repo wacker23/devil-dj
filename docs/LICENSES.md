@@ -1,0 +1,54 @@
+# Dependency and Licence Policy
+
+Default policy (until decision D1): **closed-source-capable**. Devil-DJ must be shippable as a closed or commercial product, so every dependency must allow that. If D1 later chooses open source (AGPL), this list can be relaxed — not before.
+
+I'm summarizing licences for planning; get legal advice before a commercial release.
+
+## Allowed licence families
+
+MIT, BSD-2/3-Clause, Apache-2.0, BSL-1.0, zlib, ISC, Unlicense / public domain, MPL-2.0 and MPL-1.1 (only if we do not modify the library's files, or we publish our changes to those files).
+
+## Forbidden
+
+GPL (any version), AGPL, LGPL used via static linking (unless an alternative licence such as MPL is available, as with TagLib), CC BY-NC / any non-commercial clause, "research only" model weights, anything without a licence.
+
+## Approved dependencies
+
+| Dependency | Use | Licence | How we comply |
+| --- | --- | --- | --- |
+| JUCE 8 | App framework, audio I/O, UI | Starter/Indie/Pro EULA or AGPLv3 | Starter tier (free ≤ $20k revenue or funding per year); upgrade tier when revenue grows (D6) |
+| Signalsmith Stretch (+ Signalsmith Linear) | Key lock, transpose | MIT | Keep licence text in About box + `THIRD_PARTY_NOTICES.txt` |
+| quickjs-ng | Code Beat JS runtime | MIT | Notices file |
+| SQLite | Library database | Public domain | — |
+| TagLib | Tag reading | LGPL-2.1 **or** MPL-1.1 | Use under MPL-1.1, unmodified; notices file |
+| Catch2 v3 | Tests (not shipped) | BSL-1.0 | — |
+| xxHash | Content hashing | BSD-2-Clause | Notices file |
+| Windows Media Foundation | MP3/AAC/M4A decoding | Part of Windows | System component |
+| ONNX Runtime (Phase 6) | ML inference, DirectML | MIT | Notices file |
+| Beat This! weights (Phase 6, optional) | Beat tracking | MIT (code and published weights, per model cards) | Re-verify at integration time |
+| HTDemucs weights (Phase 6) | Stem separation | **Unclear** — sources disagree (MIT vs. non-commercial) | Owner decision before shipping; fall back to another model if not clearly commercial-friendly |
+
+## Needs a decision before use
+
+| Item | Issue |
+| --- | --- |
+| ASIO SDK | Dual: GPLv3 or Steinberg's proprietary licence (free, requires signing). For closed source use the proprietary agreement (D7). |
+| Ableton Link | Check its licence terms against D1 before integrating (Phase 7). |
+| Rubber Band | GPL or paid commercial licence; only if Signalsmith quality is not good enough. |
+| Auto-update libraries | Check licence when chosen (Phase 8). |
+| LAION CLAP music checkpoint (Track Matcher embeddings, Phase 7) | Model mirrors list the checkpoints as CC0-1.0; confirm at the original source and note that the training data mix includes third-party datasets. |
+| OpenL3 (embedding alternative) | Library is MIT; confirm the licence of the weight files. |
+| Essentia models (Discogs-EffNet, MAEST) | CC BY-NC-SA 4.0 (non-commercial) with a proprietary licence on request — **forbidden** under the closed-capable policy unless we obtain a commercial licence. |
+
+## Reference only (never copy code)
+
+Strudel, TidalCycles (AGPL/GPL), Mixxx (GPL), libKeyFinder (GPLv3), Rubber Band (GPL edition), Essentia (AGPL). Reading papers and public format descriptions is fine; copying or translating their source code is not.
+
+## Content and branding
+
+No rekordbox / AlphaTheta / Pioneer DJ names, logos, skins, fonts, sample packs or screenshots in the app or repo. No third-party sample packs unless their licence allows redistribution in a commercial app. Built-in drum sounds are synthesized by our own code.
+
+## Mechanics
+
+- `tools/check_licenses.py` parses `cmake/Dependencies.cmake` and `vcpkg.json`, matches each dependency to this table, and fails CI on anything missing or forbidden.
+- `THIRD_PARTY_NOTICES.txt` is generated from this table and installed with the app; the About box shows it.

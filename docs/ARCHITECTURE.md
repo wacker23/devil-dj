@@ -1,0 +1,353 @@
+# Devil-DJ — Architecture
+
+This document is the contract between modules. Changing a public interface or the threading model here requires the owner's approval (see `CLAUDE.md`).
+
+## 1. Threads
+
+| Thread | Owner | Does | Must never |
+| --- | --- | --- | --- |
+| Audio (device callback) | `engine::AudioEngine` | Decks, voices, mixer, FX, master clock, recording tap | Allocate, lock, block, do I/O, call QuickJS |
+| UI (JUCE message thread) | `app`, `ui` | Components, input, painting at VBlank | Do analysis, DB writes, decoding |
+| Track loader pool (2) | `engine::TrackLoader` | Decode files into `TrackBuffer` | Touch UI components |
+| Analysis pool (cores − 1, low priority) | `analysis::AnalysisService` | Waveform, BPM/grid, key, loudness, phrase, stems | Run at normal priority while a deck plays |
+| DB writer (1) | `library::Database` | All SQLite writes (serialized) | Block the UI waiting on a write |
+| Code deck (1) | `codebeat::CodeDeck` | QuickJS eval + pattern queries every 25 ms | Run longer than its time budget |
+| Matcher worker (1, below normal priority) | `matcher::MatcherService` | Candidate query, scoring, ranker training at exit, Smart Sort, kNN graph | Write to the DB except through the DB writer |
+| Pattern scheduler (inside Code deck + Beat Maker timers) | `engine::Scheduler` producers | Push `ScheduledEvent`s ahead of time | Push events in the past |
+| Recorder writer (1) | `engine::Recorder` | Drain record FIFO to disk | — |
+| Housekeeping timer (UI thread, 10 Hz) | `engine::AudioEngine` | Free objects from the garbage queue, read xrun counters | — |
+
+Communication:
+
+```
+UI / workers ──EngineCommand──▶ SpscQueue ──▶ Audio thread
+Audio thread ──EngineState───▶ TripleBuffer ──▶ UI (read at VBlank)
+Producers ──ScheduledEvent──▶ SpscQueue (one per producer) ──▶ Audio thread
+Audio thread ──old pointers──▶ GarbageQueue ──▶ housekeeping frees them
+Audio thread ──samples───────▶ Recorder FIFO ──▶ writer thread
+```
+
+Each producer thread gets its **own** SPSC queue into the engine (UI commands, loader, code deck, Beat Maker), so every queue stays single-producer/single-consumer.
+
+## 2. Module dependency rules
+
+```
+app ──▶ ui ──▶ engine, library, analysis, beatmaker, codebeat, matcher
+matcher ──▶ library (queries, choice log), util
+codebeat ──▶ engine (Scheduler, Voices), util
+beatmaker ──▶ engine (Scheduler, Voices), dsp, util
+analysis ──▶ dsp, library (results), util
+engine ──▶ dsp, util
+library ──▶ util
+dsp ──▶ util
+```
+
+`engine` and `dsp` never include JUCE GUI modules. `dsp` has no knowledge of decks or tracks — pure signal processing, unit-testable in isolation.
+
+## 3. Engine
+
+### 3.1 Callback flow (per block)
+
+1. `ScopedRealtimeContext guard;` (debug allocation check)
+2. Drain command queues (bounded: at most 256 commands per block).
+3. Drain scheduled-event queues into the sorted `EventBuffer` (fixed capacity, insertion by timestamp).
+4. `MasterClock::beginBlock(numSamples)` → block start/end beat positions.
+5. Execute quantized actions whose target sample falls inside this block (split the block at those sample offsets).
+6. Render each source into its channel buffer: decks (with stretcher), sampler slots, Beat Maker bus, code deck bus (voices triggered from `EventBuffer` at exact sample offsets).
+7. Channel strips (trim, EQ/isolator, filter, color FX, fader) → FX units on their targets → crossfader → master + cue buses.
+8. Limiter, meters, output routing (stereo / 4-channel / split mode), recorder tap.
+9. Publish `EngineState` to the triple buffer, update CPU load and xrun counters.
+
+All buffers are pre-allocated in `audioDeviceAboutToStart` for the maximum block size.
+
+### 3.2 Commands
+
+```cpp
+namespace devildj::engine {
+
+using DeckId = std::uint8_t;   // 0..3
+
+struct LoadTrack    { DeckId deck; const TrackBuffer* buffer; TrackMeta meta; }; // ownership via registry, see 3.6
+struct Play         { DeckId deck; bool quantized; };
+struct Pause        { DeckId deck; };
+struct CuePress     { DeckId deck; };
+struct CueRelease   { DeckId deck; };
+struct Seek         { DeckId deck; double samplePos; };
+struct SetParam     { ParamId param; float value; };                  // every knob/fader: smoothed on the audio thread
+struct HotCue       { DeckId deck; std::uint8_t slot; HotCueOp op; }; // trigger / release / set / delete
+struct Loop         { DeckId deck; LoopOp op; Fraction beats; };
+struct BeatJump     { DeckId deck; Fraction beats; };
+struct SetSync      { DeckId deck; bool on; };
+struct SetMaster    { std::optional<DeckId> deck; double internalBpm; };
+struct FxCommand    { std::uint8_t unit; FxOp op; float value; };
+struct SamplerCmd   { std::uint8_t bank, slot; SamplerOp op; const SampleBuffer* buffer; };
+struct Transition   { DeckId from, to; TransitionPlan plan; };
+struct Record       { RecordOp op; };
+
+using EngineCommand = std::variant<LoadTrack, Play, Pause, CuePress, CueRelease, Seek, SetParam,
+                                   HotCue, Loop, BeatJump, SetSync, SetMaster, FxCommand,
+                                   SamplerCmd, Transition, Record /* ... */>;
+
+static_assert(std::is_trivially_copyable_v<EngineCommand>);
+}
+```
+
+`ParamId` is a flat enum of every continuous parameter (`Deck0Tempo`, `Ch0EqLow`, `Crossfader`, `Fx1Slot0Wet`, …) so MIDI Learn and the keymap address parameters uniformly.
+
+### 3.3 Engine state (published each block)
+
+```cpp
+struct DeckState {
+    bool loaded, playing, keyLock, sync, isMaster, slip, looping, reverse;
+    double positionSamples;        // what the listener hears (latency-compensated)
+    double slipPositionSamples;
+    double rate;                   // effective playback rate
+    double bpm;                    // effective BPM after tempo
+    float tempoPercent;
+    std::int8_t transposeSemis;
+    double loopIn, loopOut;
+    float peakL, peakR, rms;
+    std::uint64_t trackId;
+};
+
+struct EngineState {
+    std::uint64_t blockCounter;
+    double hostTimeSeconds;        // juce::Time::getMillisecondCounterHiRes()/1000 at publish
+    double sampleRate;
+    std::array<DeckState, 4> decks;
+    double masterBpm, masterBeat;
+    std::array<ChannelMeter, 8> channels;  // 4 decks, sampler, beatmaker, codedeck, mic
+    float masterPeakL, masterPeakR, limiterGainReductionDb;
+    float cpuLoad;                 // 0..1 of block budget, smoothed
+    std::uint32_t xruns, lateEvents;
+    bool recording; double recordSeconds;
+};
+```
+
+The UI extrapolates playheads: `pos + rate * sampleRate * (now - hostTimeSeconds)`.
+
+### 3.4 Deck
+
+```
+TrackBuffer ──▶ PlayHead (double pos, rate) ──▶ [key lock?] Stretcher : Resampler ──▶ deck out
+                    ▲                                    │
+            loops, cues, slip, jog                 latency compensation
+```
+
+- Position is a `double` in source samples. Rate = tempo × pitch bend × jog override × sync correction.
+- Without key lock: `dsp::Resampler` (cubic Hermite default; 16-tap windowed sinc in "high quality" setting).
+- With key lock: `dsp::Stretcher` (Signalsmith Stretch). The stretcher consumes `rate × blockSize` input samples per block; its input/output latency is subtracted from the reported position so waveform and sound match. Scratching and reverse bypass the stretcher.
+- Every discontinuity (jump, loop wrap, hot cue) uses a 2 ms equal-power crossfade between old and new read positions (two read heads for the fade duration).
+- Slip: a second "shadow" playhead always advances at the normal rate; when slip ends, the main playhead jumps (with fade) to the shadow.
+- Quantized actions are stored as `PendingAction{targetSample, action}` (fixed array of 16 per deck) and executed when the block reaches the target.
+
+### 3.5 Master clock, sync and quantize
+
+- `MasterClock` holds `bpm` and `beat` (double). Source: the master deck (`beat` = that deck's grid beat at its playhead) or internal tempo when nothing is master.
+- `sampleAt(beat)` / `beatAt(sample)` convert within the current block using the current BPM; producers schedule at most 150 ms ahead, so tempo changes cause negligible error.
+- **Sync**: follower rate = `masterBpm / trackBpm` (×2 or ÷2 if closer to 1). Phase error `e = wrap(masterBeatFrac − deckBeatFrac)` in [−0.5, 0.5). Correction: `rate *= 1 + clamp(k·e, ±0.005)` with k ≈ 0.02 per block; on sync-press while playing, phase is snapped in one jump (with fade) if |e| > 0.1 beat.
+- **Quantize**: target = next grid point at the chosen resolution after "now + 1 block".
+
+### 3.6 Ownership of big buffers
+
+- `TrackBuffer` and `SampleBuffer` are created by loader threads and registered in `BufferRegistry` (UI-thread object holding `std::shared_ptr`s).
+- The engine receives raw `const T*` plus a registry id. When the engine stops using a buffer it pushes the id to `GarbageQueue`; the housekeeping timer drops the registry's `shared_ptr`. The audio thread never decrements a reference count.
+
+### 3.7 Scheduler and voices
+
+```cpp
+struct ScheduledEvent {
+    std::int64_t sampleTime;       // absolute engine sample clock
+    SourceId source;               // BeatMaker, CodeDeck, Sampler sequencer
+    VoiceKind kind;                // Sample, DrumSynth, Synth
+    std::uint16_t soundIndex;      // index into SoundBank (resolved off the audio thread)
+    float note, velocity, gain, pan, speed, cutoffHz, hpfHz, resonance;
+    float attack, decay, sustain, release, durationSeconds;
+    float roomSend, delaySend, crush;
+    std::uint8_t chokeGroup;
+    std::uint32_t highlightToken;  // for Code Beat active highlighting
+};
+```
+
+- `engine::Voices` has fixed pools (64 sample voices, 32 synth voices, 16 drum-synth voices per source). Allocation is by free list; stealing = oldest released, then oldest playing.
+- Events start at their exact sample offset within the block. Events with `sampleTime` earlier than the block start are dropped and counted as `lateEvents`.
+
+### 3.8 Mixer graph
+
+```
+Deck A ─▶ Strip ─┐
+Deck B ─▶ Strip ─┤                 ┌─▶ Master bus ─▶ Limiter ─▶ meters ─▶ out 1/2 (or split L)
+Deck C ─▶ Strip ─┼─▶ Crossfader ───┤
+Deck D ─▶ Strip ─┤   (A/THRU/B)    └─▶ Record tap
+Sampler ▶ Strip ─┤
+BeatMkr ▶ Strip ─┤
+CodeDk ─▶ Strip ─┤
+Mic ───▶ Strip ─┘ (thru)
+Cue bus = Σ (pre-fader channels with CUE on) mixed with master by cue/master knob ─▶ out 3/4 (or split R)
+```
+
+Strip = trim → EQ/Isolator → Color FX (filter etc.) → [FX unit insert if targeted] → fader. FX units targeting "master" process the master bus before the limiter.
+
+### 3.9 Recorder
+
+Record tap copies the master (post-limiter) into a lock-free FIFO sized for 2 s; a writer thread writes WAV 24-bit or FLAC with `juce::AudioFormatWriter::ThreadedWriter`. Overflow is counted and reported (never blocks the audio thread).
+
+## 4. DSP design notes
+
+| Block | Design |
+| --- | --- |
+| Parameter smoothing | One-pole or linear ramps over 20 ms; all user-facing gains in dB internally |
+| EQ mode | RBJ biquads: low shelf 70 Hz (Q 0.7), peak 1 kHz (Q 0.7), high shelf 13 kHz (Q 0.7); range −26…+6 dB |
+| Isolator mode | Linkwitz-Riley 4th order (two cascaded 2nd-order Butterworth) at 250 Hz and 2.5 kHz with all-pass phase compensation on the low band, so bands sum flat; per-band gain −∞…+6 dB |
+| Channel filter | TPT (topology-preserving) state-variable filter; knob < 0.5 → LP 20 kHz→60 Hz (exponential), > 0.5 → HP 20 Hz→10 kHz; resonance setting; dead zone ±2 % around centre |
+| Crossfader curves | Smooth: `gA = cos(x·π/2)`, `gB = sin(x·π/2)`; Linear; Cut: full level until 5 % from the far end |
+| Limiter | 1.5 ms look-ahead, peak detector with 5 ms release, ceiling −0.3 dBFS, true-peak 4× oversampled detector in "high quality" |
+| Resampler | Cubic Hermite (default), 16-tap Kaiser-windowed sinc (high quality) |
+| Stretcher | `dsp::Stretcher` interface; `SignalsmithStretcher` with `presetDefault(channels, sampleRate)`; transposition in semitones; latency exposed via `getLatencySamples()` |
+| Reverb | 8-line feedback delay network, Householder matrix, damping LP per line, pre-delay; tempo-free |
+| Delays | Fractional delay lines (Hermite interpolation), tempo-synced times from MasterClock, LP/HP in feedback, ping-pong option |
+| Roll / Freeze | Capture N beats into a ring, loop it quantized while held, fade 3 ms at boundaries |
+| Loudness | ITU-R BS.1770-4 K-weighting + gating (offline, analysis only) |
+
+## 5. Analysis pipeline
+
+```
+AnalysisJob(trackId) ──▶ decode (mono 22.05 kHz + full-rate stereo for waveform)
+   ├─▶ WaveformBuilder (150 pts/s, 3 bands, peaks+RMS) ──▶ cache file
+   ├─▶ BeatTracker v1 (onset flux → tempogram → DP beats → grid fit → downbeat) ──▶ beatgrid
+   ├─▶ KeyDetector (chroma → 24 profiles) ──▶ key, confidence
+   ├─▶ Loudness (BS.1770) ──▶ LUFS, auto-gain dB
+   ├─▶ [Phase 6] Phrase, vocal presence, stems (ONNX)
+   └─▶ results ──▶ DB writer (transaction) ──▶ change notification ──▶ UI
+```
+
+Each analyzer is a pure function `Result analyze(const AnalysisInput&, const Params&)` with no global state, so it is unit-testable with generated signals. Results carry `analysisVersion`; bump it when an algorithm changes.
+
+## 6. Library
+
+- SQLite in WAL mode at `%APPDATA%\Devil-DJ\library.db`. One writer thread; UI reads through a read-only connection.
+- Repositories return plain structs; UI models (`TrackTableModel`) cache pages of 200 rows.
+- FTS5 virtual table `tracks_fts(title, artist, album, comment)` kept in sync by triggers.
+
+## 7. Database schema (v1)
+
+```sql
+CREATE TABLE tracks (
+  id INTEGER PRIMARY KEY,
+  path TEXT NOT NULL UNIQUE,
+  content_hash TEXT NOT NULL,
+  title TEXT, artist TEXT, album TEXT, genre TEXT, year INTEGER, comment TEXT,
+  duration_ms INTEGER, sample_rate INTEGER, bitrate INTEGER, file_size INTEGER,
+  bpm REAL, bpm_locked INTEGER DEFAULT 0,
+  musical_key INTEGER,            -- 0..23 (0 = C major ... 23 = B minor), NULL = unknown
+  key_confidence REAL,
+  loudness_lufs REAL, auto_gain_db REAL,
+  rating INTEGER DEFAULT 0, color INTEGER,
+  play_count INTEGER DEFAULT 0, last_played INTEGER,
+  date_added INTEGER NOT NULL,
+  analysis_version INTEGER DEFAULT 0,
+  missing INTEGER DEFAULT 0
+);
+CREATE INDEX idx_tracks_bpm ON tracks(bpm);
+CREATE INDEX idx_tracks_key ON tracks(musical_key);
+
+CREATE TABLE beatgrids (
+  track_id INTEGER PRIMARY KEY REFERENCES tracks(id) ON DELETE CASCADE,
+  anchors_json TEXT NOT NULL,     -- [{"beat":0,"sample":12345,"bpm":128.0,"bar_beat":1}, ...]
+  locked INTEGER DEFAULT 0
+);
+
+CREATE TABLE cues (
+  id INTEGER PRIMARY KEY,
+  track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+  kind INTEGER NOT NULL,          -- 0 hot cue, 1 memory cue, 2 memory loop, 3 hot loop, 4 mix in, 5 mix out
+  slot INTEGER,                   -- 0..15 for hot cues
+  start_sample INTEGER NOT NULL, length_samples INTEGER DEFAULT 0,
+  label TEXT, color INTEGER
+);
+CREATE INDEX idx_cues_track ON cues(track_id);
+
+CREATE TABLE playlists (
+  id INTEGER PRIMARY KEY,
+  parent_id INTEGER REFERENCES playlists(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  kind INTEGER NOT NULL,          -- 0 folder, 1 playlist, 2 smart, 3 history
+  rule_json TEXT,                 -- smart playlists
+  sort_order INTEGER DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE playlist_tracks (
+  playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+  track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL,
+  PRIMARY KEY (playlist_id, position)
+);
+
+CREATE TABLE tag_categories (id INTEGER PRIMARY KEY, name TEXT NOT NULL, sort_order INTEGER);
+CREATE TABLE tags (id INTEGER PRIMARY KEY, category_id INTEGER REFERENCES tag_categories(id), name TEXT NOT NULL);
+CREATE TABLE track_tags (track_id INTEGER REFERENCES tracks(id) ON DELETE CASCADE,
+                         tag_id INTEGER REFERENCES tags(id) ON DELETE CASCADE,
+                         PRIMARY KEY (track_id, tag_id));
+
+CREATE TABLE history (id INTEGER PRIMARY KEY, session_id INTEGER NOT NULL,
+                      track_id INTEGER REFERENCES tracks(id), played_at INTEGER NOT NULL, deck INTEGER,
+                      previous_track_id INTEGER REFERENCES tracks(id));   -- transition source for the Track Matcher
+
+CREATE TABLE analysis_artifacts (
+  track_id INTEGER REFERENCES tracks(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,             -- 'waveform', 'stems', 'phrases', 'vocal'
+  path TEXT NOT NULL, version INTEGER NOT NULL,
+  PRIMARY KEY (track_id, kind)
+);
+
+CREATE VIRTUAL TABLE tracks_fts USING fts5(title, artist, album, comment, content='tracks', content_rowid='id');
+```
+
+Migrations live in `library/Migrations.cpp` as an ordered list of SQL strings; `PRAGMA user_version` stores the applied version.
+
+Schema v2 (Phase 2, task P2-24, and later Track Matcher tasks) adds `track_features`, `track_embeddings`, `choice_log`, `matcher_models` and `track_neighbors` — defined in `docs/MATCHER_SPEC.md` §11. History rows also record the previous track so transitions can be counted.
+
+## 8. Files and folders
+
+| What | Where |
+| --- | --- |
+| Settings | `%APPDATA%\Devil-DJ\settings.xml` |
+| Library DB + backups | `%APPDATA%\Devil-DJ\library.db`, `...\backups\` |
+| Analysis cache (waveforms, stems) | `%LOCALAPPDATA%\Devil-DJ\cache\<content_hash>.*` |
+| Logs + crash dumps | `%LOCALAPPDATA%\Devil-DJ\logs\` |
+| User content | `Documents\Devil-DJ\{Samples,Beats,Code,Recordings,Keymaps}` |
+
+Waveform cache format `.wfm`: header (magic `DDJW`, version u16, sample rate u32, points/s u16, count u32) + 6 × u8 arrays (low/mid/high × peak/RMS) + overview block.
+
+## 9. UI architecture
+
+- `MainComponent` hosts layout areas: top (deck A, mixer, deck B), centre (waveforms), bottom (browser / Beat Maker / Code Beat tabs), side panels (sampler, FX, next-track).
+- All user actions go through `ui::ActionDispatcher::perform(CommandId, ActionPhase)`; components, `KeyboardController`, MIDI Learn and the phone remote all call it.
+- Views never hold engine pointers; they read `EngineState` (latest) and send `EngineCommand`s.
+- `juce::VBlankAttachment` drives waveform and meter repaints; other components repaint on change.
+- Look and feel: `ui::DevilLookAndFeel` with design tokens (colours, radii, type scale) in one header so themes can switch.
+
+## 10. Code Beat runtime
+
+See `docs/CODEBEAT_SPEC.md`. Summary: the pattern library is JS (`js/codebeat/`) embedded as binary data, evaluated in quickjs-ng on the Code deck thread; C++ queries `pattern.queryArc(t0, t1)` and converts events to `ScheduledEvent`s.
+
+## 11. Performance budgets (target laptop, 48 kHz, 256-sample buffer = 5.33 ms)
+
+| Item | Budget |
+| --- | --- |
+| Audio callback, 2 decks key lock + 2 FX + sampler | ≤ 35 % of buffer time (p99) |
+| Audio callback, 4 decks + stems on 2 | ≤ 60 % (p99) |
+| UI frame (2 waveforms + meters) | ≤ 8 ms (p95) |
+| Track load → playable (analyzed track, 6 min MP3) | ≤ 1.5 s |
+| Analysis v1 per 5-min track (one worker) | ≤ 10 s |
+| App start with 20k tracks | ≤ 3 s to usable UI |
+| Track Matcher: score 5,000 candidates | ≤ 30 ms |
+| Smart Sort: 300-track playlist | ≤ 2 s |
+| RAM: 2 decks loaded (6-min tracks, float stereo) | ≈ 260 MB + UI |
+
+## 12. Errors and diagnostics
+
+- No exceptions cross thread boundaries; workers return `Result<T, Error>` (`util/Result.h`).
+- User-facing errors (file can't decode, device lost) show as non-blocking toasts; details go to the log.
+- Device loss: engine keeps state, UI shows "audio device lost", auto-reconnects when the device returns.
