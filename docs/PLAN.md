@@ -98,7 +98,7 @@ Goal: a repository where an empty JUCE window builds locally and in CI, with the
   `tools/gen_test_signals.py` (Python, no deps beyond numpy/soundfile): click tracks at 90/120/128/140/174 BPM with known first beat, sine sweeps, major/minor chord loops in all 24 keys, silence-padded files. Output to `tests/data/generated/` (git-ignored, generated in CI).
   Done when: CI generates the files before tests run.
 
-**Phase 0 gate:** CI green on `main`; empty window launches from the CI artifact on the owner's laptop.
+**Phase 0 gate:** CI green on `main`; empty window launches from the CI artifact on the owner's laptop. **Passed 2026-11-18** (CI run 44159622127, artifact 6cb119d).
 
 ---
 

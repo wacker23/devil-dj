@@ -16,4 +16,4 @@ A Windows DJ application in C++20 / JUCE 8: a full DJ engine (decks, library, an
 | `docs/LICENSES.md` | Dependency licence policy |
 | `docs/DEVLOG.md` | One entry per finished task |
 
-Status: Phase 0 (Foundations) in progress.
+Status: Phase 0 (Foundations) complete; Phase 1 (Decks and mixer) next.

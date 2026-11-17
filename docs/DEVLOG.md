@@ -11,6 +11,10 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-18 · Phase 0 gate passed
+- CI green on `main` (run 44159622127). The CI-built Release exe (artifact from 6cb119d) opens its window on the owner's laptop, showing JUCE 8.0.15 | TagLib 2.3.1.
+- Next: Phase 1, task P1-01 (audio device manager). Needed soon: D4 laptop specs for the P1-08 / P1-20 measurements.
+
 ## 2026-11-18 · P0-06 fix: exe didn't start on the owner's laptop
 - Cause: the exe used the dynamic MSVC runtime (MSVCP140.dll, VCRUNTIME140.dll, VCRUNTIME140_1.dll, UCRT). The dev PC has them via Visual Studio; a normal laptop may not, or has an older version than the VS 2026 toolset needs, so Windows refused to load the exe before any code (and logging) ran.
 - Fix: static runtime everywhere — `CMAKE_MSVC_RUNTIME_LIBRARY = MultiThreaded$<$<CONFIG:Debug>:Debug>` and vcpkg triplet `x64-windows-static`. Release exe now imports only Windows system DLLs; 5.4 MB (was 4.9 MB). New CI step fails if the exe imports msvcp/vcruntime/concrt/ucrtbase/api-ms-win-crt-*.
