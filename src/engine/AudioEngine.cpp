@@ -30,10 +30,12 @@ bool AudioEngine::send(const EngineCommand& command) noexcept
     return false;
 }
 
-void AudioEngine::prepare(double newSampleRate, int newMaxBlockSize) noexcept
+void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
 {
     sampleRate = newSampleRate > 0.0 ? newSampleRate : 48000.0;
-    maxBlockSize = newMaxBlockSize;
+    capacity = std::max(maxBlockSize, 1);
+    masterBus.setSize(2, capacity, false, true, false);
+    cueBus.setSize(2, capacity, false, true, false);
     tone.gain.reset(sampleRate, kGainRampSeconds);
     reset();
 }
@@ -43,13 +45,17 @@ void AudioEngine::reset() noexcept
     tone.phase = 0.0;
     tone.phaseIncrement = 2.0 * std::numbers::pi * tone.frequencyHz / sampleRate;
     tone.gain.setCurrentAndTargetValue(tone.on ? tone.gain.getTargetValue() : 0.0f);
+    masterBus.clear();
+    cueBus.clear();
 
     const auto processed = current.commandsProcessed;
     current = EngineState{};
     current.sampleRate = sampleRate;
     current.commandsProcessed = processed;
+    current.outputLayout = layout;
     current.testToneOn = tone.on;
     current.testToneHz = tone.frequencyHz;
+    current.testToneBus = tone.bus;
 }
 
 void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device)
@@ -73,14 +79,40 @@ void AudioEngine::process(float* const* outputs, int numChannels, int numSamples
 
     drainCommands();
 
-    for (int ch = 0; ch < numChannels; ++ch)
-        if (outputs[ch] != nullptr)
-            juce::FloatVectorOperations::clear(outputs[ch], numSamples);
-
-    renderTestTone(outputs, numChannels, numSamples);
+    if (capacity == 0) // not prepared: stay silent
+    {
+        for (int ch = 0; ch < numChannels; ++ch)
+            if (outputs[ch] != nullptr)
+                juce::FloatVectorOperations::clear(outputs[ch], numSamples);
+    }
+    else
+    {
+        for (int offset = 0; offset < numSamples; offset += capacity)
+            renderChunk(outputs, numChannels, offset, std::min(capacity, numSamples - offset));
+    }
 
     const auto elapsed = juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - startTicks);
-    publish(numSamples, elapsed);
+    publish(numChannels, numSamples, elapsed);
+}
+
+void AudioEngine::renderChunk(float* const* outputs, int numChannels, int offset, int numSamples) noexcept
+{
+    masterBus.clear(0, numSamples);
+    cueBus.clear(0, numSamples);
+
+    renderTestTone(numSamples);
+
+    // Point at this chunk of each device output channel.
+    float* chunk[kMaxOutputChannels] = {};
+    const int channels = std::min(numChannels, kMaxOutputChannels);
+    for (int ch = 0; ch < channels; ++ch)
+        chunk[ch] = outputs[ch] != nullptr ? outputs[ch] + offset : nullptr;
+    for (int ch = channels; ch < numChannels; ++ch) // more outputs than we track: keep them silent
+        if (outputs[ch] != nullptr)
+            juce::FloatVectorOperations::clear(outputs[ch] + offset, numSamples);
+
+    routeOutputs(layout, masterBus.getReadPointer(0), masterBus.getReadPointer(1), cueBus.getReadPointer(0),
+                 cueBus.getReadPointer(1), chunk, channels, numSamples);
 }
 
 void AudioEngine::drainCommands() noexcept
@@ -88,7 +120,9 @@ void AudioEngine::drainCommands() noexcept
     EngineCommand command;
     for (int i = 0; i < kMaxCommandsPerBlock && commands.tryPop(command); ++i)
     {
-        std::visit(Overloaded{[this](const SetTestTone& c) { apply(c); }}, command);
+        std::visit(
+            Overloaded{[this](const SetTestTone& c) { apply(c); }, [this](const SetOutputLayout& c) { apply(c); }},
+            command);
         ++current.commandsProcessed;
     }
 }
@@ -99,34 +133,52 @@ void AudioEngine::apply(const SetTestTone& command) noexcept
     tone.frequencyHz = hz;
     tone.phaseIncrement = 2.0 * std::numbers::pi * hz / sampleRate;
 
-    if (command.on && !tone.on)
+    const bool busChanged = command.bus != tone.bus;
+    if (command.on && (!tone.on || busChanged))
+    {
         tone.phase = 0.0; // start at a zero crossing; the gain ramp handles the rest
+        if (busChanged)
+            tone.gain.setCurrentAndTargetValue(0.0f); // fade in on the new bus instead of jumping
+    }
     tone.on = command.on;
+    tone.bus = command.bus;
+
+    const double angle = (std::clamp(command.pan, -1.0f, 1.0f) + 1.0) * std::numbers::pi / 4.0;
+    tone.gainLeft = static_cast<float>(std::cos(angle));
+    tone.gainRight = static_cast<float>(std::sin(angle));
     tone.gain.setTargetValue(command.on ? juce::Decibels::decibelsToGain(command.gainDb) : 0.0f);
 
     current.testToneOn = tone.on;
     current.testToneHz = hz;
+    current.testToneBus = tone.bus;
 }
 
-void AudioEngine::renderTestTone(float* const* outputs, int numChannels, int numSamples) noexcept
+void AudioEngine::apply(const SetOutputLayout& command) noexcept
+{
+    layout = command.layout;
+    current.outputLayout = layout;
+}
+
+void AudioEngine::renderTestTone(int numSamples) noexcept
 {
     if (!tone.on && !tone.gain.isSmoothing() && tone.gain.getCurrentValue() == 0.0f)
         return; // silent: nothing to add
 
+    auto& bus = tone.bus == Bus::Cue ? cueBus : masterBus;
+    float* left = bus.getWritePointer(0);
+    float* right = bus.getWritePointer(1);
     for (int i = 0; i < numSamples; ++i)
     {
         const float sample = static_cast<float>(std::sin(tone.phase)) * tone.gain.getNextValue();
         tone.phase += tone.phaseIncrement;
         if (tone.phase >= 2.0 * std::numbers::pi)
             tone.phase -= 2.0 * std::numbers::pi;
-
-        for (int ch = 0; ch < numChannels; ++ch)
-            if (outputs[ch] != nullptr)
-                outputs[ch][i] += sample;
+        left[i] += sample * tone.gainLeft;
+        right[i] += sample * tone.gainRight;
     }
 }
 
-void AudioEngine::publish(int numSamples, double elapsedSeconds) noexcept
+void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds) noexcept
 {
     const double budget = numSamples / sampleRate;
     const auto load = budget > 0.0 ? static_cast<float>(elapsedSeconds / budget) : 0.0f;
@@ -139,6 +191,8 @@ void AudioEngine::publish(int numSamples, double elapsedSeconds) noexcept
     current.cpuLoadPeak = std::max(load, current.cpuLoadPeak * kPeakDecay);
     if (load > 1.0f)
         ++current.xruns;
+    current.outputChannels = numChannels;
+    current.cueRouted = cueIsRouted(layout, numChannels);
 
     state.write(current);
 }

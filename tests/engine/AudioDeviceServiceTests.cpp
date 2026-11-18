@@ -1,4 +1,5 @@
 #include "engine/AudioDeviceService.h"
+#include "engine/AudioEngine.h"
 
 #include "FakeAudioDevice.h"
 
@@ -213,4 +214,49 @@ TEST_CASE("AudioDeviceService status description keeps non-ASCII device names in
     devildj::engine::AudioDeviceStatus closed;
     closed.lastError = "device unplugged";
     CHECK(devildj::engine::describeStatus(closed) == "no audio device open (device unplugged)");
+}
+
+TEST_CASE("AudioDeviceService opens 2 or 4 outputs for the output layout", "[engine][AudioDeviceService]")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    devildj::engine::AudioDeviceService service;
+    service.addDeviceType(std::make_unique<FakeAudioDeviceType>("Fake 4ch", juce::StringArray{"Interface"}, 4));
+    service.addDeviceType(std::make_unique<FakeAudioDeviceType>("Fake 2ch", juce::StringArray{"Laptop"}, 2));
+    REQUIRE(service.initialise({}).isEmpty());
+    CHECK(service.getMaxOutputChannelCount() == 4);
+    CHECK(service.getActiveOutputChannelCount() == 2); // stereo by default
+
+    CHECK(service.setOutputChannelCount(4).isEmpty());
+    CHECK(service.getActiveOutputChannelCount() == 4);
+
+    // Persisted with the device choice.
+    const auto saved = service.getStateXml();
+    devildj::engine::AudioDeviceService restored;
+    restored.addDeviceType(std::make_unique<FakeAudioDeviceType>("Fake 4ch", juce::StringArray{"Interface"}, 4));
+    REQUIRE(restored.initialise(saved).isEmpty());
+    CHECK(restored.getActiveOutputChannelCount() == 4);
+
+    // A stereo device opens what it has.
+    REQUIRE(service.setDeviceType("Fake 2ch").isEmpty());
+    service.setOutputChannelCount(4);
+    CHECK(service.getActiveOutputChannelCount() == 2);
+}
+
+TEST_CASE("Engine routes cue to outputs 3/4 on a 4-output device", "[engine][AudioDeviceService][routing]")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    devildj::engine::AudioDeviceService service;
+    service.addDeviceType(std::make_unique<FakeAudioDeviceType>("Fake 4ch", juce::StringArray{"Interface"}, 4));
+    REQUIRE(service.initialise({}).isEmpty());
+    REQUIRE(service.setOutputChannelCount(4).isEmpty());
+
+    devildj::engine::AudioEngine engine;
+    engine.send(devildj::engine::SetOutputLayout{devildj::engine::OutputLayout::FourChannel});
+    service.setAudioCallback(&engine);
+    REQUIRE(waitFor([&] { return engine.readState().blockCounter > 5; }));
+
+    const auto& state = engine.readState();
+    CHECK(state.outputChannels == 4);
+    CHECK(state.cueRouted);
+    service.setAudioCallback(nullptr);
 }

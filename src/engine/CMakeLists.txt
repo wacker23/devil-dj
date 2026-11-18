@@ -12,7 +12,9 @@ target_sources(devildj_engine INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/AudioEngine.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/AudioEngine.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/EngineCommand.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/EngineState.h")
+    "${CMAKE_CURRENT_SOURCE_DIR}/EngineState.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/OutputRouter.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/OutputRouter.h")
 
 target_include_directories(devildj_engine INTERFACE "${PROJECT_SOURCE_DIR}/src")
 

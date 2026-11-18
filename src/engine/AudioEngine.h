@@ -2,6 +2,7 @@
 
 #include "engine/EngineCommand.h"
 #include "engine/EngineState.h"
+#include "engine/OutputRouter.h"
 #include "util/SpscQueue.h"
 #include "util/TripleBuffer.h"
 
@@ -13,15 +14,16 @@
 namespace devildj::engine
 {
 
-// The real-time audio engine (P1-02 skeleton; ARCHITECTURE §3.1).
+// The real-time audio engine (ARCHITECTURE §3.1). P1-02 skeleton + P1-03 output routing.
 //
 // Threads:
 //   - Message thread: send() commands, readState() for the UI.
 //   - Audio thread: audioDeviceIOCallbackWithContext() (or process() in tests). It never allocates, locks,
 //     logs or blocks; RealtimeGuard checks this in Debug builds.
 //
-// Per block: drain up to kMaxCommandsPerBlock commands, render (for now: silence or the test tone on every
-// output channel), measure the CPU load, publish EngineState.
+// Per block: drain up to kMaxCommandsPerBlock commands; render the master and cue buses (for now only the
+// test tone); route them to the device outputs for the current OutputLayout; measure CPU; publish EngineState.
+// Blocks larger than the size given to prepare() are processed in chunks.
 class AudioEngine final : public juce::AudioIODeviceCallback
 {
 public:
@@ -43,11 +45,13 @@ public:
     // Latest published state. One reader thread only (the UI); the reference stays valid until the next call.
     const EngineState& readState() noexcept { return state.read(); }
 
-    // ---- audio thread (also callable directly, e.g. offline tests) ----
+    // ---- not on the audio thread: allocates the bus buffers ----
 
-    // Call before processing (the device callback does this in audioDeviceAboutToStart).
-    void prepare(double sampleRate, int maxBlockSize) noexcept;
+    // The device callback calls this from audioDeviceAboutToStart. Call it yourself for offline processing.
+    void prepare(double sampleRate, int maxBlockSize);
     void reset() noexcept;
+
+    // ---- audio thread ----
 
     // Renders one block into 'outputs' (numChannels pointers to numSamples floats; null pointers are skipped).
     void process(float* const* outputs, int numChannels, int numSamples) noexcept;
@@ -60,10 +64,14 @@ public:
     void audioDeviceStopped() override;
 
 private:
+    static constexpr int kMaxOutputChannels = 32;
+
     void drainCommands() noexcept;
     void apply(const SetTestTone& command) noexcept;
-    void renderTestTone(float* const* outputs, int numChannels, int numSamples) noexcept;
-    void publish(int numSamples, double elapsedSeconds) noexcept;
+    void apply(const SetOutputLayout& command) noexcept;
+    void renderChunk(float* const* outputs, int numChannels, int offset, int numSamples) noexcept;
+    void renderTestTone(int numSamples) noexcept;
+    void publish(int numChannels, int numSamples, double elapsedSeconds) noexcept;
 
     util::SpscQueue<EngineCommand, kCommandQueueSize> commands;
     util::TripleBuffer<EngineState> state;
@@ -71,7 +79,10 @@ private:
 
     // Audio-thread state.
     double sampleRate = 48000.0;
-    int maxBlockSize = 0;
+    int capacity = 0;                   // samples per chunk (prepared block size)
+    juce::AudioBuffer<float> masterBus; // 2 x capacity
+    juce::AudioBuffer<float> cueBus;    // 2 x capacity
+    OutputLayout layout = OutputLayout::StereoMaster;
     EngineState current; // built up during the block, then published
 
     struct TestTone
@@ -80,6 +91,9 @@ private:
         double phase = 0.0;          // radians
         double phaseIncrement = 0.0; // radians per sample
         float frequencyHz = 440.0f;
+        Bus bus = Bus::Master;
+        float gainLeft = 0.70710678f; // constant-power pan gains
+        float gainRight = 0.70710678f;
         juce::SmoothedValue<float> gain; // linear, ramped over 20 ms
     } tone;
 };

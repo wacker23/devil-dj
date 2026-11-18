@@ -96,7 +96,8 @@ TEST_CASE("AudioEngine test tone command plays a sine at the requested pitch and
     const auto from = static_cast<std::size_t>(0.1 * kRate);
     const auto to = from + static_cast<std::size_t>(0.5 * kRate);
     const double amplitude = std::pow(10.0, -12.0 / 20.0);
-    CHECK(std::abs(rms(r.left, from, to) - amplitude / std::sqrt(2.0)) < 1e-3);
+    // Centre pan is constant power: each channel carries amplitude * cos(pi/4).
+    CHECK(std::abs(rms(r.left, from, to) - amplitude * std::cos(std::numbers::pi / 4.0) / std::sqrt(2.0)) < 1e-3);
     CHECK(r.left == r.right); // same tone on both channels
 
     int crossings = 0; // rising zero crossings in 0.5 s = 220 for 440 Hz

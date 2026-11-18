@@ -65,6 +65,12 @@ public:
     juce::String setSampleRate(double sampleRate);
     juce::String setBufferSize(int samples);
 
+    // Opens the first 'count' outputs of the current device (2 for stereo/split, 4 for 4-channel cue).
+    // Devices with fewer outputs open as many as they have.
+    juce::String setOutputChannelCount(int count);
+    int getActiveOutputChannelCount() const;
+    int getMaxOutputChannelCount() const;
+
     juce::Array<double> getAvailableSampleRates() const;
     juce::Array<int> getAvailableBufferSizes() const;
 

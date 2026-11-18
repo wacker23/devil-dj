@@ -56,7 +56,13 @@ public:
         const bool showDebugMenu =
             kDebugBuild || commandLine.contains("--debug-menu") || settings->get(keys::showDebugMenu);
         menu = std::make_unique<AppMenu>(logDirectory(), showDebugMenu);
-        menu->onAudioSettings = [this] { showAudioSettingsWindow(*audio, mainWindow.get()); };
+        menu->onAudioSettings = [this]
+        {
+            AudioSettingsComponent::Callbacks callbacks;
+            callbacks.getLayout = [this] { return currentLayout(); };
+            callbacks.setLayout = [this](engine::OutputLayout layout) { applyOutputLayout(layout, true); };
+            showAudioSettingsWindow(*audio, *engine, std::move(callbacks), mainWindow.get());
+        };
         menu->onToggleDebugOverlay = [this] { mainComponent->toggleDebugOverlay(); };
         menu->onToggleTestTone = [this] { mainComponent->toggleTestTone(); };
         mainWindow->setMenuBar(menu.get());
@@ -118,12 +124,32 @@ private:
         engine = std::make_unique<engine::AudioEngine>();
         audio = std::make_unique<engine::AudioDeviceService>();
         audio->initialise(settings->get(keys::audioDeviceState));
+        applyOutputLayout(currentLayout(), false);
         audio->setAudioCallback(engine.get());
         audio->onDeviceChanged = [this]
         {
             if (const auto state = audio->getStateXml(); state.isNotEmpty())
                 settings->set(keys::audioDeviceState, state);
         };
+    }
+
+    engine::OutputLayout currentLayout() const
+    {
+        const int value = settings->get(keys::outputLayout);
+        if (value < 0 || value >= engine::kNumOutputLayouts)
+            return engine::OutputLayout::StereoMaster;
+        return static_cast<engine::OutputLayout>(value);
+    }
+
+    // Tells the engine, opens the outputs the layout needs, optionally saves the choice.
+    void applyOutputLayout(engine::OutputLayout layout, bool save)
+    {
+        if (save)
+            settings->set(keys::outputLayout, static_cast<int>(layout));
+        engine->send(engine::SetOutputLayout{layout});
+        if (const auto error = audio->setOutputChannelCount(engine::outputChannelsFor(layout)); error.isNotEmpty())
+            util::logWarning("Audio: {}", error.toStdString());
+        util::logInfo("Audio: output layout {}", engine::outputLayoutName(layout));
     }
 
     juce::LookAndFeel_V4 lookAndFeel;

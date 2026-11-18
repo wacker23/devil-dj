@@ -14,14 +14,21 @@ namespace devildj::test
 class FakeAudioDevice final : public juce::AudioIODevice
 {
 public:
-    FakeAudioDevice(const juce::String& deviceName, const juce::String& typeName)
+    FakeAudioDevice(const juce::String& deviceName, const juce::String& typeName, int outputChannels = 2)
         : AudioIODevice(deviceName, typeName)
+        , numOutputs(outputChannels)
     {
     }
 
     ~FakeAudioDevice() override { close(); }
 
-    juce::StringArray getOutputChannelNames() override { return {"Left", "Right"}; }
+    juce::StringArray getOutputChannelNames() override
+    {
+        juce::StringArray names;
+        for (int i = 0; i < numOutputs; ++i)
+            names.add("Out " + juce::String(i + 1));
+        return names;
+    }
     juce::StringArray getInputChannelNames() override { return {}; }
     juce::Array<double> getAvailableSampleRates() override { return {44100.0, 48000.0}; }
     juce::Array<int> getAvailableBufferSizes() override { return {128, 256, 512}; }
@@ -81,21 +88,23 @@ public:
 private:
     void run()
     {
-        juce::AudioBuffer<float> buffer(2, bufferSamples);
+        const int channels = juce::jmax(1, activeOutputs.countNumberOfSetBits());
+        juce::AudioBuffer<float> buffer(channels, bufferSamples);
         const auto period = std::chrono::duration<double>(bufferSamples / sampleRate);
         auto next = std::chrono::steady_clock::now();
         const juce::AudioIODeviceCallbackContext context{};
         while (running)
         {
             buffer.clear();
-            callback->audioDeviceIOCallbackWithContext(nullptr, 0, buffer.getArrayOfWritePointers(), 2, bufferSamples,
-                                                       context);
+            callback->audioDeviceIOCallbackWithContext(nullptr, 0, buffer.getArrayOfWritePointers(), channels,
+                                                       bufferSamples, context);
             ++callbacks;
             next += std::chrono::duration_cast<std::chrono::steady_clock::duration>(period);
             std::this_thread::sleep_until(next);
         }
     }
 
+    int numOutputs = 2;
     double sampleRate = 48000.0;
     int bufferSamples = 256;
     juce::BigInteger activeOutputs;
@@ -108,9 +117,10 @@ private:
 class FakeAudioDeviceType final : public juce::AudioIODeviceType
 {
 public:
-    FakeAudioDeviceType(const juce::String& typeName, juce::StringArray deviceNames)
+    FakeAudioDeviceType(const juce::String& typeName, juce::StringArray deviceNames, int outputChannels = 2)
         : AudioIODeviceType(typeName)
         , names(std::move(deviceNames))
+        , numOutputs(outputChannels)
     {
     }
 
@@ -131,11 +141,12 @@ public:
         const auto name = outputName.isNotEmpty() ? outputName : inputName;
         if (!names.contains(name))
             return nullptr;
-        return new FakeAudioDevice(name, getTypeName()); // JUCE takes ownership
+        return new FakeAudioDevice(name, getTypeName(), numOutputs); // JUCE takes ownership
     }
 
 private:
     juce::StringArray names;
+    int numOutputs;
 };
 
 } // namespace devildj::test

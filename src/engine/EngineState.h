@@ -1,5 +1,8 @@
 #pragma once
 
+#include "engine/EngineCommand.h"
+#include "engine/OutputRouter.h"
+
 #include <cstdint>
 #include <type_traits>
 
@@ -22,8 +25,13 @@ struct EngineState
 
     std::uint64_t commandsProcessed = 0;
 
+    OutputLayout outputLayout = OutputLayout::StereoMaster;
+    int outputChannels = 0; // active device outputs in the last block
+    bool cueRouted = false; // the cue bus is audible with this layout and device
+
     bool testToneOn = false;
     float testToneHz = 0.0f;
+    Bus testToneBus = Bus::Master;
 };
 
 static_assert(std::is_trivially_copyable_v<EngineState>, "EngineState must stay trivially copyable");

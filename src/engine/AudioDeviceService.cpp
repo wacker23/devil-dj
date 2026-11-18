@@ -127,6 +127,31 @@ juce::String AudioDeviceService::setBufferSize(int samples)
     return applySetup(setup);
 }
 
+juce::String AudioDeviceService::setOutputChannelCount(int count)
+{
+    auto setup = deviceManager.getAudioDeviceSetup();
+    setup.useDefaultOutputChannels = false;
+    setup.outputChannels.clear();
+    setup.outputChannels.setRange(0, juce::jlimit(1, juce::jmax(1, getMaxOutputChannelCount()), count), true);
+    if (setup.outputChannels == deviceManager.getAudioDeviceSetup().outputChannels)
+        return {};
+    return applySetup(setup);
+}
+
+int AudioDeviceService::getActiveOutputChannelCount() const
+{
+    if (auto* device = deviceManager.getCurrentAudioDevice())
+        return device->getActiveOutputChannels().countNumberOfSetBits();
+    return 0;
+}
+
+int AudioDeviceService::getMaxOutputChannelCount() const
+{
+    if (auto* device = deviceManager.getCurrentAudioDevice())
+        return device->getOutputChannelNames().size();
+    return 0;
+}
+
 juce::String AudioDeviceService::applySetup(const juce::AudioDeviceManager::AudioDeviceSetup& setup)
 {
     auto error = deviceManager.setAudioDeviceSetup(setup, true);
