@@ -110,7 +110,7 @@ Space is deliberately unbound in performance view to avoid accidental stops; it 
 | Right-click any control | MIDI Learn / bind key / reset |
 | Two-finger touch on two faders | Both move independently (multi-touch) |
 
-Until the zoomed waveform exists (P1-14), the drag / scroll jog gestures work on the temporary jog strips at the bottom of the window (left = deck A, right = deck B). Grab-and-move: dragging left pushes the track forward; 1 px = 5 ms, one wheel notch = 5 ms.
+Zoomed waveform gestures: grab-and-move (dragging left pushes the track forward, so the waveform follows the hand); one wheel notch nudges 5 ms; Ctrl + wheel zooms between 2 and 32 s visible.
 
 ## "Laptop compact" preset
 

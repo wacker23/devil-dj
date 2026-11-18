@@ -1,5 +1,7 @@
 #include "DeckView.h"
 
+#include "ui/WaveformColours.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -234,32 +236,25 @@ void DeckView::Overview::paint(juce::Graphics& g)
     g.fillRoundedRectangle(area, 4.0f);
     const auto& t = deckView.track;
     const auto& s = deckView.state;
-    if (t == nullptr || t->overviewPeak.empty() || s.lengthSamples <= 0)
+    if (t == nullptr || t->waveform.overviewPeak[0].empty() || s.lengthSamples <= 0)
         return;
 
-    const int points = static_cast<int>(t->overviewPeak.size());
+    const auto& w = t->waveform;
+    const int points = static_cast<int>(w.overviewPeak[0].size());
     const float mid = area.getCentreY();
     const float half = area.getHeight() * 0.5f - 2.0f;
     const float playedX = area.getX() + area.getWidth() * static_cast<float>(s.positionSamples / s.lengthSamples);
     const int columns = std::max(1, static_cast<int>(area.getWidth()));
     for (int c = 0; c < columns; ++c)
     {
-        // Each pixel column shows the loudest overview point under it.
+        // Each pixel column shows the loudest overview point under it, in the 3-band colours; played = dimmed.
         const int from = c * points / columns, to = std::max(from + 1, (c + 1) * points / columns);
-        float peak = 0.0f, rms = 0.0f;
+        float peaks[3] = {};
         for (int p = from; p < to && p < points; ++p)
-        {
-            peak = std::max(peak, t->overviewPeak[static_cast<std::size_t>(p)]);
-            rms = std::max(rms, t->overviewRms[static_cast<std::size_t>(p)]);
-        }
+            for (int b = 0; b < 3; ++b)
+                peaks[b] = std::max(peaks[b], w.overviewPeak[static_cast<std::size_t>(b)][static_cast<std::size_t>(p)]);
         const float x = area.getX() + static_cast<float>(c);
-        const bool played = x < playedX;
-        g.setColour((played ? kDim : kText).withAlpha(0.45f));
-        const float hp = std::min(1.0f, peak) * half;
-        g.fillRect(x, mid - hp, 1.0f, 2.0f * hp);
-        g.setColour(played ? kDim : kAccent.brighter(0.2f));
-        const float hr = std::min(1.0f, rms * 1.4f) * half;
-        g.fillRect(x, mid - hr, 1.0f, 2.0f * hr);
+        drawBandColumn(g, x, 1.0f, mid, half, peaks, x < playedX ? 0.35f : 0.95f);
     }
 
     // Cue marker and playhead.

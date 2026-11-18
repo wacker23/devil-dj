@@ -25,8 +25,8 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
 {
     addAndMakeVisible(deckA);
     addAndMakeVisible(deckB);
-    addAndMakeVisible(jogA);
-    addAndMakeVisible(jogB);
+    addAndMakeVisible(waveA);
+    addAndMakeVisible(waveB);
     overlay.setExtraLines([this] { return statusLines(); });
     addChildComponent(overlay); // added last: on top of the jog strips
 
@@ -396,7 +396,15 @@ juce::StringArray MainComponent::statusLines()
               (state.cueRouted ? "" : "  [not routed: Options > Audio settings > output layout]"));
     lines.add("Crossfader: hold G / H glide, Shift+G / Shift+H snap, B centre;  CUE: Ctrl+E (A), Ctrl+O (B)");
     lines.add("Mixer: Ctrl+A/S/D, Ctrl+J/K/L kill; hold Shift+3/4, Shift+9/0 filter; Shift+5, Shift+- reset");
-    lines.add("Jog strips (bottom): drag = scratch (playing) / scrub (paused), wheel = nudge");
+    lines.add("Waveforms: drag = scratch (playing) / scrub (paused), wheel = nudge, Ctrl+wheel = zoom");
+    for (const auto* w : {&waveA, &waveB})
+    {
+        const auto f = w->frameStats();
+        lines.add(juce::String("   frame: paint ") + juce::String(f.paintMsAverage, 2) + " ms avg, " +
+                  juce::String(f.paintMsMax, 2) + " ms max; " +
+                  (f.frameIntervalMs > 0.0 ? juce::String(1000.0 / f.frameIntervalMs, 1) : juce::String("--")) +
+                  " fps");
+    }
     lines.add("Track buffers: " + juce::String(engine::TrackBuffer::liveCount()) + " alive, " +
               juce::String(static_cast<int>(registry.size())) + " registered, " +
               juce::String(juce::roundToInt(static_cast<double>(registry.memoryBytes()) / (1024.0 * 1024.0))) + " MB");
@@ -410,7 +418,7 @@ void MainComponent::paint(juce::Graphics& g)
     // Placeholder for the waveforms (P1-14) and the mixer (P1-15) between the decks and the jog strips.
     g.setColour(juce::Colours::white.withAlpha(0.12f));
     g.setFont(juce::FontOptions(32.0f, juce::Font::bold));
-    g.drawText("Devil-DJ", getLocalBounds().withTrimmedTop(280).withTrimmedBottom(150), juce::Justification::centred);
+    g.drawText("Devil-DJ", getLocalBounds().withTrimmedTop(540).withTrimmedBottom(30), juce::Justification::centred);
 
     // Temporary build-info line; moves to the About box later.
     const auto version = TagLib::runtimeVersion();
@@ -423,16 +431,21 @@ void MainComponent::paint(juce::Graphics& g)
     g.drawText(info, getLocalBounds().reduced(12), juce::Justification::bottomLeft);
 }
 
+double MainComponent::outputLatencySeconds() const
+{
+    return audio.getStatus().totalOutputLatencyMs / 1000.0;
+}
+
 void MainComponent::resized()
 {
     auto decks = getLocalBounds().reduced(12).removeFromTop(250);
     deckA.setBounds(decks.removeFromLeft(decks.getWidth() / 2).withTrimmedRight(6));
     deckB.setBounds(decks.withTrimmedLeft(6));
 
-    auto strips = getLocalBounds().reduced(12).withTrimmedBottom(24); // above the build-info line
-    strips = strips.removeFromBottom(110);
-    jogA.setBounds(strips.removeFromLeft(strips.getWidth() / 2).withTrimmedRight(6));
-    jogB.setBounds(strips.withTrimmedLeft(6));
+    auto waves = getLocalBounds().reduced(12).withTrimmedTop(262).removeFromTop(2 * 130 + 6);
+    waveA.setBounds(waves.removeFromTop(130));
+    waves.removeFromTop(6);
+    waveB.setBounds(waves.removeFromTop(130));
 
     overlay.setBounds(getWidth() - ui::DebugOverlay::kWidth - kOverlayMargin, kOverlayMargin, ui::DebugOverlay::kWidth,
                       ui::DebugOverlay::kHeight);

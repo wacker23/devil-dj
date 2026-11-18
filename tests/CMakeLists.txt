@@ -9,7 +9,7 @@ juce_add_console_app(DevilDJTests
 target_sources(DevilDJTests PRIVATE
     analysis/AnalysisSmokeTests.cpp
     analysis/TestSignalTests.cpp
-    analysis/WaveformOverviewTests.cpp
+    analysis/WaveformBuilderTests.cpp
     app/AppSmokeTests.cpp
     app/SettingsTests.cpp
     beatmaker/BeatMakerSmokeTests.cpp
@@ -38,6 +38,7 @@ target_sources(DevilDJTests PRIVATE
     matcher/MatcherSmokeTests.cpp
     ui/UiSmokeTests.cpp
     ui/DeckViewTests.cpp
+    ui/WaveformViewTests.cpp
     util/CrashHandlerTests.cpp
     util/FractionTests.cpp
     util/GarbageQueueTests.cpp

@@ -6,7 +6,7 @@
 #include "engine/TrackLoader.h"
 #include "ui/DebugOverlay.h"
 #include "ui/DeckView.h"
-#include "ui/JogPad.h"
+#include "ui/WaveformView.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -16,7 +16,7 @@
 namespace devildj::app
 {
 
-// Root component of the main window: deck views on top, jog strips at the bottom; mixer and browser later.
+// Root component of the main window: deck views on top, zoomed waveforms below; mixer and browser later.
 // Hosts the debug overlay (F12) for now.
 class MainComponent final : public juce::Component
 {
@@ -63,9 +63,12 @@ private:
     // Deck views (P1-13), left = A, right = B.
     ui::DeckView deckA{engine, 0, [this](engine::BufferId id) { return registry.get(id); }};
     ui::DeckView deckB{engine, 1, [this](engine::BufferId id) { return registry.get(id); }};
-    // Temporary jog strips (P1-09) until the deck view / zoomed waveform (P1-13, P1-14).
-    ui::JogPad jogA{engine, 0};
-    ui::JogPad jogB{engine, 1};
+    // Zoomed waveforms (P1-14): drag = scratch / scrub, wheel = nudge, Ctrl+wheel = zoom.
+    double outputLatencySeconds() const;
+    ui::WaveformView waveA{engine, 0, [this](engine::BufferId id) { return registry.get(id); },
+                           [this] { return outputLatencySeconds(); }};
+    ui::WaveformView waveB{engine, 1, [this](engine::BufferId id) { return registry.get(id); },
+                           [this] { return outputLatencySeconds(); }};
     ui::DebugOverlay overlay;
     bool testToneOn = false;
 

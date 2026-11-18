@@ -2,7 +2,7 @@
 // Touch arrives in JUCE as mouse events on the same components, so driving the components' mouse / button
 // paths covers both. The [.screenshot] test renders docs/images/p1-13-deck-view.png.
 
-#include "analysis/WaveformOverview.h"
+#include "analysis/WaveformBuilder.h"
 #include "engine/AudioEngine.h"
 #include "ui/DeckView.h"
 
@@ -45,9 +45,7 @@ std::shared_ptr<engine::TrackBuffer> demoTrack(double seconds = 240.0)
     t->title = "Night Drive (Extended Mix)";
     t->artist = "Generated test signal";
     t->tagBpm = 128.0;
-    auto o = analysis::buildOverview(t->audio.getReadPointer(0), t->audio.getReadPointer(1), n);
-    t->overviewPeak = std::move(o.peak);
-    t->overviewRms = std::move(o.rms);
+    t->waveform = analysis::buildWaveform(t->audio.getReadPointer(0), t->audio.getReadPointer(1), n, kRate);
     return t;
 }
 

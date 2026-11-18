@@ -7,8 +7,9 @@ target_sources(devildj_ui INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/DeckView.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/DeckView.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/DebugOverlay.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/JogPad.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/JogPad.h")
+    "${CMAKE_CURRENT_SOURCE_DIR}/WaveformColours.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/WaveformView.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/WaveformView.h")
 
 target_include_directories(devildj_ui INTERFACE "${PROJECT_SOURCE_DIR}/src")
 
