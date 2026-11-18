@@ -2,6 +2,7 @@
 
 #include "engine/TrackDecoder.h"
 #include "util/Log.h"
+#include "util/ProcessStats.h"
 
 #include <taglib/tversionnumber.h>
 
@@ -22,6 +23,10 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     , audio(audioService)
     , loader(trackLoader)
     , registry(bufferRegistry)
+    , soak(SoakTest::Hooks{[&audioEngine] { return audioEngine.readState(); }, [&audioService]
+                           { return audioService.getStatus(); }, [&audioEngine](const engine::EngineCommand& c)
+                           { audioEngine.send(c); }, [] { return util::processMemory().privateMb; },
+                           [] { return juce::Time::getMillisecondCounterHiRes() / 1000.0; }})
     , overlay([&audioEngine] { return audioEngine.readState(); }, [&audioService] { return audioService.getStatus(); })
 {
     addAndMakeVisible(deckA);
@@ -56,6 +61,7 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
         if (deck < deckStatus.size())
             deckStatus[deck] = "failed: " + file.getFileName() + " - " + error;
     };
+    soak.onFinished = [this](const juce::String& report) { soakFinished(report); };
     registerActions();
     reloadKeymap();
     keyHook = std::make_unique<ui::PhysicalKeyHook>([this](const ui::KeyboardController::KeyEvent& e)
@@ -441,6 +447,8 @@ juce::StringArray MainComponent::statusLines()
               levelDb(std::max(state.cuePeakL, state.cuePeakR)) + " dB" +
               (state.cueRouted ? "" : "  [not routed: Options > Audio settings > output layout]"));
     lines.add("Crossfader: hold G / H glide, Shift+G / Shift+H snap, B centre;  CUE: Ctrl+E (A), Ctrl+O (B)");
+    if (soak.isRunning())
+        lines.add(soak.statusLine());
     lines.add("Mixer: Ctrl+A/S/D, Ctrl+J/K/L kill; hold Shift+3/4, Shift+9/0 filter; Shift+5, Shift+- reset");
     lines.add("Waveforms: drag = scratch (playing) / scrub (paused), wheel = nudge, Ctrl+wheel = zoom");
     for (const auto* w : {&waveA, &waveB})
@@ -470,6 +478,68 @@ void MainComponent::paint(juce::Graphics& g)
     g.setColour(juce::Colours::white.withAlpha(0.35f));
     g.setFont(juce::FontOptions(13.0f));
     g.drawText(info, getLocalBounds().reduced(12), juce::Justification::bottomLeft);
+}
+
+juce::File MainComponent::soakFolder()
+{
+    return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("Devil-DJ/Soak");
+}
+
+void MainComponent::startSoak(double minutes, bool silent)
+{
+    const auto error = soak.start({minutes, silent});
+    if (error.isNotEmpty())
+    {
+        util::logWarning("Soak test not started: {}", error.toStdString());
+        if (!quitAfterSoak)
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "Soak test", error);
+        else
+            juce::JUCEApplication::getInstance()->systemRequestedQuit();
+        return;
+    }
+    util::logInfo("Soak test started: {} min{}", minutes, silent ? " (silent)" : "");
+    if (!overlay.isVisible())
+        toggleDebugOverlay(); // show progress
+}
+
+void MainComponent::stopSoak()
+{
+    soak.stop();
+}
+
+void MainComponent::startSoakWhenLoaded(double minutes, bool silent, bool quitWhenDone)
+{
+    quitAfterSoak = quitWhenDone;
+    const double deadline = juce::Time::getMillisecondCounterHiRes() + 120000.0;
+    soakWaiter = std::make_unique<juce::TimedCallback>(
+        [this, minutes, silent, deadline]
+        {
+            const auto& s = engine.readState();
+            const bool loaded = s.decks[0].loaded && s.decks[1].loaded;
+            if (!loaded && juce::Time::getMillisecondCounterHiRes() < deadline)
+                return;
+            soakWaiter->stopTimer();
+            startSoak(minutes, silent);
+        });
+    soakWaiter->startTimer(500);
+}
+
+void MainComponent::soakFinished(const juce::String& report)
+{
+    const auto folder = soakFolder();
+    folder.createDirectory();
+    const auto file = folder.getChildFile("soak-" + juce::Time::getCurrentTime().formatted("%Y%m%d-%H%M%S") + ".txt");
+    file.replaceWithText(report);
+    util::logInfo("Soak test finished ({}): {}", soak.passed() ? "pass" : "FAIL", file.getFullPathName().toStdString());
+    if (quitAfterSoak)
+    {
+        juce::JUCEApplication::getInstance()->systemRequestedQuit();
+        return;
+    }
+    juce::AlertWindow::showMessageBoxAsync(
+        soak.passed() ? juce::MessageBoxIconType::InfoIcon : juce::MessageBoxIconType::WarningIcon,
+        soak.passed() ? "Soak test passed" : "Soak test: glitches",
+        report.upToFirstOccurrenceOf("\nminute", false, false) + "\nFull report: " + file.getFullPathName());
 }
 
 juce::File MainComponent::keymapFolder()

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "SoakTest.h"
 #include "engine/AudioDeviceService.h"
 #include "engine/AudioEngine.h"
 #include "engine/BufferRegistry.h"
@@ -80,6 +81,10 @@ private:
     ui::FileBrowserPanel browserPanel; // P1-18, bottom
     ui::DebugOverlay overlay;
     ui::KeymapOverlay keymapOverlay; // Ctrl+/ held (P1-17)
+    SoakTest soak;
+    bool quitAfterSoak = false;
+    std::unique_ptr<juce::TimedCallback> soakWaiter;
+    void soakFinished(const juce::String& report);
     bool testToneOn = false;
 
 public:
@@ -97,6 +102,14 @@ public:
     static juce::File keymapFolder();
     void reloadKeymap();
     void openKeymapFolder();
+
+    // Soak test (P1-20): Options menu, or the command line (--soak=MIN [--soak-silent] [--soak-quit]
+    // [--soak-tracks="a.mp3|b.mp3"]). Reports go to Documents\Devil-DJ\Soak.
+    void startSoak(double minutes, bool silent);
+    void stopSoak();
+    // Waits (up to 2 minutes) until decks A and B have tracks, then starts; `quitWhenDone` closes the app after.
+    void startSoakWhenLoaded(double minutes, bool silent, bool quitWhenDone);
+    static juce::File soakFolder();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };

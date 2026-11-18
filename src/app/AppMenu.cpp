@@ -88,6 +88,12 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
         menu.addItem(OpenKeymapFolder, "Open keymap folder (keymap.json)");
         menu.addItem(ReloadKeymap, "Reload keymap");
         menu.addItem(-1, "Hold Ctrl + / to see the keyboard map", false);
+        menu.addSeparator();
+        juce::PopupMenu soakMenu;
+        soakMenu.addItem(Soak60, "Run for 60 minutes");
+        soakMenu.addItem(Soak5, "Run for 5 minutes");
+        soakMenu.addItem(SoakStop, "Stop soak test");
+        menu.addSubMenu("Soak test (needs tracks on A and B)", soakMenu);
     }
     else if (menuName == "Debug")
     {
@@ -164,6 +170,13 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
             isolator = !isolator;
             if (onIsolator)
                 onIsolator(isolator);
+            break;
+
+        case Soak60:
+        case Soak5:
+        case SoakStop:
+            if (onSoakTest)
+                onSoakTest(menuItemID == Soak60 ? 60.0 : menuItemID == Soak5 ? 5.0 : 0.0);
             break;
 
         case ReloadKeymap:

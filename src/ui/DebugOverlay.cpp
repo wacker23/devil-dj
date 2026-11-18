@@ -1,5 +1,6 @@
 #include "ui/DebugOverlay.h"
 
+#include "util/ProcessStats.h"
 #include "util/RealtimeGuard.h"
 
 namespace devildj::ui
@@ -84,6 +85,11 @@ void DebugOverlay::paint(juce::Graphics& g)
     if (util::kRealtimeGuardEnabled)
         lines.add("RealtimeGuard violations: " +
                   juce::String(static_cast<juce::int64>(util::realtimeViolationCount())));
+    const auto memory = util::processMemory();
+    lines.add("Memory " + juce::String(juce::roundToInt(memory.privateMb)) + " MB private, " +
+              juce::String(juce::roundToInt(memory.workingSetMb)) + " MB in RAM   block CPU now " +
+              juce::String(juce::roundToInt(100.0f * s.cpuLoad)) + " %, peak " +
+              juce::String(juce::roundToInt(100.0f * s.cpuLoadPeak)) + " %");
     lines.addArray(extraLines);
     lines.add("F12: hide");
 

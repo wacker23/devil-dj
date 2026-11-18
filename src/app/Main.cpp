@@ -77,6 +77,14 @@ public:
         menu->onTempoRange = [this](double range) { mainComponent->setTempoRange(range); };
         menu->onHighQualityResampling = [this](bool on) { mainComponent->setHighQualityResampling(on); };
         menu->onReloadKeymap = [this] { mainComponent->reloadKeymap(); };
+        menu->onSoakTest = [this](double minutes)
+        {
+            if (minutes <= 0.0)
+                mainComponent->stopSoak();
+            else
+                mainComponent->startSoak(minutes, false);
+        };
+        startSoakFromCommandLine(commandLine);
         menu->onOpenKeymapFolder = [this] { mainComponent->openKeymapFolder(); };
         menu->onToggleKeyLock = [this](int deck) { mainComponent->toggleKeyLock(static_cast<engine::DeckId>(deck)); };
         menu->onIsolator = [this](bool on) { mainComponent->setIsolator(on); };
@@ -108,6 +116,47 @@ public:
     }
 
     void systemRequestedQuit() override { quit(); }
+
+    // --soak=MIN [--soak-silent] [--soak-quit] [--soak-driver=NAME] [--soak-buffer=N] [--soak-tracks="a.mp3|b.mp3"]
+    // (P1-20)
+    void startSoakFromCommandLine(const juce::String& commandLine)
+    {
+        const auto args = juce::StringArray::fromTokens(commandLine, true);
+        double minutes = 0.0;
+        bool silent = false, quit = false;
+        int buffer = 0;
+        juce::String driver;
+        juce::StringArray tracks;
+        for (auto arg : args)
+        {
+            arg = arg.unquoted();
+            if (arg.startsWith("--soak="))
+                minutes = arg.fromFirstOccurrenceOf("=", false, false).getDoubleValue();
+            else if (arg == "--soak-silent")
+                silent = true;
+            else if (arg.startsWith("--soak-driver="))
+                driver = arg.fromFirstOccurrenceOf("=", false, false).unquoted();
+            else if (arg.startsWith("--soak-buffer="))
+                buffer = arg.fromFirstOccurrenceOf("=", false, false).getIntValue();
+            else if (arg == "--soak-quit")
+                quit = true;
+            else if (arg.startsWith("--soak-tracks="))
+                tracks =
+                    juce::StringArray::fromTokens(arg.fromFirstOccurrenceOf("=", false, false).unquoted(), "|", "");
+        }
+        if (minutes <= 0.0)
+            return;
+        if (driver.isNotEmpty()) // e.g. "Windows Audio (Low Latency Mode)"; saved like a settings change
+            if (const auto error = audio->setDeviceType(driver); error.isNotEmpty())
+                util::logWarning("Soak test: driver {} not available: {}", driver.toStdString(), error.toStdString());
+        if (buffer > 0) // saved like a change on the settings page
+            if (const auto error = audio->setBufferSize(buffer); error.isNotEmpty())
+                util::logWarning("Soak test: buffer {} not available: {}", buffer, error.toStdString());
+        for (int d = 0; d < std::min(2, tracks.size()); ++d)
+            mainComponent->loadFile(static_cast<engine::DeckId>(d), juce::File(tracks[d]));
+        util::logInfo("Soak test requested on the command line: {} min", minutes);
+        mainComponent->startSoakWhenLoaded(minutes, silent, quit);
+    }
 
     void anotherInstanceStarted(const juce::String& /*commandLine*/) override
     {
