@@ -165,7 +165,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
 
 ### UI
 
-- [ ] **P1-13 Deck view**
+- [x] **P1-13 Deck view**
   Track title/artist, time elapsed/remaining, BPM (with tempo %), key lock indicator, play/cue/sync buttons, tempo slider, overview waveform with playhead and click-to-seek.
   Done when: all controls usable with mouse and touch; screenshot in DEVLOG.
 

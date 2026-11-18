@@ -23,6 +23,8 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     , registry(bufferRegistry)
     , overlay([&audioEngine] { return audioEngine.readState(); }, [&audioService] { return audioService.getStatus(); })
 {
+    addAndMakeVisible(deckA);
+    addAndMakeVisible(deckB);
     addAndMakeVisible(jogA);
     addAndMakeVisible(jogB);
     overlay.setExtraLines([this] { return statusLines(); });
@@ -405,9 +407,10 @@ void MainComponent::paint(juce::Graphics& g)
 {
     g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
 
-    g.setColour(juce::Colours::white.withAlpha(0.6f));
+    // Placeholder for the waveforms (P1-14) and the mixer (P1-15) between the decks and the jog strips.
+    g.setColour(juce::Colours::white.withAlpha(0.12f));
     g.setFont(juce::FontOptions(32.0f, juce::Font::bold));
-    g.drawText("Devil-DJ", getLocalBounds(), juce::Justification::centred);
+    g.drawText("Devil-DJ", getLocalBounds().withTrimmedTop(280).withTrimmedBottom(150), juce::Justification::centred);
 
     // Temporary build-info line; moves to the About box later.
     const auto version = TagLib::runtimeVersion();
@@ -422,6 +425,10 @@ void MainComponent::paint(juce::Graphics& g)
 
 void MainComponent::resized()
 {
+    auto decks = getLocalBounds().reduced(12).removeFromTop(250);
+    deckA.setBounds(decks.removeFromLeft(decks.getWidth() / 2).withTrimmedRight(6));
+    deckB.setBounds(decks.withTrimmedLeft(6));
+
     auto strips = getLocalBounds().reduced(12).withTrimmedBottom(24); // above the build-info line
     strips = strips.removeFromBottom(110);
     jogA.setBounds(strips.removeFromLeft(strips.getWidth() / 2).withTrimmedRight(6));

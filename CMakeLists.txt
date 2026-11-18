@@ -32,6 +32,8 @@ include(cmake/Dependencies.cmake)
 
 add_subdirectory(src/util)
 add_subdirectory(src/dsp)
+add_subdirectory(src/analysis)
+add_subdirectory(src/library)
 add_subdirectory(src/engine)
 add_subdirectory(src/ui)
 add_subdirectory(src/app)

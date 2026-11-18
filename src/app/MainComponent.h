@@ -5,6 +5,7 @@
 #include "engine/BufferRegistry.h"
 #include "engine/TrackLoader.h"
 #include "ui/DebugOverlay.h"
+#include "ui/DeckView.h"
 #include "ui/JogPad.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -15,7 +16,7 @@
 namespace devildj::app
 {
 
-// Root component of the main window. Decks, mixer and browser are added later in Phase 1.
+// Root component of the main window: deck views on top, jog strips at the bottom; mixer and browser later.
 // Hosts the debug overlay (F12) for now.
 class MainComponent final : public juce::Component
 {
@@ -59,6 +60,9 @@ private:
     engine::BufferRegistry& registry;
     std::array<juce::String, 2> deckStatus{"empty", "empty"};
     std::unique_ptr<juce::FileChooser> chooser;
+    // Deck views (P1-13), left = A, right = B.
+    ui::DeckView deckA{engine, 0, [this](engine::BufferId id) { return registry.get(id); }};
+    ui::DeckView deckB{engine, 1, [this](engine::BufferId id) { return registry.get(id); }};
     // Temporary jog strips (P1-09) until the deck view / zoomed waveform (P1-13, P1-14).
     ui::JogPad jogA{engine, 0};
     ui::JogPad jogB{engine, 1};

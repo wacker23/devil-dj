@@ -36,6 +36,8 @@ target_link_libraries(devildj_engine INTERFACE
     juce::juce_audio_devices
     juce::juce_audio_formats
     devildj::dsp
+    devildj::analysis
+    devildj::library
     xxHash::xxhash
     devildj::util
     # Windows Media Foundation (MP3/AAC/ALAC decoding): part of Windows.

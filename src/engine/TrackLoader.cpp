@@ -1,5 +1,8 @@
 #include "engine/TrackLoader.h"
 
+#include "analysis/WaveformOverview.h"
+#include "library/TagReader.h"
+
 #include "engine/TrackDecoder.h"
 #include "util/Log.h"
 
@@ -60,6 +63,15 @@ public:
         {
             track = std::move(result).value();
             track->contentHash = contentHash(file);
+            const auto tags = library::readBasicTags(file.getFullPathName().toWideCharPointer());
+            track->title = juce::String::fromUTF8(tags.title.c_str());
+            track->artist = juce::String::fromUTF8(tags.artist.c_str());
+            track->tagBpm = tags.bpm;
+            auto overview = analysis::buildOverview(
+                track->audio.getReadPointer(0),
+                track->audio.getReadPointer(std::min(1, track->audio.getNumChannels() - 1)), track->numSamples());
+            track->overviewPeak = std::move(overview.peak);
+            track->overviewRms = std::move(overview.rms);
             util::logInfo("Loader: {} decoded in {:.0f} ms ({}, {:.1f} s, {:.0f} -> {:.0f} Hz)",
                           file.getFileName().toStdString(), juce::Time::getMillisecondCounterHiRes() - started,
                           track->formatName.toStdString(), track->durationSeconds(), track->sourceSampleRate,

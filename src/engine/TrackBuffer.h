@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <vector>
 
 namespace devildj::engine
 {
@@ -30,6 +31,11 @@ struct TrackBuffer
     std::int64_t sourceLengthSamples = 0;
     double containerDurationSeconds = 0.0; // what the file declares (MP3/M4A via Media Foundation); 0 = unknown
     juce::String contentHash;              // xxHash3 of file size + first/last 1 MB (set by the loader)
+
+    // Set by the loader (P1-13): tags, and a whole-track overview for the deck view (peak and RMS per point).
+    juce::String title, artist; // empty if the file has no tags
+    double tagBpm = 0.0;        // BPM tag; 0 = none (analysis comes in Phase 2)
+    std::vector<float> overviewPeak, overviewRms;
 
     int numSamples() const noexcept { return audio.getNumSamples(); }
     double durationSeconds() const noexcept { return sampleRate > 0.0 ? numSamples() / sampleRate : 0.0; }

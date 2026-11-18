@@ -9,6 +9,7 @@ juce_add_console_app(DevilDJTests
 target_sources(DevilDJTests PRIVATE
     analysis/AnalysisSmokeTests.cpp
     analysis/TestSignalTests.cpp
+    analysis/WaveformOverviewTests.cpp
     app/AppSmokeTests.cpp
     app/SettingsTests.cpp
     beatmaker/BeatMakerSmokeTests.cpp
@@ -33,8 +34,10 @@ target_sources(DevilDJTests PRIVATE
     engine/TrackDecoderTests.cpp
     engine/TrackLoaderTests.cpp
     library/LibrarySmokeTests.cpp
+    library/TagReaderTests.cpp
     matcher/MatcherSmokeTests.cpp
     ui/UiSmokeTests.cpp
+    ui/DeckViewTests.cpp
     util/CrashHandlerTests.cpp
     util/FractionTests.cpp
     util/GarbageQueueTests.cpp
@@ -51,6 +54,7 @@ set(DEVILDJ_TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/generated")
 
 target_compile_definitions(DevilDJTests PRIVATE
     DEVILDJ_TEST_DATA_DIR="${DEVILDJ_TEST_DATA_DIR}"
+    DEVILDJ_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0)
 
@@ -58,6 +62,10 @@ target_link_libraries(DevilDJTests PRIVATE
     Catch2::Catch2WithMain
     devildj::app_core
     devildj::engine
+    devildj::ui
+    devildj::analysis
+    devildj::library
+    TagLib::tag
     juce::juce_core
     juce::juce_data_structures
     juce::juce_audio_formats
