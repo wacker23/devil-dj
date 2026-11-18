@@ -287,6 +287,30 @@ void AudioEngine::apply(const SetKeyShift& command) noexcept
         decks[command.deck].deck.setKeyShift(command.semitones);
 }
 
+void AudioEngine::apply(const ScratchBegin& command) noexcept
+{
+    if (command.deck < kMaxDecks && !decks[command.deck].hasPending)
+        decks[command.deck].deck.scratchBegin(command.timeSeconds);
+}
+
+void AudioEngine::apply(const ScratchMove& command) noexcept
+{
+    if (command.deck < kMaxDecks)
+        decks[command.deck].deck.scratchMove(command.deltaSamples, command.timeSeconds);
+}
+
+void AudioEngine::apply(const ScratchEnd& command) noexcept
+{
+    if (command.deck < kMaxDecks)
+        decks[command.deck].deck.scratchEnd();
+}
+
+void AudioEngine::apply(const Nudge& command) noexcept
+{
+    if (command.deck < kMaxDecks && !decks[command.deck].hasPending)
+        decks[command.deck].deck.nudge(command.deltaSamples);
+}
+
 void AudioEngine::renderDecks(int numSamples) noexcept
 {
     // No mixer yet (P1-10/P1-11): every deck goes straight to the master bus.
@@ -374,11 +398,12 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         s.atEnd = d.isAtEnd();
         s.positionSamples = d.position();
         s.cuePointSamples = d.cuePoint();
-        s.rate = d.rate();
+        s.rate = d.currentRate();
         s.tempoPercent = d.tempoPercent();
         s.tempoRangePercent = d.tempoRange();
         s.pitchBendPercent = d.pitchBendPercent();
         s.keyLock = d.keyLock();
+        s.scratching = d.isScratching();
         s.transposeSemis = static_cast<std::int8_t>(d.keyShift());
     }
 

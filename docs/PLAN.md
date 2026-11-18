@@ -144,7 +144,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
   `dsp/Stretcher` interface with `SignalsmithStretcher` implementation (MIT). Handles latency compensation so the displayed position matches what is heard. Key lock toggle per deck; transpose in semitones for later Key Shift.
   Done when: 440 Hz sine at +10 % tempo stays 440 Hz ±1 Hz with key lock; CPU for 2 decks with key lock < 15 % of the 256-sample budget at 48 kHz on the target laptop (measure and log).
 
-- [ ] **P1-09 Jog / scratch from mouse**
+- [x] **P1-09 Jog / scratch from mouse**
   Drag on the zoomed waveform: while dragging, playback rate follows mouse velocity (smoothed), key lock bypassed; release resumes the previous rate with a 50 ms ramp. Playing vs paused behaviour (nudge vs scrub). Scroll wheel on waveform = fine nudge.
   Done when: scratching sounds continuous (no zipper noise) at 60 Hz UI event rate; manual test note.
 

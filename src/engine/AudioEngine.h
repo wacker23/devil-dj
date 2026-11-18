@@ -92,6 +92,10 @@ private:
     void apply(const SetInterpolationQuality& command) noexcept;
     void apply(const SetKeyLock& command) noexcept;
     void apply(const SetKeyShift& command) noexcept;
+    void apply(const ScratchBegin& command) noexcept;
+    void apply(const ScratchMove& command) noexcept;
+    void apply(const ScratchEnd& command) noexcept;
+    void apply(const Nudge& command) noexcept;
     void requestTrack(DeckId deck, const TrackBuffer* buffer, BufferId id) noexcept;
     void swapPendingTracks() noexcept;
     void renderDecks(int numSamples) noexcept;

@@ -142,9 +142,38 @@ struct SetKeyShift
     int semitones = 0; // clamped to +-12
 };
 
-using EngineCommand = std::variant<SetTestTone, SetOutputLayout, LoadTrack, UnloadTrack, Play, Pause, TogglePlay,
-                                   CuePress, CueRelease, Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo,
-                                   PitchBend, SetInterpolationQuality, SetKeyLock, SetKeyShift>;
+// Jog (P1-09): mouse drag on the waveform scratches (playing) or scrubs (paused); the wheel nudges.
+// timeSeconds: when the UI saw the event (any steady clock, e.g. juce::Time::getMillisecondCounterHiRes()/1000).
+// The deck measures hand speed on that clock, so it doesn't matter which audio block picks the command up.
+// Negative = unknown: the audio clock is used instead.
+struct ScratchBegin
+{
+    DeckId deck = 0;
+    double timeSeconds = -1.0;
+};
+
+struct ScratchMove
+{
+    DeckId deck = 0;
+    double deltaSamples = 0.0; // how far the hand moved since the last move (signed, track samples)
+    double timeSeconds = -1.0;
+};
+
+struct ScratchEnd
+{
+    DeckId deck = 0;
+};
+
+struct Nudge
+{
+    DeckId deck = 0;
+    double deltaSamples = 0.0; // fine position shift (played out as a small rate offset while playing)
+};
+
+using EngineCommand =
+    std::variant<SetTestTone, SetOutputLayout, LoadTrack, UnloadTrack, Play, Pause, TogglePlay, CuePress, CueRelease,
+                 Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo, PitchBend, SetInterpolationQuality, SetKeyLock,
+                 SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

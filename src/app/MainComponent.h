@@ -5,6 +5,7 @@
 #include "engine/BufferRegistry.h"
 #include "engine/TrackLoader.h"
 #include "ui/DebugOverlay.h"
+#include "ui/JogPad.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -45,6 +46,9 @@ private:
     engine::BufferRegistry& registry;
     std::array<juce::String, 2> deckStatus{"empty", "empty"};
     std::unique_ptr<juce::FileChooser> chooser;
+    // Temporary jog strips (P1-09) until the deck view / zoomed waveform (P1-13, P1-14).
+    ui::JogPad jogA{engine, 0};
+    ui::JogPad jogB{engine, 1};
     ui::DebugOverlay overlay;
     bool testToneOn = false;
 

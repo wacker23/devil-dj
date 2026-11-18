@@ -35,6 +35,122 @@ void Deck::prepare(double newSampleRate, int maxBlockSize)
     stretcherPrimed = false;
 }
 
+// ---- jog / scratch ----
+
+void Deck::scratchBegin(double timeSeconds) noexcept
+{
+    if (buffer == nullptr || scratch == Scratch::Holding)
+        return;
+    const bool sounding = state != Transport::Paused || scratch == Scratch::Releasing;
+    if (!sounding)
+        startSounding(); // scrub from pause: fade in
+    else if (keyLockOn && scratch == Scratch::None)
+    {
+        spawnTail(playhead, currentMainGain()); // leave the stretcher: crossfade to the direct read
+        mainFadeRemaining = fadeSamples;
+    }
+    scratchRate = sounding ? lastRate : 0.0;
+    scratchDesired = 0.0; // hand down = the record stops under it until it moves
+    scratchTarget = playhead;
+    samplesSinceMove = 0.0;
+    moveInterval = 0.0167 * sampleRate;
+    moveCount = 0;
+    lastMoveTime = timeSeconds;
+    atEnd = false;
+    scratch = Scratch::Holding;
+}
+
+void Deck::scratchMove(double deltaSamples, double timeSeconds) noexcept
+{
+    if (scratch != Scratch::Holding)
+        return;
+    const double before = scratchTarget;
+    scratchTarget = std::clamp(scratchTarget + deltaSamples, 0.0, static_cast<double>(length()));
+    const bool timed = timeSeconds >= 0.0 && lastMoveTime >= 0.0;
+    const double measured = timed ? (timeSeconds - lastMoveTime) * sampleRate : samplesSinceMove;
+    const double interval = std::clamp(measured, 0.004 * sampleRate, 0.05 * sampleRate);
+    lastMoveTime = timeSeconds;
+    moveInterval = 0.7 * moveInterval + 0.3 * interval;
+    samplesSinceMove = 0.0;
+
+    moveDeltas[static_cast<std::size_t>(moveIndex)] = scratchTarget - before;
+    moveIntervals[static_cast<std::size_t>(moveIndex)] = interval;
+    moveIndex = (moveIndex + 1) % kMoveWindow;
+    moveCount = std::min(moveCount + 1, kMoveWindow);
+    double distance = 0.0, time = 0.0;
+    for (int i = 0; i < moveCount; ++i)
+    {
+        distance += moveDeltas[static_cast<std::size_t>(i)];
+        time += moveIntervals[static_cast<std::size_t>(i)];
+    }
+    const double velocity = distance / time;
+    // Aim one move interval behind the hand (where a steady hand puts the playhead at each event); correct the
+    // remaining error gently over 100 ms, held until the next move so there's no ripple between events.
+    const double error = scratchTarget - playhead - velocity * moveInterval;
+    scratchDesired = velocity + error / (0.1 * sampleRate);
+}
+
+void Deck::scratchEnd() noexcept
+{
+    if (scratch != Scratch::Holding)
+        return;
+    if (state != Transport::Paused) // playing: ease back to the normal rate
+    {
+        scratch = Scratch::Releasing;
+        releaseRemaining = std::max(1, static_cast<int>(std::lround(kScratchReleaseSeconds * sampleRate)));
+        releaseFromRate = scratchRate;
+    }
+    else // scrubbing: stay paused here
+    {
+        scratch = Scratch::None;
+        stopSounding();
+    }
+}
+
+void Deck::nudge(double deltaSamples) noexcept
+{
+    if (buffer == nullptr)
+        return;
+    if (state == Transport::Paused && scratch == Scratch::None)
+        playhead = std::clamp(playhead + deltaSamples, 0.0, static_cast<double>(length())); // silent fine move
+    else
+        nudgeRemaining += deltaSamples;
+}
+
+double Deck::nextScratchRate(double playheadNow, double normalRate) noexcept
+{
+    if (scratch == Scratch::Holding)
+    {
+        samplesSinceMove += 1.0;
+        // No new move for a while: the hand has stopped; settle onto it.
+        if (samplesSinceMove > 1.5 * moveInterval)
+        {
+            scratchDesired = (scratchTarget - playheadNow) / (0.02 * sampleRate);
+            moveCount = 0; // next move starts a fresh speed estimate
+        }
+        const double desired = std::clamp(scratchDesired, -kMaxScratchRate, kMaxScratchRate);
+        const double alpha = 1.0 - std::exp(-1.0 / (0.005 * sampleRate)); // 5 ms smoother
+        scratchRate += alpha * (desired - scratchRate);
+        return scratchRate;
+    }
+    // Releasing: linear ramp to the normal rate.
+    const double t = 1.0 - static_cast<double>(releaseRemaining) /
+                               std::max(1.0, std::lround(kScratchReleaseSeconds * sampleRate) * 1.0);
+    --releaseRemaining;
+    return releaseFromRate + (normalRate - releaseFromRate) * t;
+}
+
+void Deck::finishScratchRelease() noexcept
+{
+    scratch = Scratch::None;
+    if (keyLockOn && state != Transport::Paused) // back to the stretcher with a crossfade
+    {
+        spawnTail(playhead, currentMainGain());
+        mainFadeRemaining = fadeSamples;
+        stretcherPrimed = false;
+    }
+}
+
 void Deck::setKeyLock(bool on) noexcept
 {
     if (on == keyLockOn)
@@ -94,11 +210,13 @@ void Deck::setTrack(const TrackBuffer* track) noexcept
     mainFadeRemaining = 0;
     tails = {};
     stretcherPrimed = false;
+    scratch = Scratch::None;
+    nudgeRemaining = 0.0;
 }
 
 bool Deck::isSilent() const noexcept
 {
-    if (state != Transport::Paused)
+    if (state != Transport::Paused || scratch != Scratch::None)
         return false;
     return std::none_of(tails.begin(), tails.end(), [](const Tail& t) { return t.active; });
 }
@@ -313,17 +431,34 @@ void Deck::render(float* left, float* right, int numSamples) noexcept
     const double len = length();
     const double bendStep = kPitchBendSlewPercentPerSecond / sampleRate;
 
-    // Rates for this block (the bend slews per sample), so key lock knows how far the playhead will move.
+    // Rates for this block (bend slews, scratch follows the hand, nudges add an offset), so key lock knows
+    // how far the playhead will move.
     double playheadEnd = playhead;
+    bool releaseFinished = false;
     for (int i = 0; i < numSamples; ++i)
     {
         if (bend != bendTarget)
             bend = bend < bendTarget ? std::min(bendTarget, bend + bendStep) : std::max(bendTarget, bend - bendStep);
-        blockRates[static_cast<std::size_t>(i)] = this->rate();
-        playheadEnd += blockRates[static_cast<std::size_t>(i)];
+        double r = this->rate();
+        if (scratch != Scratch::None && !releaseFinished)
+        {
+            r = nextScratchRate(playheadEnd, r);
+            if (scratch == Scratch::Releasing && releaseRemaining <= 0)
+                releaseFinished = true;
+        }
+        else if (nudgeRemaining != 0.0)
+        {
+            const double offset = std::clamp(nudgeRemaining, -kMaxNudgeRateOffset, kMaxNudgeRateOffset);
+            nudgeRemaining -= offset;
+            r += offset;
+        }
+        blockRates[static_cast<std::size_t>(i)] = r;
+        playheadEnd += r;
     }
 
-    const bool stretched = keyLockOn && state != Transport::Paused && stretcher != nullptr;
+    const bool sounding = state != Transport::Paused || scratch != Scratch::None;
+    const bool stretched =
+        keyLockOn && state != Transport::Paused && scratch == Scratch::None && !releaseFinished && stretcher != nullptr;
     if (stretched)
     {
         if (!stretcherPrimed)
@@ -336,7 +471,7 @@ void Deck::render(float* left, float* right, int numSamples) noexcept
         float l = 0.0f, r = 0.0f;
         const double rate = blockRates[static_cast<std::size_t>(i)];
 
-        if (state != Transport::Paused)
+        if (sounding)
         {
             const float g = currentMainGain();
             if (stretched)
@@ -353,7 +488,9 @@ void Deck::render(float* left, float* right, int numSamples) noexcept
             if (mainFadeRemaining > 0)
                 --mainFadeRemaining;
 
-            if (playhead >= len) // end of track: stop at the end (the track's own ending is the fade)
+            if (scratch != Scratch::None) // the hand can't push past either end
+                playhead = std::clamp(playhead, 0.0, len);
+            else if (playhead >= len) // end of track: stop at the end (the track's own ending is the fade)
             {
                 playhead = len;
                 atEnd = true;
@@ -378,6 +515,10 @@ void Deck::render(float* left, float* right, int numSamples) noexcept
         left[i] = l;
         right[i] = r;
     }
+
+    lastRate = blockRates[static_cast<std::size_t>(numSamples - 1)];
+    if (releaseFinished)
+        finishScratchRelease();
 }
 
 } // namespace devildj::engine

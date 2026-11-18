@@ -27,6 +27,16 @@ namespace devildj::engine
 // playhead and `position()` stays what the listener hears. Jump fades still work: the old position fades out
 // through the resampler while the stretched audio fades in.
 //
+// Jog (P1-09): scratchBegin/Move/End follow the hand like vinyl. Each move says how far the hand went since
+// the previous one and when (UI clock). The deck plays at the hand's speed over the last 4 moves (timed on the
+// UI clock, so it doesn't matter which audio block picks a move up), aiming one move behind the hand and
+// correcting position drift over 100 ms; a steady hand at 60 events/s gives a constant rate instead of 60 Hz
+// steps ("zipper"). When moves stop, the deck settles onto the hand within ~20 ms; a 5 ms smoother removes
+// what's left. Key lock is bypassed while
+// scratching. Playing: release eases back to the normal rate over 50 ms. Paused: dragging scrubs (audible) and
+// the deck stays paused on release. nudge() is the scroll-wheel fine nudge: a small position shift played
+// out as a <= 5 % rate offset while playing, or moved silently while paused.
+//
 // CDJ cue button:
 //   paused, cue pressed   -> the cue point moves to the playhead, and playback previews from it while held
 //   preview, cue released -> back to the cue point, paused
@@ -74,6 +84,18 @@ public:
     void setPitchBend(double percent) noexcept;
     void setInterpolation(dsp::Resampler::Quality quality) noexcept { resampler.setQuality(quality); }
 
+    // Jog / scratch (see top). Deltas are in samples of the track (signed).
+    // timeSeconds: UI event time on any steady clock (negative = unknown, use the audio clock).
+    void scratchBegin(double timeSeconds = -1.0) noexcept;
+    void scratchMove(double deltaSamples, double timeSeconds = -1.0) noexcept;
+    void scratchEnd() noexcept;
+    void nudge(double deltaSamples) noexcept;
+    bool isScratching() const noexcept { return scratch != Scratch::None; }
+
+    static constexpr double kMaxScratchRate = 8.0;
+    static constexpr double kScratchReleaseSeconds = 0.05;
+    static constexpr double kMaxNudgeRateOffset = 0.05;
+
     // Key lock on/off (crossfades if playing) and Key Shift in semitones (only heard with key lock on).
     void setKeyLock(bool on) noexcept;
     void setKeyShift(int semitones) noexcept;
@@ -90,6 +112,8 @@ public:
 
     Transport transport() const noexcept { return state; }
     bool isPlaying() const noexcept { return state != Transport::Paused; }
+    // Rate of the last rendered sample (includes scratching and nudges; rate() is the tempo setting).
+    double currentRate() const noexcept { return lastRate; }
     double position() const noexcept { return playhead; }
     double cuePoint() const noexcept { return cue; }
     bool isAtEnd() const noexcept { return atEnd; }
@@ -99,6 +123,36 @@ public:
     // swapped or released when the deck is silent.
     bool isSilent() const noexcept;
 
+private:
+    enum class Scratch : std::uint8_t
+    {
+        None,
+        Holding,   // hand on the "record"
+        Releasing, // let go while playing: easing back to the normal rate
+    };
+    double nextScratchRate(double playheadNow, double normalRate) noexcept;
+    void finishScratchRelease() noexcept;
+
+    Scratch scratch = Scratch::None;
+    double scratchTarget = 0.0;  // hand position (samples)
+    double scratchRate = 0.0;    // current, smoothed
+    double scratchDesired = 0.0; // rate implied by the latest move
+    double moveInterval = 800.0; // smoothed samples between moves
+    double samplesSinceMove = 0.0;
+    // Hand speed = distance over the last kMoveWindow moves / their total time: event-timing jitter (UI thread,
+    // block boundaries) mostly cancels out, unlike a per-move estimate.
+    static constexpr int kMoveWindow = 4;
+    std::array<double, kMoveWindow> moveDeltas{};
+    std::array<double, kMoveWindow> moveIntervals{};
+    int moveCount = 0;
+    double lastMoveTime = -1.0; // UI clock, seconds
+    int moveIndex = 0;
+    int releaseRemaining = 0;
+    double releaseFromRate = 0.0;
+    double nudgeRemaining = 0.0; // samples of position still to add
+    double lastRate = 1.0;
+
+public:
 private:
     struct Tail // a read head that fades out after a jump or stop
     {

@@ -110,6 +110,8 @@ Space is deliberately unbound in performance view to avoid accidental stops; it 
 | Right-click any control | MIDI Learn / bind key / reset |
 | Two-finger touch on two faders | Both move independently (multi-touch) |
 
+Until the zoomed waveform exists (P1-14), the drag / scroll jog gestures work on the temporary jog strips at the bottom of the window (left = deck A, right = deck B). Grab-and-move: dragging left pushes the track forward; 1 px = 5 ms, one wheel notch = 5 ms.
+
 ## "Laptop compact" preset
 
 For laptops where F-keys need Fn: pad modes move to Ctrl+Shift+Q/W/E/R (Hot Cue, Beat Loop, Beat Jump, Slicer) and FX on/off to Ctrl+Shift+A/S; everything else is unchanged.

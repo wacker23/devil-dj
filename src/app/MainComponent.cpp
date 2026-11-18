@@ -20,8 +20,10 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     , registry(bufferRegistry)
     , overlay([&audioEngine] { return audioEngine.readState(); }, [&audioService] { return audioService.getStatus(); })
 {
+    addAndMakeVisible(jogA);
+    addAndMakeVisible(jogB);
     overlay.setExtraLines([this] { return statusLines(); });
-    addChildComponent(overlay);
+    addChildComponent(overlay); // added last: on top of the jog strips
 
     loader.callbacks.onProgress = [this](engine::DeckId deck, const juce::File& file, double fraction)
     {
@@ -218,14 +220,15 @@ juce::StringArray MainComponent::statusLines()
             const juce::String what = s.cuePreview ? "CUE" : s.playing ? "PLAY" : s.atEnd ? "END" : "pause";
             lines.add("   " + what + "  " + clock(s.positionSamples, state.sampleRate) + " / " +
                       clock(s.lengthSamples, state.sampleRate) + "  cue " + clock(s.cuePointSamples, state.sampleRate));
-            lines.add(juce::String("   ") + (s.keyLock ? "KEY LOCK  " : "") + "tempo " +
-                      juce::String(s.tempoPercent >= 0 ? "+" : "") + juce::String(s.tempoPercent, 1) + " % (range +-" +
-                      juce::String(juce::roundToInt(s.tempoRangePercent)) + ")  bend " +
+            lines.add(juce::String("   ") + (s.scratching ? "SCRATCH  " : "") + (s.keyLock ? "KEY LOCK  " : "") +
+                      "tempo " + juce::String(s.tempoPercent >= 0 ? "+" : "") + juce::String(s.tempoPercent, 1) +
+                      " % (range +-" + juce::String(juce::roundToInt(s.tempoRangePercent)) + ")  bend " +
                       juce::String(s.pitchBendPercent, 1) + " %  rate " + juce::String(s.rate, 4));
         }
     }
     lines.add("Keys A: Z cue, X play, 1/2 bend, Shift+1/2 tempo, Shift+Z start, Ctrl+W key lock");
     lines.add("Keys B: M cue, , play, 7/8 bend, Shift+7/8 tempo, Shift+M start, Ctrl+I key lock");
+    lines.add("Jog strips (bottom): drag = scratch (playing) / scrub (paused), wheel = nudge");
     lines.add("Track buffers: " + juce::String(engine::TrackBuffer::liveCount()) + " alive, " +
               juce::String(static_cast<int>(registry.size())) + " registered, " +
               juce::String(juce::roundToInt(static_cast<double>(registry.memoryBytes()) / (1024.0 * 1024.0))) + " MB");
@@ -253,6 +256,11 @@ void MainComponent::paint(juce::Graphics& g)
 
 void MainComponent::resized()
 {
+    auto strips = getLocalBounds().reduced(12).withTrimmedBottom(24); // above the build-info line
+    strips = strips.removeFromBottom(110);
+    jogA.setBounds(strips.removeFromLeft(strips.getWidth() / 2).withTrimmedRight(6));
+    jogB.setBounds(strips.withTrimmedLeft(6));
+
     overlay.setBounds(getWidth() - ui::DebugOverlay::kWidth - kOverlayMargin, kOverlayMargin, ui::DebugOverlay::kWidth,
                       ui::DebugOverlay::kHeight);
 }

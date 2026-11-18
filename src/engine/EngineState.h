@@ -22,11 +22,12 @@ struct DeckState
     bool atEnd = false;
     double positionSamples = 0.0;
     double cuePointSamples = 0.0;
-    double rate = 1.0; // effective playback rate = (1 + tempo) x (1 + bend)
+    double rate = 1.0; // effective playback rate now (tempo x bend, or the scratch/nudge rate)
     double tempoPercent = 0.0;
     double tempoRangePercent = 10.0;
     double pitchBendPercent = 0.0; // current (slewed) bend
     bool keyLock = false;
+    bool scratching = false;        // jog held (or easing back after release)
     std::int8_t transposeSemis = 0; // Key Shift
 };
 
