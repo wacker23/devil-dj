@@ -9,7 +9,7 @@ namespace devildj::app
 
 // Temporary main-window menu bar until the real UI and ui/Actions.h exist (P1-16):
 //   Decks: load / unload a track on deck A or B (until the file browser, P1-18), status overlay
-//   Mixer: EQ / isolator mode, crossfader curve and assignment (until the mixer view, P1-15)
+//   Mixer: EQ / isolator mode, crossfader curve and assignment, headphone mix and level (until P1-15)
 //   Options: Audio settings...
 //   Debug (optional): debug overlay, test tone, open log folder, crash tests. Shown in Debug
 //   builds, with --debug-menu, or with the showDebugMenu setting.
@@ -30,6 +30,8 @@ public:
     std::function<void(bool on)> onIsolator;
     std::function<void(int curve)> onCrossfaderCurve;             // 0 smooth, 1 linear, 2 cut
     std::function<void(int deck, int assign)> onCrossfaderAssign; // 0 A, 1 THRU, 2 B
+    std::function<void(double mix)> onCueMix;                     // 0 cue .. 1 master
+    std::function<void(double db)> onHeadphoneLevel;
 
     juce::StringArray getMenuBarNames() override;
     juce::PopupMenu getMenuForIndex(int topLevelMenuIndex, const juce::String& menuName) override;
@@ -63,6 +65,10 @@ private:
         CurveCut,
         AssignFirst, // deck * 3 + assign (decks A and B)
         AssignLast = AssignFirst + 5,
+        CueMixFirst, // 5 positions: 0, 0.25, 0.5, 0.75, 1
+        CueMixLast = CueMixFirst + 4,
+        LevelFirst, // 0, -6, -12, -18 dB
+        LevelLast = LevelFirst + 3,
     };
 
     juce::File logDirectory;
@@ -72,6 +78,8 @@ private:
     bool isolator = false;
     int crossfaderCurve = 0;
     int assign[2] = {0, 2};
+    int cueMixIndex = 2;
+    int levelIndex = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AppMenu)
 };

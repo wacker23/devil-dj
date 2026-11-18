@@ -159,7 +159,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
   Crossfader with assign A/THRU/B per channel and curves: smooth (constant power), linear, sharp cut (scratch). Master gain, brick-wall look-ahead limiter (1.5 ms, −0.3 dBFS ceiling), peak + RMS meters per channel and master (in `EngineState`).
   Done when: unit tests for curve values at 0/0.5/1; limiter never exceeds ceiling on a +12 dB test signal.
 
-- [ ] **P1-12 Headphone cue**
+- [x] **P1-12 Headphone cue**
   CUE button per channel, cue/master mix knob, headphone level. Routed to the cue bus selected in P1-03. Split mode works with the cue knob.
   Done when: cueing deck B while A plays to master verified in all three output layouts.
 

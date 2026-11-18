@@ -183,7 +183,7 @@ Sampler ▶ Strip ─┤
 BeatMkr ▶ Strip ─┤
 CodeDk ─▶ Strip ─┤
 Mic ───▶ Strip ─┘ (thru)
-Cue bus = Σ (pre-fader channels with CUE on) mixed with master by cue/master knob ─▶ out 3/4 (or split R)
+Cue bus = Σ (pre-fader channels with CUE on) mixed with master (after master gain) by cue/master knob ─▶ headphone level ─▶ Limiter ─▶ out 3/4 (or split R)
 ```
 
 Strip = trim → EQ/Isolator → Color FX (filter etc.) → [FX unit insert if targeted] → fader. FX units targeting "master" process the master bus before the limiter.

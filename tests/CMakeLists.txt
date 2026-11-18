@@ -24,6 +24,7 @@ target_sources(DevilDJTests PRIVATE
     engine/DeckScratchTests.cpp
     engine/ChannelStripTests.cpp
     engine/MixerMasterTests.cpp
+    engine/HeadphoneCueTests.cpp
     engine/DeckTempoTests.cpp
     engine/DeckTests.cpp
     engine/EngineSmokeTests.cpp

@@ -98,6 +98,8 @@ public:
     void setIsolator(bool on);
     void setCrossfaderCurve(int curve);
     void setCrossfaderAssign(int deck, int assign);
+    void setCueMix(double mix);
+    void setHeadphoneLevel(double db);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };

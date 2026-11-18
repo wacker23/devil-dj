@@ -20,7 +20,7 @@ constexpr int kMaxChannels = kMaxDecks;
 
 // Per-channel continuous parameters. Units: Trim and EQ bands in dB (EQ <= -100 = kill), Filter 0..1 (0.5 = off),
 // FilterResonance 0..1, Fader 0..1, EqMode 0 = EQ / 1 = isolator, FaderCurve 0 smooth / 1 linear / 2 sharp,
-// CrossfaderAssign 0 A / 1 THRU / 2 B.
+// CrossfaderAssign 0 A / 1 THRU / 2 B, Cue 0 / 1.
 enum class ChannelParam : std::uint16_t
 {
     Trim,
@@ -33,6 +33,7 @@ enum class ChannelParam : std::uint16_t
     EqMode,
     FaderCurve,
     CrossfaderAssign, // 0 A, 1 THRU, 2 B
+    Cue,              // headphone CUE button: 0 off, 1 on
     Count
 };
 constexpr int kChannelParamCount = static_cast<int>(ChannelParam::Count);
@@ -46,6 +47,8 @@ enum class ParamId : std::uint16_t
     Crossfader,      // 0 (A side) .. 1 (B side)
     CrossfaderCurve, // 0 smooth, 1 linear, 2 cut
     MasterGain,      // dB, <= -100 = silent, max +6
+    CueMix,          // headphones: 0 = cue only, 0.5 = both at full level, 1 = master only
+    HeadphoneLevel,  // dB, <= -100 = silent, max +6
     Count
 };
 

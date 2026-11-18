@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <vector>
 
 namespace devildj::dsp
@@ -13,7 +14,7 @@ namespace devildj::dsp
 // The average of values that are each <= the requirement of the sample now leaving the delay line is itself
 // <= that requirement, so the output never exceeds the ceiling, and the gain still moves smoothly (a linear
 // fade over the look-ahead instead of a step). A final clamp catches float rounding.
-// Latency: window samples (72 at 48 kHz). prepare() allocates; process() doesn't.
+// Latency: window samples (72 at 48 kHz). O(1) per sample. prepare() allocates; process() doesn't.
 class Limiter
 {
 public:
@@ -36,9 +37,13 @@ private:
     double releaseCoeff = 0.0;
     std::vector<float> delayL, delayR; // window samples each
     std::vector<double> held;          // released, min-held gains (window), averaged for the output gain
-    std::vector<double> required;      // raw per-sample requirement (window + 1), for the min-hold
+    double heldSum = 0.0;
+    // Monotonic queue over the last window + 1 requirements (ring of window + 1 entries).
+    std::vector<double> queueValue;
+    std::vector<std::int64_t> queueIndex;
+    int queueHead = 0, queueSize = 0;
+    std::int64_t counter = 0;
     int pos = 0;
-    int requiredPos = 0;
     double envelope = 1.0;
     float lastReductionDb = 0.0f;
 };

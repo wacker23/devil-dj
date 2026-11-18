@@ -14,7 +14,8 @@ void Limiter::prepare(double sampleRate, int /*maxBlockSize*/)
     delayL.assign(static_cast<std::size_t>(window), 0.0f);
     delayR.assign(static_cast<std::size_t>(window), 0.0f);
     held.assign(static_cast<std::size_t>(window), 1.0);
-    required.assign(static_cast<std::size_t>(window) + 1, 1.0);
+    queueValue.assign(static_cast<std::size_t>(window) + 1, 1.0);
+    queueIndex.assign(static_cast<std::size_t>(window) + 1, 0);
     reset();
 }
 
@@ -23,37 +24,52 @@ void Limiter::reset() noexcept
     std::fill(delayL.begin(), delayL.end(), 0.0f);
     std::fill(delayR.begin(), delayR.end(), 0.0f);
     std::fill(held.begin(), held.end(), 1.0);
-    std::fill(required.begin(), required.end(), 1.0);
+    heldSum = static_cast<double>(window);
+    queueHead = queueSize = 0;
+    counter = 0;
     pos = 0;
-    requiredPos = 0;
     envelope = 1.0;
     lastReductionDb = 0.0f;
 }
 
 void Limiter::process(float* left, float* right, int numSamples) noexcept
 {
-    const auto w = static_cast<std::size_t>(window);
     const double ceilingD = ceilingGain;
+    const int capacity = window + 1;
     double minGain = 1.0;
     for (int i = 0; i < numSamples; ++i)
     {
         const auto p = static_cast<std::size_t>(pos);
         const double peak = std::max(std::abs(static_cast<double>(left[i])), std::abs(static_cast<double>(right[i])));
-        required[static_cast<std::size_t>(requiredPos)] = peak > ceilingD ? ceilingD / peak : 1.0;
-        requiredPos = requiredPos == window ? 0 : requiredPos + 1;
+        const double need = peak > ceilingD ? ceilingD / peak : 1.0;
 
-        // Min over the last window + 1 requirements: every held value averaged below covers the sample that
-        // leaves the delay line (window samples old) as well as the newest one.
-        double hold = 1.0;
-        for (double r : required)
-            hold = std::min(hold, r);
+        // Running minimum of the last window + 1 requirements (monotonic queue: O(1) per sample). Every held
+        // value averaged below then covers the sample leaving the delay line (window samples old) as well as
+        // the newest one.
+        while (queueSize > 0 && queueValue[static_cast<std::size_t>((queueHead + queueSize - 1) % capacity)] >= need)
+            --queueSize;
+        const auto back = static_cast<std::size_t>((queueHead + queueSize) % capacity);
+        queueValue[back] = need;
+        queueIndex[back] = counter;
+        ++queueSize;
+        while (queueIndex[static_cast<std::size_t>(queueHead)] < counter - window)
+        {
+            queueHead = (queueHead + 1) % capacity;
+            --queueSize;
+        }
+        const double hold = queueValue[static_cast<std::size_t>(queueHead)];
+        ++counter;
+
         envelope = std::min(hold, envelope + (1.0 - envelope) * releaseCoeff);
+        heldSum += envelope - held[p];
         held[p] = envelope;
-
-        double sum = 0.0;
-        for (std::size_t k = 0; k < w; ++k)
-            sum += held[k];
-        const double gain = std::min(1.0, sum / static_cast<double>(window));
+        if (pos == 0) // re-add exactly once per window so rounding can't drift
+        {
+            heldSum = 0.0;
+            for (double h : held)
+                heldSum += h;
+        }
+        const double gain = std::min(1.0, heldSum / static_cast<double>(window));
         minGain = std::min(minGain, gain);
 
         // The sample leaving the delay line is the oldest one: the slot about to be overwritten.

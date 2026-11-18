@@ -62,8 +62,20 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
                 sides.addItem(AssignFirst + deck * 3 + a, names[a], true, assign[deck] == a);
             menu.addSubMenu(juce::String("Crossfader assign deck ") + (deck == 0 ? "A" : "B"), sides);
         }
+        juce::PopupMenu mix;
+        static const char* const mixNames[] = {"Cue only", "Mostly cue", "Cue + master (both full)", "Mostly master",
+                                               "Master only"};
+        for (int i = 0; i < 5; ++i)
+            mix.addItem(CueMixFirst + i, mixNames[i], true, cueMixIndex == i);
+        menu.addSubMenu("Headphone mix (cue / master)", mix);
+        juce::PopupMenu level;
+        for (int i = 0; i < 4; ++i)
+            level.addItem(LevelFirst + i, i == 0 ? juce::String("0 dB") : juce::String(-6 * i) + " dB", true,
+                          levelIndex == i);
+        menu.addSubMenu("Headphone level", level);
         menu.addSeparator();
         menu.addItem(-1, "Crossfader: hold G / H to glide, Shift+G / Shift+H snap, B centre", false);
+        menu.addItem(-1, "Headphone CUE: Ctrl+E (A), Ctrl+O (B)", false);
         menu.addItem(-1, "Kill low / mid / high: Ctrl+A/S/D (A), Ctrl+J/K/L (B)", false);
         menu.addItem(-1, "Filter: hold Shift+3 / Shift+4 (A), Shift+9 / Shift+0 (B)", false);
         menu.addItem(-1, "Filter reset: Shift+5 (A), Shift+- (B)", false);
@@ -177,7 +189,19 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
             break;
 
         default:
-            if (menuItemID >= AssignFirst && menuItemID <= AssignLast)
+            if (menuItemID >= CueMixFirst && menuItemID <= CueMixLast)
+            {
+                cueMixIndex = menuItemID - CueMixFirst;
+                if (onCueMix)
+                    onCueMix(0.25 * cueMixIndex);
+            }
+            else if (menuItemID >= LevelFirst && menuItemID <= LevelLast)
+            {
+                levelIndex = menuItemID - LevelFirst;
+                if (onHeadphoneLevel)
+                    onHeadphoneLevel(-6.0 * levelIndex);
+            }
+            else if (menuItemID >= AssignFirst && menuItemID <= AssignLast)
             {
                 const int deck = (menuItemID - AssignFirst) / 3;
                 assign[deck] = (menuItemID - AssignFirst) % 3;

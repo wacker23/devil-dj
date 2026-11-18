@@ -42,6 +42,7 @@ struct ChannelState
     std::uint8_t eqMode = 0;           // 0 EQ, 1 isolator
     std::uint8_t faderCurve = 0;       // 0 smooth, 1 linear, 2 sharp
     std::uint8_t crossfaderAssign = 1; // 0 A, 1 THRU, 2 B
+    bool cue = false;                  // CUE button: this channel (pre-fader) is in the headphones
 
     // Meters, linear (0 dBFS = 1): pre-fader, so they show what trim and EQ do. Peaks fall at 20 dB/s.
     float peakL = 0.0f, peakR = 0.0f, rms = 0.0f;
@@ -81,6 +82,11 @@ struct EngineState
     float masterPeakL = 0.0f, masterPeakR = 0.0f, masterRms = 0.0f; // after the limiter, linear
     float limiterGainReductionDb = 0.0f;                            // largest in the last block (>= 0)
     int masterLatencySamples = 0;                                   // limiter look-ahead
+
+    // Headphones (P1-12): cue bus = channels with CUE on, mixed with the master, then the headphone level.
+    float cueMix = 0.5f;
+    float headphoneLevelDb = 0.0f;
+    float cuePeakL = 0.0f, cuePeakR = 0.0f;   // headphone signal after its limiter, linear
     std::uint32_t buffersAwaitingRelease = 0; // replaced buffers not yet handed back (queue was full)
 };
 

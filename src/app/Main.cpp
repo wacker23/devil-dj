@@ -76,6 +76,8 @@ public:
         menu->onIsolator = [this](bool on) { mainComponent->setIsolator(on); };
         menu->onCrossfaderCurve = [this](int curve) { mainComponent->setCrossfaderCurve(curve); };
         menu->onCrossfaderAssign = [this](int deck, int assign) { mainComponent->setCrossfaderAssign(deck, assign); };
+        menu->onCueMix = [this](double mix) { mainComponent->setCueMix(mix); };
+        menu->onHeadphoneLevel = [this](double db) { mainComponent->setHeadphoneLevel(db); };
         mainWindow->setMenuBar(menu.get());
     }
 

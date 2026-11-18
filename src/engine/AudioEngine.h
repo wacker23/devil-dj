@@ -140,6 +140,8 @@ private:
         CrossfaderAssign assign = CrossfaderAssign::Thru;
         dsp::LinearRamp crossfaderGain; // this channel's side of the crossfader, 20 ms
         dsp::LevelMeter meter;          // pre-fader
+        bool cue = false;
+        dsp::LinearRamp cueSend; // 0/1, 20 ms: pre-fader signal into the cue bus
     };
     std::array<MixerChannel, kMaxChannels> mixer{};
     double crossfaderPosition = 0.5;
@@ -148,6 +150,13 @@ private:
     dsp::LinearRamp masterGain;
     dsp::Limiter limiter;
     dsp::LevelMeter masterMeter;
+    double cueMix = 0.5, headphoneLevelDb = 0.0;
+    dsp::LinearRamp cueMixCue, cueMixMaster, headphoneGain;
+    dsp::Limiter cueLimiter; // the headphones can't clip either, and stay aligned with the limited master
+    dsp::LevelMeter cueMeter;
+    void updateCueMix() noexcept;
+    void mixHeadphones(int numSamples) noexcept;
+    void finishBuses(int numSamples) noexcept;
     float blockGainReductionDb = 0.0f;
     bool mixerInitialised = false;
     void updateCrossfaderGains() noexcept;

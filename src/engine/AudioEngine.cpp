@@ -42,7 +42,12 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
             m.assign = i == 0 ? CrossfaderAssign::A : i == 1 ? CrossfaderAssign::B : CrossfaderAssign::Thru;
         m.crossfaderGain.prepare(sampleRate, ChannelStrip::kSmoothingSeconds);
         m.meter.prepare(sampleRate);
+        m.cueSend.prepare(sampleRate, ChannelStrip::kSmoothingSeconds);
     }
+    for (auto* r : {&cueMixCue, &cueMixMaster, &headphoneGain})
+        r->prepare(sampleRate, ChannelStrip::kSmoothingSeconds);
+    cueLimiter.prepare(sampleRate, capacity);
+    cueMeter.prepare(sampleRate);
     mixerInitialised = true;
     masterGain.prepare(sampleRate, ChannelStrip::kSmoothingSeconds);
     limiter.prepare(sampleRate, capacity);
@@ -62,7 +67,14 @@ void AudioEngine::reset() noexcept
     {
         m.crossfaderGain.snap(crossfaderGain(m.assign, crossfaderPosition, crossfaderCurve));
         m.meter.reset();
+        m.cueSend.snap(m.cue ? 1.0 : 0.0);
     }
+    updateCueMix();
+    cueMixCue.snap(cueMixCue.targetValue());
+    cueMixMaster.snap(cueMixMaster.targetValue());
+    headphoneGain.snap(headphoneGain.targetValue());
+    cueLimiter.reset();
+    cueMeter.reset();
     masterGain.snap(masterGainDb <= -100.0 ? 0.0 : std::pow(10.0, masterGainDb / 20.0));
     limiter.reset();
     masterMeter.reset();
@@ -122,9 +134,11 @@ void AudioEngine::renderChunk(float* const* outputs, int numChannels, int offset
     cueBus.clear(0, numSamples);
 
     renderDecks(numSamples);
-    renderTestTone(numSamples);
-    renderMaster(numSamples);
-    swapPendingTracks(); // decks that finished fading out can take their new track now
+    renderMaster(numSamples);   // master gain
+    mixHeadphones(numSamples);  // cue bus + master -> headphone level
+    renderTestTone(numSamples); // straight onto its bus (not into the headphone mix)
+    finishBuses(numSamples);    // limiters and meters
+    swapPendingTracks();        // decks that finished fading out can take their new track now
 
     // Point at this chunk of each device output channel.
     float* chunk[kMaxOutputChannels] = {};
@@ -343,7 +357,7 @@ void AudioEngine::updateCrossfaderGains() noexcept
 
 void AudioEngine::renderMaster(int numSamples) noexcept
 {
-    // Master gain -> brick-wall limiter -> meter. The cue bus is not limited.
+    // Master gain (the limiter runs in finishBuses, after the headphone mix has taken its copy).
     float* l = masterBus.getWritePointer(0);
     float* r = masterBus.getWritePointer(1);
     if (masterGain.isRamping() || masterGain.value() != 1.0)
@@ -353,9 +367,46 @@ void AudioEngine::renderMaster(int numSamples) noexcept
             l[i] *= g;
             r[i] *= g;
         }
+}
+
+void AudioEngine::updateCueMix() noexcept
+{
+    // Mix knob: cue at full level up to the centre, then fading out; master the mirror image. Centre = both.
+    cueMixCue.setTarget(std::min(1.0, 2.0 * (1.0 - cueMix)));
+    cueMixMaster.setTarget(std::min(1.0, 2.0 * cueMix));
+    headphoneGain.setTarget(headphoneLevelDb <= -100.0 ? 0.0 : std::pow(10.0, headphoneLevelDb / 20.0));
+}
+
+void AudioEngine::mixHeadphones(int numSamples) noexcept
+{
+    // cueBus holds the pre-fader sum of channels with CUE on; add the master (after master gain, before its
+    // limiter, so both go through one limiter each and stay in step).
+    float* cl = cueBus.getWritePointer(0);
+    float* cr = cueBus.getWritePointer(1);
+    const float* ml = masterBus.getReadPointer(0);
+    const float* mr = masterBus.getReadPointer(1);
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const auto gc = static_cast<float>(cueMixCue.next());
+        const auto gm = static_cast<float>(cueMixMaster.next());
+        const auto level = static_cast<float>(headphoneGain.next());
+        cl[i] = (gc * cl[i] + gm * ml[i]) * level;
+        cr[i] = (gc * cr[i] + gm * mr[i]) * level;
+    }
+}
+
+void AudioEngine::finishBuses(int numSamples) noexcept
+{
+    float* l = masterBus.getWritePointer(0);
+    float* r = masterBus.getWritePointer(1);
     limiter.process(l, r, numSamples);
     blockGainReductionDb = std::max(blockGainReductionDb, limiter.lastGainReductionDb());
     masterMeter.process(l, r, numSamples);
+
+    float* cl = cueBus.getWritePointer(0);
+    float* cr = cueBus.getWritePointer(1);
+    cueLimiter.process(cl, cr, numSamples);
+    cueMeter.process(cl, cr, numSamples);
 }
 
 void AudioEngine::apply(const SetParam& command) noexcept
@@ -371,6 +422,14 @@ void AudioEngine::apply(const SetParam& command) noexcept
                               : command.value >= 0.5 ? CrossfaderCurve::Linear
                                                      : CrossfaderCurve::Smooth;
             updateCrossfaderGains();
+            return;
+        case ParamId::CueMix:
+            cueMix = std::clamp(static_cast<double>(command.value), 0.0, 1.0);
+            updateCueMix();
+            return;
+        case ParamId::HeadphoneLevel:
+            headphoneLevelDb = command.value <= -100.0f ? -100.0 : std::min(6.0, static_cast<double>(command.value));
+            updateCueMix();
             return;
         case ParamId::MasterGain:
             masterGainDb = command.value <= -100.0f ? -100.0 : std::min(6.0, static_cast<double>(command.value));
@@ -422,6 +481,13 @@ void AudioEngine::apply(const SetParam& command) noexcept
             m.crossfaderGain.setTarget(crossfaderGain(m.assign, crossfaderPosition, crossfaderCurve));
             break;
         }
+        case ChannelParam::Cue:
+        {
+            auto& m = mixer[static_cast<std::size_t>(index / kChannelParamCount)];
+            m.cue = v >= 0.5;
+            m.cueSend.setTarget(m.cue ? 1.0 : 0.0);
+            break;
+        }
         case ChannelParam::Count:
             break;
     }
@@ -429,7 +495,7 @@ void AudioEngine::apply(const SetParam& command) noexcept
 
 void AudioEngine::renderDecks(int numSamples) noexcept
 {
-    // Deck -> channel strip (pre-fader meter) -> fader -> crossfader -> master bus.
+    // Deck -> channel strip (pre-fader meter, cue send) -> fader -> crossfader -> master bus.
     float* l = deckScratch.getWritePointer(0);
     float* r = deckScratch.getWritePointer(1);
     for (std::size_t i = 0; i < decks.size(); ++i)
@@ -440,11 +506,23 @@ void AudioEngine::renderDecks(int numSamples) noexcept
         {
             m.meter.processSilence(numSamples);
             m.crossfaderGain.skip(numSamples);
+            m.cueSend.skip(numSamples);
             continue;
         }
         slot.deck.render(l, r, numSamples);
         strips[i].processPreFader(l, r, numSamples);
         m.meter.process(l, r, numSamples);
+        if (m.cueSend.isRamping() || m.cueSend.value() > 0.0)
+        {
+            float* cl = cueBus.getWritePointer(0);
+            float* cr = cueBus.getWritePointer(1);
+            for (int s = 0; s < numSamples; ++s)
+            {
+                const auto g = static_cast<float>(m.cueSend.next());
+                cl[s] += g * l[s];
+                cr[s] += g * r[s];
+            }
+        }
         strips[i].applyFader(l, r, numSamples);
         if (m.crossfaderGain.isRamping() || m.crossfaderGain.value() != 1.0)
             for (int s = 0; s < numSamples; ++s)
@@ -552,6 +630,7 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         c.faderCurve = static_cast<std::uint8_t>(strip.faderCurve());
         const auto& m = mixer[i];
         c.crossfaderAssign = static_cast<std::uint8_t>(m.assign);
+        c.cue = m.cue;
         c.peakL = m.meter.peakLeft();
         c.peakR = m.meter.peakRight();
         c.rms = m.meter.rms();
@@ -565,6 +644,10 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
     current.limiterGainReductionDb = blockGainReductionDb;
     blockGainReductionDb = 0.0f;
     current.masterLatencySamples = limiter.latencySamples();
+    current.cueMix = static_cast<float>(cueMix);
+    current.headphoneLevelDb = static_cast<float>(headphoneLevelDb);
+    current.cuePeakL = cueMeter.peakLeft();
+    current.cuePeakR = cueMeter.peakRight();
 
     state.write(current);
 }

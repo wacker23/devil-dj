@@ -137,8 +137,15 @@ bool MainComponent::handleMixerKey(const juce::KeyPress& key)
 {
     const auto mods = key.getModifiers();
     const int code = key.getKeyCode();
-    if (mods.isCtrlDown() && !mods.isShiftDown()) // EQ kills (toggle)
+    if (mods.isCtrlDown() && !mods.isShiftDown()) // EQ kills, headphone CUE (toggles)
     {
+        if (code == 'E' || code == 'O')
+        {
+            const int ch = code == 'E' ? 0 : 1;
+            const bool on = !engine.readState().channels[static_cast<std::size_t>(ch)].cue;
+            engine.send(engine::SetParam{engine::channelParam(ch, engine::ChannelParam::Cue), on ? 1.0f : 0.0f});
+            return true;
+        }
         static constexpr int killKeys[2][3] = {{'A', 'S', 'D'}, {'J', 'K', 'L'}};
         for (int ch = 0; ch < 2; ++ch)
             for (int band = 0; band < 3; ++band)
@@ -237,6 +244,16 @@ void MainComponent::setCrossfaderAssign(int deck, int assign)
 {
     engine.send(engine::SetParam{engine::channelParam(deck, engine::ChannelParam::CrossfaderAssign),
                                  static_cast<float>(assign)});
+}
+
+void MainComponent::setCueMix(double mix)
+{
+    engine.send(engine::SetParam{engine::ParamId::CueMix, static_cast<float>(mix)});
+}
+
+void MainComponent::setHeadphoneLevel(double db)
+{
+    engine.send(engine::SetParam{engine::ParamId::HeadphoneLevel, static_cast<float>(db)});
 }
 
 void MainComponent::setIsolator(bool on)
@@ -362,8 +379,8 @@ juce::StringArray MainComponent::statusLines()
         lines.add(juce::String("   ") + (c.eqMode == 1 ? "ISO" : "EQ") + "  low " + band(c.eqDb[0]) + "  mid " +
                   band(c.eqDb[1]) + "  high " + band(c.eqDb[2]) + "  filter " + filter);
         static const char* const sides[] = {"xf A", "xf THRU", "xf B"};
-        lines.add(juce::String("   ") + sides[std::min<int>(c.crossfaderAssign, 2)] + "  meter " +
-                  levelDb(std::max(c.peakL, c.peakR)) + " dB peak, " + levelDb(c.rms) + " dB rms");
+        lines.add(juce::String("   ") + (c.cue ? "CUE  " : "") + sides[std::min<int>(c.crossfaderAssign, 2)] +
+                  "  meter " + levelDb(std::max(c.peakL, c.peakR)) + " dB peak, " + levelDb(c.rms) + " dB rms");
     }
     lines.add("Keys A: Z cue, X play, 1/2 bend, Shift+1/2 tempo, Shift+Z start, Ctrl+W key lock");
     lines.add("Keys B: M cue, , play, 7/8 bend, Shift+7/8 tempo, Shift+M start, Ctrl+I key lock");
@@ -371,7 +388,11 @@ juce::StringArray MainComponent::statusLines()
     lines.add("Master: crossfader " + juce::String(state.crossfader, 2) + " (" +
               curves[std::min<int>(state.crossfaderCurve, 2)] + ")  peak " + levelDb(state.masterPeakL) + " / " +
               levelDb(state.masterPeakR) + " dB  limiter -" + juce::String(state.limiterGainReductionDb, 1) + " dB");
-    lines.add("Crossfader: hold G / H glide, Shift+G / Shift+H snap, B centre");
+    lines.add("Headphones: mix " + juce::String(state.cueMix, 2) + " (0 cue .. 1 master)  level " +
+              juce::String(state.headphoneLevelDb, 0) + " dB  peak " +
+              levelDb(std::max(state.cuePeakL, state.cuePeakR)) + " dB" +
+              (state.cueRouted ? "" : "  [not routed: Options > Audio settings > output layout]"));
+    lines.add("Crossfader: hold G / H glide, Shift+G / Shift+H snap, B centre;  CUE: Ctrl+E (A), Ctrl+O (B)");
     lines.add("Mixer: Ctrl+A/S/D, Ctrl+J/K/L kill; hold Shift+3/4, Shift+9/0 filter; Shift+5, Shift+- reset");
     lines.add("Jog strips (bottom): drag = scratch (playing) / scrub (paused), wheel = nudge");
     lines.add("Track buffers: " + juce::String(engine::TrackBuffer::liveCount()) + " alive, " +
