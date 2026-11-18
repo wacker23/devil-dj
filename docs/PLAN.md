@@ -126,7 +126,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
   `engine/TrackDecoder`: JUCE readers for WAV/AIFF/FLAC/OGG; Windows Media Foundation `IMFSourceReader` for MP3/AAC/M4A/ALAC. Output float stereo at the device rate (resample at load with a high-quality windowed-sinc resampler if needed).
   Done when: generated test files and one file of each format decode; duration within 1 ms of reference; unit test compares decoded WAV to source.
 
-- [ ] **P1-05 TrackLoader thread**
+- [x] **P1-05 TrackLoader thread**
   Background thread pool decodes into `std::shared_ptr<const TrackBuffer>` (interleaved or planar float, sample rate, length, file path, content hash). Loading posts `LoadTrack{deck, ptr}` to the engine; the replaced buffer goes to `GarbageQueue`. Progress events for UI.
   Done when: loading a 10-min MP3 doesn't glitch playback on the other deck; memory is released after replacing a track (verified with a counter).
 

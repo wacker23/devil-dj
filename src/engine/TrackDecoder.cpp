@@ -50,6 +50,15 @@ bool cancelled(const DecodeOptions& o) noexcept
     return o.cancel != nullptr && o.cancel->load(std::memory_order_relaxed);
 }
 
+// Decoding is reported as 0..kDecodeShare of the progress, resampling as the rest.
+constexpr double kDecodeShare = 0.8;
+
+void report(const DecodeOptions& o, double fraction)
+{
+    if (o.progress)
+        o.progress(std::clamp(fraction, 0.0, 1.0));
+}
+
 const juce::StringArray& juceExtensions()
 {
     static const juce::StringArray e{".wav", ".wave", ".aif", ".aiff", ".aifc", ".flac", ".ogg"};
@@ -91,6 +100,7 @@ util::Result<RawAudio> decodeWithJuce(const juce::File& file, const DecodeOption
     juce::AudioBuffer<float> chunk(raw.sourceChannels, kChunkSamples);
     for (int pos = 0; pos < length; pos += kChunkSamples)
     {
+        report(options, kDecodeShare * pos / std::max(1, length));
         if (cancelled(options))
             return util::Result<RawAudio>::fail("Cancelled");
         const int n = std::min(kChunkSamples, length - pos);
@@ -244,6 +254,8 @@ util::Result<RawAudio> decodeWithMediaFoundation(const juce::File& file, const D
         DWORD streamIndex = 0, flags = 0;
         LONGLONG timestamp = 0;
         ComPtr<IMFSample> sample;
+        if (raw.containerSeconds > 0.0)
+            report(options, kDecodeShare * (static_cast<double>(timestamp) * 1e-7) / raw.containerSeconds);
         if (FAILED(hr = reader->ReadSample(audioStream, 0, &streamIndex, &flags, &timestamp, &sample)))
             return R::fail("Decode error in " + file.getFileName().toStdString() + " (" +
                            hresultMessage("ReadSample", hr) + ")");
@@ -336,6 +348,7 @@ DecodeResult decodeTrack(const juce::File& file, const DecodeOptions& options)
         audio.channels[0] = dsp::resample(audio.channels[0], audio.sampleRate, options.targetSampleRate);
         audio.channels[1] = right.get();
         track->sampleRate = options.targetSampleRate;
+        report(options, 0.95);
     }
     else
     {
@@ -350,6 +363,7 @@ DecodeResult decodeTrack(const juce::File& file, const DecodeOptions& options)
         std::copy(audio.channels[static_cast<std::size_t>(ch)].begin(),
                   audio.channels[static_cast<std::size_t>(ch)].end(), track->audio.getWritePointer(ch));
 
+    report(options, 1.0);
     return DecodeResult::ok(std::move(track));
 }
 

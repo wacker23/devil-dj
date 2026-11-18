@@ -3,11 +3,13 @@
 #include "engine/EngineCommand.h"
 #include "engine/EngineState.h"
 #include "engine/OutputRouter.h"
+#include "engine/TrackBuffer.h"
 #include "util/SpscQueue.h"
 #include "util/TripleBuffer.h"
 
 #include <juce_audio_devices/juce_audio_devices.h>
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 
@@ -42,6 +44,10 @@ public:
     bool send(const EngineCommand& command) noexcept;
     std::uint64_t droppedCommands() const noexcept { return dropped.load(std::memory_order_relaxed); }
 
+    // Ids of buffers the engine no longer uses; the owner pops them (10 Hz housekeeping) and releases them from
+    // the BufferRegistry. Message thread.
+    bool popReleasedBuffer(BufferId& id) noexcept { return releasedBuffers.tryPop(id); }
+
     // Latest published state. One reader thread only (the UI); the reference stays valid until the next call.
     const EngineState& readState() noexcept { return state.read(); }
 
@@ -69,11 +75,16 @@ private:
     void drainCommands() noexcept;
     void apply(const SetTestTone& command) noexcept;
     void apply(const SetOutputLayout& command) noexcept;
+    void apply(const LoadTrack& command) noexcept;
+    void apply(const UnloadTrack& command) noexcept;
+    void releaseBuffer(BufferId id) noexcept;
+    void retryPendingReleases() noexcept;
     void renderChunk(float* const* outputs, int numChannels, int offset, int numSamples) noexcept;
     void renderTestTone(int numSamples) noexcept;
     void publish(int numChannels, int numSamples, double elapsedSeconds) noexcept;
 
     util::SpscQueue<EngineCommand, kCommandQueueSize> commands;
+    util::SpscQueue<BufferId, 256> releasedBuffers; // audio thread -> message thread
     util::TripleBuffer<EngineState> state;
     std::atomic<std::uint64_t> dropped{0};
 
@@ -83,6 +94,19 @@ private:
     juce::AudioBuffer<float> masterBus; // 2 x capacity
     juce::AudioBuffer<float> cueBus;    // 2 x capacity
     OutputLayout layout = OutputLayout::StereoMaster;
+
+    struct DeckSlot
+    {
+        const TrackBuffer* buffer = nullptr;
+        BufferId id = 0;
+    };
+    std::array<DeckSlot, kMaxDecks> decks{};
+
+    // Releases that didn't fit into releasedBuffers yet; retried every block.
+    static constexpr int kMaxPendingReleases = 16;
+    std::array<BufferId, kMaxPendingReleases> pendingReleases{};
+    int numPendingReleases = 0;
+
     EngineState current; // built up during the block, then published
 
     struct TestTone

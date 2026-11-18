@@ -2,9 +2,14 @@
 
 #include "engine/AudioDeviceService.h"
 #include "engine/AudioEngine.h"
+#include "engine/BufferRegistry.h"
+#include "engine/TrackLoader.h"
 #include "ui/DebugOverlay.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
+
+#include <array>
+#include <memory>
 
 namespace devildj::app
 {
@@ -14,7 +19,9 @@ namespace devildj::app
 class MainComponent final : public juce::Component
 {
 public:
-    MainComponent(engine::AudioEngine& engine, engine::AudioDeviceService& audio);
+    MainComponent(engine::AudioEngine& engine, engine::AudioDeviceService& audio, engine::TrackLoader& loader,
+                  engine::BufferRegistry& registry);
+    ~MainComponent() override;
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -23,8 +30,19 @@ public:
     void toggleDebugOverlay();
     void toggleTestTone();
 
+    // Temporary until the file browser (P1-18) and library (Phase 2): pick a file and load it.
+    void chooseTrackForDeck(engine::DeckId deck);
+    void unloadDeck(engine::DeckId deck);
+
 private:
+    juce::StringArray statusLines() const;
+
     engine::AudioEngine& engine;
+    engine::AudioDeviceService& audio;
+    engine::TrackLoader& loader;
+    engine::BufferRegistry& registry;
+    std::array<juce::String, 2> deckStatus{"empty", "empty"};
+    std::unique_ptr<juce::FileChooser> chooser;
     ui::DebugOverlay overlay;
     bool testToneOn = false;
 

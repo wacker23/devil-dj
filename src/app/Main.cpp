@@ -7,6 +7,8 @@
 
 #include "engine/AudioDeviceService.h"
 #include "engine/AudioEngine.h"
+#include "engine/BufferRegistry.h"
+#include "engine/TrackLoader.h"
 #include "util/CrashHandler.h"
 #include "util/Log.h"
 
@@ -48,7 +50,7 @@ public:
 
         startAudio();
 
-        auto content = std::make_unique<MainComponent>(*engine, *audio);
+        auto content = std::make_unique<MainComponent>(*engine, *audio, *loader, *registry);
         mainComponent = content.get();
         mainWindow = std::make_unique<MainWindow>(getApplicationName(), *settings, std::move(content));
         mainComponent->grabKeyboardFocus();
@@ -65,6 +67,8 @@ public:
         };
         menu->onToggleDebugOverlay = [this] { mainComponent->toggleDebugOverlay(); };
         menu->onToggleTestTone = [this] { mainComponent->toggleTestTone(); };
+        menu->onLoadTrack = [this](int deck) { mainComponent->chooseTrackForDeck(static_cast<engine::DeckId>(deck)); };
+        menu->onUnloadTrack = [this](int deck) { mainComponent->unloadDeck(static_cast<engine::DeckId>(deck)); };
         mainWindow->setMenuBar(menu.get());
     }
 
@@ -75,10 +79,12 @@ public:
         mainWindow = nullptr; // also destroys mainComponent
         mainComponent = nullptr;
         menu = nullptr;
+        loader = nullptr; // cancels and waits for running loads
         if (audio != nullptr)
             audio->setAudioCallback(nullptr); // stop calling the engine before it goes away
         audio = nullptr;
         engine = nullptr;
+        registry = nullptr; // frees all track buffers (nothing uses them any more)
         settings = nullptr;
         juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
 
@@ -126,6 +132,8 @@ private:
         audio->initialise(settings->get(keys::audioDeviceState));
         applyOutputLayout(currentLayout(), false);
         audio->setAudioCallback(engine.get());
+        registry = std::make_unique<engine::BufferRegistry>();
+        loader = std::make_unique<engine::TrackLoader>(*engine, *registry);
         audio->onDeviceChanged = [this]
         {
             if (const auto state = audio->getStateXml(); state.isNotEmpty())
@@ -156,6 +164,8 @@ private:
     std::unique_ptr<Settings> settings;
     std::unique_ptr<engine::AudioEngine> engine;
     std::unique_ptr<engine::AudioDeviceService> audio;
+    std::unique_ptr<engine::BufferRegistry> registry;
+    std::unique_ptr<engine::TrackLoader> loader;
     std::unique_ptr<MainWindow> mainWindow;
     std::unique_ptr<AppMenu> menu;
     MainComponent* mainComponent = nullptr; // owned by mainWindow

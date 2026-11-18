@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/EngineIds.h"
 #include "engine/OutputRouter.h"
 
 #include <cstdint>
@@ -14,6 +15,8 @@ namespace devildj::engine
 // travels through util::SpscQueue without allocating.
 //
 // The full list in ARCHITECTURE §3.2 (LoadTrack, Play, Seek, SetParam, ...) is added as each task needs it.
+
+struct TrackBuffer;
 
 enum class Bus : std::uint8_t
 {
@@ -37,7 +40,22 @@ struct SetOutputLayout
     OutputLayout layout = OutputLayout::StereoMaster;
 };
 
-using EngineCommand = std::variant<SetTestTone, SetOutputLayout>;
+// Puts a decoded track on a deck (P1-05). The buffer is owned by the BufferRegistry on the message thread;
+// the engine hands `bufferId` back through popReleasedBuffer() when it no longer uses it.
+struct LoadTrack
+{
+    DeckId deck = 0;
+    const TrackBuffer* buffer = nullptr;
+    BufferId bufferId = 0;
+};
+
+// Empties a deck; its buffer is handed back like a replaced one.
+struct UnloadTrack
+{
+    DeckId deck = 0;
+};
+
+using EngineCommand = std::variant<SetTestTone, SetOutputLayout, LoadTrack, UnloadTrack>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

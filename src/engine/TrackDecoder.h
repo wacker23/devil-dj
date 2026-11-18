@@ -4,6 +4,7 @@
 #include "util/Result.h"
 
 #include <atomic>
+#include <functional>
 #include <memory>
 
 namespace devildj::engine
@@ -21,6 +22,7 @@ struct DecodeOptions
 {
     double targetSampleRate = 0.0;             // 0 = keep the file's rate
     const std::atomic<bool>* cancel = nullptr; // checked between chunks; set to stop early
+    std::function<void(double)> progress;      // 0..1, called on the decoding thread (may be empty)
 };
 
 util::Result<std::unique_ptr<TrackBuffer>> decodeTrack(const juce::File& file, const DecodeOptions& options = {});

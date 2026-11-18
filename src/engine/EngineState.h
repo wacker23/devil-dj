@@ -3,11 +3,20 @@
 #include "engine/EngineCommand.h"
 #include "engine/OutputRouter.h"
 
+#include <array>
 #include <cstdint>
 #include <type_traits>
 
 namespace devildj::engine
 {
+
+// What the engine knows about one deck (more fields arrive with P1-06 transport).
+struct DeckSlotState
+{
+    bool loaded = false;
+    BufferId bufferId = 0;
+    int lengthSamples = 0;
+};
 
 // Snapshot published by the audio thread once per block through util::TripleBuffer (ARCHITECTURE §3.3).
 // The UI reads the latest one at display rate. Fields from §3.3 (decks, meters, master clock, ...) are
@@ -32,6 +41,9 @@ struct EngineState
     bool testToneOn = false;
     float testToneHz = 0.0f;
     Bus testToneBus = Bus::Master;
+
+    std::array<DeckSlotState, kMaxDecks> decks{};
+    std::uint32_t buffersAwaitingRelease = 0; // replaced buffers not yet handed back (queue was full)
 };
 
 static_assert(std::is_trivially_copyable_v<EngineState>, "EngineState must stay trivially copyable");

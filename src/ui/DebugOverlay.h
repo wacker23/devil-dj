@@ -22,18 +22,25 @@ public:
     using EngineStateSource = std::function<engine::EngineState()>;
     using DeviceStatusSource = std::function<engine::AudioDeviceStatus()>;
 
+    using ExtraLinesSource = std::function<juce::StringArray()>;
+
     DebugOverlay(EngineStateSource engineState, DeviceStatusSource deviceStatus);
+
+    // More lines under the built-in ones (e.g. deck and loader status). Read at most 10x per second.
+    void setExtraLines(ExtraLinesSource source) { readExtra = std::move(source); }
 
     void paint(juce::Graphics& g) override;
 
-    static constexpr int kWidth = 320;
-    static constexpr int kHeight = 150;
+    static constexpr int kWidth = 380;
+    static constexpr int kHeight = 250;
 
 private:
     void onVBlank(double timestampSeconds);
 
     EngineStateSource readEngine;
     DeviceStatusSource readDevice;
+    ExtraLinesSource readExtra;
+    juce::StringArray extraLines;
     juce::VBlankAttachment vblank;
 
     engine::EngineState engineState;

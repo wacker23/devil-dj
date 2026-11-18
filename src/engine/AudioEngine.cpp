@@ -77,6 +77,7 @@ void AudioEngine::process(float* const* outputs, int numChannels, int numSamples
     util::ScopedRealtimeContext realtime; // Debug: any allocation from here on is reported
     const auto startTicks = juce::Time::getHighResolutionTicks();
 
+    retryPendingReleases();
     drainCommands();
 
     if (capacity == 0) // not prepared: stay silent
@@ -120,9 +121,10 @@ void AudioEngine::drainCommands() noexcept
     EngineCommand command;
     for (int i = 0; i < kMaxCommandsPerBlock && commands.tryPop(command); ++i)
     {
-        std::visit(
-            Overloaded{[this](const SetTestTone& c) { apply(c); }, [this](const SetOutputLayout& c) { apply(c); }},
-            command);
+        std::visit(Overloaded{[this](const SetTestTone& c) { apply(c); },
+                              [this](const SetOutputLayout& c) { apply(c); }, [this](const LoadTrack& c) { apply(c); },
+                              [this](const UnloadTrack& c) { apply(c); }},
+                   command);
         ++current.commandsProcessed;
     }
 }
@@ -159,6 +161,60 @@ void AudioEngine::apply(const SetOutputLayout& command) noexcept
     current.outputLayout = layout;
 }
 
+void AudioEngine::apply(const LoadTrack& command) noexcept
+{
+    if (command.deck >= kMaxDecks)
+    {
+        releaseBuffer(command.bufferId); // nowhere to put it: give it straight back
+        return;
+    }
+    auto& slot = decks[command.deck];
+    if (slot.id != 0 && slot.id != command.bufferId)
+        releaseBuffer(slot.id);
+    slot.buffer = command.buffer;
+    slot.id = command.bufferId;
+
+    auto& s = current.decks[command.deck];
+    s.loaded = slot.buffer != nullptr;
+    s.bufferId = slot.id;
+    s.lengthSamples = slot.buffer != nullptr ? slot.buffer->numSamples() : 0;
+}
+
+void AudioEngine::apply(const UnloadTrack& command) noexcept
+{
+    if (command.deck >= kMaxDecks)
+        return;
+    auto& slot = decks[command.deck];
+    if (slot.id != 0)
+        releaseBuffer(slot.id);
+    slot = {};
+    current.decks[command.deck] = {};
+}
+
+void AudioEngine::releaseBuffer(BufferId id) noexcept
+{
+    if (id == 0)
+        return;
+    if (releasedBuffers.tryPush(id))
+        return;
+    if (numPendingReleases < kMaxPendingReleases)
+        pendingReleases[static_cast<std::size_t>(numPendingReleases++)] = id;
+    // else: the message thread hasn't drained 256 + 16 releases; the buffer stays in the registry (leaks until
+    // shutdown) rather than being freed while it might still be in use.
+}
+
+void AudioEngine::retryPendingReleases() noexcept
+{
+    int kept = 0;
+    for (int i = 0; i < numPendingReleases; ++i)
+    {
+        const auto id = pendingReleases[static_cast<std::size_t>(i)];
+        if (!releasedBuffers.tryPush(id))
+            pendingReleases[static_cast<std::size_t>(kept++)] = id;
+    }
+    numPendingReleases = kept;
+}
+
 void AudioEngine::renderTestTone(int numSamples) noexcept
 {
     if (!tone.on && !tone.gain.isSmoothing() && tone.gain.getCurrentValue() == 0.0f)
@@ -193,6 +249,7 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         ++current.xruns;
     current.outputChannels = numChannels;
     current.cueRouted = cueIsRouted(layout, numChannels);
+    current.buffersAwaitingRelease = static_cast<std::uint32_t>(numPendingReleases);
 
     state.write(current);
 }

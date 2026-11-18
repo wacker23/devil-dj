@@ -9,7 +9,7 @@ describing every file. Tests never use real music; they use these.
   sweeps/   logarithmic sine sweep 20 Hz - 20 kHz
   keys/     I-IV-V-I chord loops in all 24 keys (key index 0..23 as in ARCHITECTURE §7, Camelot code)
   padded/   files with leading/trailing silence, and pure silence
-  formats/  one reference signal (440 Hz left, 660 Hz right) as WAV, AIFF, FLAC, Ogg Vorbis and MP3, plus mono,
+  formats/  long_10min.mp3 for the loader tests, and one reference signal (440 Hz left, 660 Hz right) as WAV, AIFF, FLAC, Ogg Vorbis and MP3, plus mono,
             48 kHz and corrupt files, for the decoder (P1-04). AAC/ALAC are encoded by the C++ tests themselves.
 
 Deterministic: the same version of this script always writes identical files. Skips work when the
@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-GENERATOR_VERSION = 2
+GENERATOR_VERSION = 3
 DEFAULT_SAMPLE_RATE = 44_100
 DEFAULT_OUT = Path(__file__).resolve().parent.parent / "tests" / "data" / "generated"
 
@@ -228,6 +228,7 @@ def generate(out: Path, sr: int) -> list[Entry]:
 REF_LEFT_HZ, REF_RIGHT_HZ = 440.0, 660.0
 REF_LEFT_AMP, REF_RIGHT_AMP = 0.5, 0.25
 REF_SECONDS = 5.0
+LONG_MP3_SECONDS = 600.0
 
 
 def reference_signal(sr: int) -> np.ndarray:
@@ -261,6 +262,18 @@ def generate_formats(out: Path, sr: int) -> list[Entry]:
     t48 = np.arange(int(round(2.0 * rate48))) / rate48
     entries.append(write(out, "formats/sine_1000hz_48k.wav", 0.5 * np.sin(2 * np.pi * 1000.0 * t48), rate48, "format",
                          {"left_hz": 1000.0, "right_hz": 1000.0, "lossy": False}))
+
+    # A 10-minute MP3 for the loader tests (P1-05): an 8 s chord loop repeated, written block by block.
+    loop, _ = key_loop(sr, 0)
+    loop = np.stack([loop, 0.8 * loop], axis=1)
+    repeats = int(LONG_MP3_SECONDS / (loop.shape[0] / sr))
+    long_path = out / "formats/long_10min.mp3"
+    with sf.SoundFile(long_path, "w", sr, 2, format="MP3", subtype="MPEG_LAYER_III") as f:
+        for _ in range(repeats):
+            f.write(loop.astype(np.float32))
+    frames = repeats * loop.shape[0]
+    entries.append(Entry("formats/long_10min.mp3", "long", sr, 2, round(frames / sr, 6), frames,
+                         {"lossy": True, "seconds": frames / sr}))
 
     # Not audio at all, with an audio extension: decoders must fail cleanly.
     corrupt = out / "formats/corrupt.wav"

@@ -37,6 +37,7 @@ void DebugOverlay::onVBlank(double timestampSeconds)
     if (timestampSeconds - lastTextUpdate >= kTextIntervalSeconds || lastTextUpdate == 0.0)
     {
         deviceStatus = readDevice();
+        extraLines = readExtra ? readExtra() : juce::StringArray();
         lastTextUpdate = timestampSeconds;
     }
     repaint();
@@ -83,6 +84,7 @@ void DebugOverlay::paint(juce::Graphics& g)
     if (util::kRealtimeGuardEnabled)
         lines.add("RealtimeGuard violations: " +
                   juce::String(static_cast<juce::int64>(util::realtimeViolationCount())));
+    lines.addArray(extraLines);
     lines.add("F12: hide");
 
     g.setColour(juce::Colours::white.withAlpha(0.85f));
