@@ -8,7 +8,11 @@ add_library(devildj::engine ALIAS devildj_engine)
 
 target_sources(devildj_engine INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/AudioDeviceService.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/AudioDeviceService.h")
+    "${CMAKE_CURRENT_SOURCE_DIR}/AudioDeviceService.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/AudioEngine.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/AudioEngine.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/EngineCommand.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/EngineState.h")
 
 target_include_directories(devildj_engine INTERFACE "${PROJECT_SOURCE_DIR}/src")
 

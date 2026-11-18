@@ -15,6 +15,7 @@ target_sources(DevilDJTests PRIVATE
     codebeat/CodeBeatSmokeTests.cpp
     dsp/DspSmokeTests.cpp
     engine/AudioDeviceServiceTests.cpp
+    engine/AudioEngineTests.cpp
     engine/EngineSmokeTests.cpp
     library/LibrarySmokeTests.cpp
     matcher/MatcherSmokeTests.cpp

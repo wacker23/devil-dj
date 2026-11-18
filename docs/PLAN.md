@@ -112,7 +112,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
   `engine/AudioDeviceService` wrapping `juce::AudioDeviceManager`: lists device types (Windows Audio, Windows Audio Exclusive, Low Latency, DirectSound), sample rate, buffer size; saves/restores the choice; reports xruns (callback time > buffer time) and current latency.
   Done when: settings page can switch devices without restart; selected device persists.
 
-- [ ] **P1-02 AudioEngine skeleton**
+- [x] **P1-02 AudioEngine skeleton**
   `engine/AudioEngine` implements `juce::AudioIODeviceCallback`. Owns `CommandQueue` (SpscQueue of `EngineCommand` — a `std::variant` of POD structs), publishes `EngineState` via TripleBuffer once per block, enters `ScopedRealtimeContext` inside the callback, measures CPU load per block.
   Done when: engine outputs silence with a test tone command; CPU meter visible in a debug overlay.
 

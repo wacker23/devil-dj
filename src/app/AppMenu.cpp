@@ -31,6 +31,9 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
     }
     else if (menuName == "Debug")
     {
+        menu.addItem(DebugOverlay, "Debug overlay (F12)");
+        menu.addItem(TestTone, "Test tone 440 Hz on/off");
+        menu.addSeparator();
         menu.addItem(OpenLogFolder, "Open log folder");
         menu.addSeparator();
         menu.addItem(CrashUiThread, "Crash test (UI thread)");
@@ -46,6 +49,16 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
         case AudioSettings:
             if (onAudioSettings)
                 onAudioSettings();
+            break;
+
+        case DebugOverlay:
+            if (onToggleDebugOverlay)
+                onToggleDebugOverlay();
+            break;
+
+        case TestTone:
+            if (onToggleTestTone)
+                onToggleTestTone();
             break;
 
         case CrashUiThread:

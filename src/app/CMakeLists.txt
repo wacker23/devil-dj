@@ -35,6 +35,7 @@ target_link_libraries(DevilDJ
     PRIVATE
         devildj::app_core
         devildj::engine
+        devildj::ui
         juce::juce_gui_basics
         juce::juce_audio_utils
         TagLib::tag

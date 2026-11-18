@@ -12,7 +12,7 @@ juce::String describeStatus(const AudioDeviceStatus& s)
     if (!s.isOpen)
         return "no audio device open" + (s.lastError.isEmpty() ? juce::String() : " (" + s.lastError + ")");
 
-    return s.typeName + " / " + s.deviceName + ", " + juce::String(s.sampleRate, 0) + " Hz, " +
+    return s.typeName + " / " + s.deviceName + ", " + juce::String(juce::roundToInt(s.sampleRate)) + " Hz, " +
            juce::String(s.bufferSize) + " samples (" + juce::String(s.bufferMs, 1) + " ms), output latency " +
            juce::String(s.totalOutputLatencyMs, 1) + " ms";
 }

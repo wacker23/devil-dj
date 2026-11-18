@@ -4,6 +4,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <memory>
+
 namespace devildj::app
 {
 
@@ -11,7 +13,7 @@ namespace devildj::app
 class MainWindow final : public juce::DocumentWindow
 {
 public:
-    MainWindow(const juce::String& name, Settings& settings);
+    MainWindow(const juce::String& name, Settings& settings, std::unique_ptr<juce::Component> content);
     ~MainWindow() override;
 
     void closeButtonPressed() override;

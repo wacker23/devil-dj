@@ -5,9 +5,42 @@
 namespace devildj::app
 {
 
-MainComponent::MainComponent()
+namespace
 {
+constexpr int kOverlayMargin = 12;
+}
+
+MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDeviceService& audio)
+    : engine(audioEngine)
+    , overlay([&audioEngine] { return audioEngine.readState(); }, [&audio] { return audio.getStatus(); })
+{
+    addChildComponent(overlay);
+    setWantsKeyboardFocus(true);
     setSize(1280, 800);
+}
+
+// Temporary key handling until the KeyboardController binds keys by scan code (P1-16).
+bool MainComponent::keyPressed(const juce::KeyPress& key)
+{
+    if (key.getKeyCode() == juce::KeyPress::F12Key)
+    {
+        toggleDebugOverlay();
+        return true;
+    }
+    return false;
+}
+
+void MainComponent::toggleDebugOverlay()
+{
+    overlay.setVisible(!overlay.isVisible());
+    if (overlay.isVisible())
+        overlay.toFront(false);
+}
+
+void MainComponent::toggleTestTone()
+{
+    testToneOn = !testToneOn;
+    engine.send(engine::SetTestTone{testToneOn, 440.0f, -18.0f});
 }
 
 void MainComponent::paint(juce::Graphics& g)
@@ -29,6 +62,10 @@ void MainComponent::paint(juce::Graphics& g)
     g.drawText(info, getLocalBounds().reduced(12), juce::Justification::bottomLeft);
 }
 
-void MainComponent::resized() {}
+void MainComponent::resized()
+{
+    overlay.setBounds(getWidth() - ui::DebugOverlay::kWidth - kOverlayMargin, kOverlayMargin, ui::DebugOverlay::kWidth,
+                      ui::DebugOverlay::kHeight);
+}
 
 } // namespace devildj::app

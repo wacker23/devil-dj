@@ -1,6 +1,5 @@
 #include "MainWindow.h"
 
-#include "MainComponent.h"
 #include "SettingsKeys.h"
 
 #include <memory>
@@ -14,7 +13,7 @@ constexpr int kMinWidth = 960;
 constexpr int kMinHeight = 600;
 } // namespace
 
-MainWindow::MainWindow(const juce::String& name, Settings& settingsStore)
+MainWindow::MainWindow(const juce::String& name, Settings& settingsStore, std::unique_ptr<juce::Component> content)
     : DocumentWindow(
           name,
           juce::Desktop::getInstance().getDefaultLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId),
@@ -22,7 +21,7 @@ MainWindow::MainWindow(const juce::String& name, Settings& settingsStore)
     , settings(settingsStore)
 {
     setUsingNativeTitleBar(true);
-    setContentOwned(std::make_unique<MainComponent>().release(), true);
+    setContentOwned(content.release(), true);
     setResizable(true, true);
     setResizeLimits(kMinWidth, kMinHeight, 16384, 16384);
 

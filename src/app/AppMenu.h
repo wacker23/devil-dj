@@ -9,14 +9,16 @@ namespace devildj::app
 
 // Temporary main-window menu bar until the real UI and ui/Actions.h exist (P1-16):
 //   Options: Audio settings...
-//   Debug (optional): Open log folder, crash tests. Shown in Debug builds, with --debug-menu, or with the
-//   showDebugMenu setting.
+//   Debug (optional): debug overlay, test tone, open log folder, crash tests. Shown in Debug builds, with --debug-menu,
+//   or with the showDebugMenu setting.
 class AppMenu final : public juce::MenuBarModel
 {
 public:
     AppMenu(juce::File logDirectory, bool showDebugMenu);
 
     std::function<void()> onAudioSettings;
+    std::function<void()> onToggleDebugOverlay;
+    std::function<void()> onToggleTestTone;
 
     juce::StringArray getMenuBarNames() override;
     juce::PopupMenu getMenuForIndex(int topLevelMenuIndex, const juce::String& menuName) override;
@@ -26,6 +28,8 @@ private:
     enum ItemId
     {
         AudioSettings = 1,
+        DebugOverlay,
+        TestTone,
         CrashUiThread,
         CrashWorkerThread,
         OpenLogFolder,
