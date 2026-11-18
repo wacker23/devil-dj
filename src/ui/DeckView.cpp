@@ -227,6 +227,12 @@ void DeckView::paint(juce::Graphics& g)
     }
 }
 
+void DeckView::paintOverChildren(juce::Graphics& g)
+{
+    if (isDropHovering())
+        drawDropHighlight(g, getLocalBounds().toFloat(), juce::String("Drop to load deck ") + engine::deckLetter(deck));
+}
+
 // ---- overview ----
 
 void DeckView::Overview::paint(juce::Graphics& g)

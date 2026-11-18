@@ -2,6 +2,7 @@
 
 #include "engine/AudioEngine.h"
 #include "engine/TrackBuffer.h"
+#include "ui/TrackDropTarget.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -15,7 +16,7 @@ namespace devildj::ui
 // SYNC (until beat grids: P2-19), tempo slider, and the whole-track overview with playhead, cue marker and
 // click / drag to seek. Reads the engine state at display rate (VBlankAttachment); sends engine commands.
 // Every control is a plain JUCE component, so mouse and touch both work.
-class DeckView final : public juce::Component
+class DeckView final : public juce::Component, public TrackDropTarget
 {
 public:
     using TrackLookup = std::function<std::shared_ptr<const engine::TrackBuffer>(engine::BufferId)>;
@@ -24,6 +25,7 @@ public:
     ~DeckView() override;
 
     void paint(juce::Graphics& g) override;
+    void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
 
     // Pulls the latest engine state into the controls (called every frame; public for tests).
@@ -62,6 +64,7 @@ private:
     juce::VBlankAttachment vblank;
 
     juce::Rectangle<int> headerArea, infoArea;
+    void dropHoverChanged() override { repaint(); }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DeckView)
 };

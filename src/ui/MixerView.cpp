@@ -224,8 +224,11 @@ void MixerView::resized()
         auto col = ch == 0 ? area.withWidth(column) : area.withLeft(area.getRight() - column);
         auto& c = channels[static_cast<std::size_t>(ch)];
         headers[static_cast<std::size_t>(ch)] = col.removeFromTop(14);
+        // Knob rows shrink on short windows (42 px down to 30) so the fader keeps at least ~70 px.
+        const int knobRow = std::clamp((col.getHeight() - 32 - 70) / 5, 30, 42);
         for (auto* knob : {c.trim.get(), c.hi.get(), c.mid.get(), c.low.get(), c.filter.get()})
-            knob->setBounds(col.removeFromTop(42).withSizeKeepingCentre(std::min(100, col.getWidth()), 40));
+            knob->setBounds(
+                col.removeFromTop(knobRow).withSizeKeepingCentre(std::min(100, col.getWidth()), knobRow - 2));
         col.removeFromTop(4);
         c.cue->setBounds(col.removeFromTop(24).reduced(10, 0));
         col.removeFromTop(4);
@@ -238,10 +241,11 @@ void MixerView::resized()
 
     auto centre = area.withTrimmedLeft(column).withWidth(area.getWidth() - 2 * column);
     centre.removeFromTop(14);
-    masterLevel->setBounds(centre.removeFromTop(48).withSizeKeepingCentre(56, 48));
-    auto knobsBottom = centre.removeFromBottom(100);
-    phonesLevel->setBounds(knobsBottom.removeFromBottom(48).withSizeKeepingCentre(56, 48));
-    cueMix->setBounds(knobsBottom.removeFromBottom(48).withSizeKeepingCentre(56, 48));
+    const int centreKnob = std::clamp((centre.getHeight() - 80) / 3, 36, 48);
+    masterLevel->setBounds(centre.removeFromTop(centreKnob).withSizeKeepingCentre(56, centreKnob));
+    auto knobsBottom = centre.removeFromBottom(2 * centreKnob + 4);
+    phonesLevel->setBounds(knobsBottom.removeFromBottom(centreKnob).withSizeKeepingCentre(56, centreKnob));
+    cueMix->setBounds(knobsBottom.removeFromBottom(centreKnob).withSizeKeepingCentre(56, centreKnob));
     centre.removeFromBottom(16); // room for the "phones not routed" note
     masterMeter->setBounds(centre.reduced(0, 6).withSizeKeepingCentre(18, centre.getHeight() - 12));
 }

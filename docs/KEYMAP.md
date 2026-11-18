@@ -6,7 +6,7 @@ Hold **Ctrl + /** to see the current map drawn on a keyboard. To change keys bef
 
 Performance keys are active whenever no text field (search box, code editor, rename field) has focus. A unit test checks that the default map has no conflicts.
 
-Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / reset, jump to start, EQ kills, key lock, headphone cue, load (Tab / Enter open the file chooser for deck A / B until the browser exists), crossfader glide / snap / centre, full screen (F11), debug overlay (F12), panic (Esc: releases holds and bends). Every other key below is already reserved for its action and does nothing until the feature exists.
+Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / reset, jump to start, EQ kills, key lock, headphone cue, load (Tab / Enter load the file selected in the browser to deck A / B, or open a file chooser if none is selected), browser Up / Down / Page Up / Page Down and Left (parent folder), crossfader glide / snap / centre, full screen (F11), debug overlay (F12), panic (Esc: releases holds and bends). Every other key below is already reserved for its action and does nothing until the feature exists.
 
 ## Decks
 

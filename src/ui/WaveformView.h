@@ -2,6 +2,7 @@
 
 #include "engine/AudioEngine.h"
 #include "engine/TrackBuffer.h"
+#include "ui/TrackDropTarget.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -19,7 +20,7 @@ namespace devildj::ui
 // Repaints from VBlankAttachment. Between engine states (one per audio block) the playhead is extrapolated
 // from the state's timestamp and rate, then moved back by the output latency so the line is where the sound
 // is heard. Paint time and frame interval are measured for the 60 fps target.
-class WaveformView final : public juce::Component
+class WaveformView final : public juce::Component, public TrackDropTarget
 {
 public:
     using TrackLookup = std::function<std::shared_ptr<const engine::TrackBuffer>(engine::BufferId)>;
@@ -60,6 +61,7 @@ public:
 
 private:
     void onVBlank();
+    void dropHoverChanged() override { repaint(); }
     static double uiClockSeconds();
 
     engine::AudioEngine& engine;

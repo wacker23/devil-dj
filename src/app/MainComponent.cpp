@@ -29,6 +29,12 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     addAndMakeVisible(mixer);
     addAndMakeVisible(waveA);
     addAndMakeVisible(waveB);
+    addAndMakeVisible(browserPanel);
+    browserPanel.onLoad = [this](int deck, const juce::File& file)
+    { loadFile(static_cast<engine::DeckId>(deck), file); };
+    for (auto [target, deck] :
+         {std::pair<ui::TrackDropTarget*, engine::DeckId>{&deckA, 0}, {&deckB, 1}, {&waveA, 0}, {&waveB, 1}})
+        target->onTrackDropped = [this, deck = deck](const juce::File& file) { loadFile(deck, file); };
     overlay.setExtraLines([this] { return statusLines(); });
     addChildComponent(overlay);       // on top of the decks and waveforms
     addChildComponent(keymapOverlay); // above everything while Ctrl+/ is held
@@ -57,7 +63,10 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     if (!keyHook->isInstalled())
         util::logWarning("Keyboard hook not installed: performance keys are unavailable");
     setWantsKeyboardFocus(true);
-    setSize(1280, 800);
+    // Default size (a saved window position wins): up to 1440 x 900, never bigger than the screen.
+    const auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay();
+    const auto screen = display != nullptr ? display->userBounds.toNearestInt() : juce::Rectangle<int>(0, 0, 1280, 800);
+    setSize(std::min(1440, screen.getWidth() - 40), std::min(900, screen.getHeight() - 60));
 }
 
 // ---- keys (P1-16): physical key -> KeyboardController -> ActionDispatcher -> handlers below ----
@@ -146,7 +155,12 @@ void MainComponent::registerActions()
                     const bool on = !engine.readState().channels[d].cue;
                     engine.send(engine::SetParam{engine::channelParam(d, engine::ChannelParam::Cue), on ? 1.0f : 0.0f});
                 });
-        onPress(cmd(DA::Load), [this, d] { chooseTrackForDeck(d); });
+        onPress(cmd(DA::Load),
+                [this, d]
+                {
+                    if (!browserPanel.loadSelected(d)) // nothing selected in the browser: ask for a file
+                        chooseTrackForDeck(d);
+                });
     }
 
     actions.setHandler(ui::globalCommand(GA::CrossfaderLeft), [](Phase) {}); // glides every frame while held
@@ -161,6 +175,22 @@ void MainComponent::registerActions()
                     sendCrossfader();
                 });
     onPress(ui::globalCommand(GA::DebugOverlay), [this] { toggleDebugOverlay(); });
+    const auto move = [this](ui::GlobalAction a, int rows)
+    {
+        actions.setHandler(ui::globalCommand(a),
+                           [this, rows](Phase p)
+                           {
+                               if (p == Phase::Release)
+                                   return;
+                               const int page = browserPanel.pageSize();
+                               browserPanel.moveSelection(rows == 0 ? 0 : rows > 1 ? page : rows < -1 ? -page : rows);
+                           });
+    };
+    move(GA::BrowserUp, -1);
+    move(GA::BrowserDown, 1);
+    move(GA::BrowserPageUp, -2);
+    move(GA::BrowserPageDown, 2);
+    onPress(ui::globalCommand(GA::BrowserCollapse), [this] { browserPanel.goToParentFolder(); });
     actions.setHandler(ui::globalCommand(GA::KeymapOverlay),
                        [this](Phase p)
                        {
@@ -329,9 +359,16 @@ void MainComponent::chooseTrackForDeck(engine::DeckId deck)
                              const auto file = fc.getResult();
                              if (file == juce::File())
                                  return;
-                             deckStatus[deck] = "loading " + file.getFileName();
-                             loader.load(deck, file, audio.getStatus().sampleRate);
+                             loadFile(deck, file);
                          });
+}
+
+void MainComponent::loadFile(engine::DeckId deck, const juce::File& file)
+{
+    if (!file.existsAsFile())
+        return;
+    deckStatus[deck] = "loading " + file.getFileName();
+    loader.load(deck, file, audio.getStatus().sampleRate);
 }
 
 void MainComponent::unloadDeck(engine::DeckId deck)
@@ -478,21 +515,29 @@ double MainComponent::outputLatencySeconds() const
 
 void MainComponent::resized()
 {
-    // Top: deck A | mixer | deck B. Below: the two zoomed waveforms.
-    auto top = getLocalBounds().reduced(12).removeFromTop(ui::MixerView::kPreferredHeight);
+    // Top: deck A | mixer | deck B; then the two zoomed waveforms; bottom: the file browser. On short windows
+    // (laptops at 125-150 % scaling) the mixer gives up height first, down to its minimum, so the waveforms keep
+    // at least ~80 px each and the browser ~4 rows.
+    auto area = getLocalBounds().reduced(12).withTrimmedBottom(18); // bottom: the build-info line
+    const int topHeight = std::clamp(area.getHeight() - 2 * 80 - 6 - 130 - 14, ui::MixerView::kMinimumHeight,
+                                     ui::MixerView::kPreferredHeight);
+    auto top = area.removeFromTop(topHeight);
+    area.removeFromTop(8);
     const int deckWidth = (top.getWidth() - ui::MixerView::kPreferredWidth - 12) / 2;
-    deckA.setBounds(top.removeFromLeft(deckWidth).withHeight(250));
+    const int deckHeight = std::min(250, top.getHeight());
+    deckA.setBounds(top.removeFromLeft(deckWidth).withHeight(deckHeight));
     top.removeFromLeft(6);
-    deckB.setBounds(top.removeFromRight(deckWidth).withHeight(250));
+    deckB.setBounds(top.removeFromRight(deckWidth).withHeight(deckHeight));
     top.removeFromRight(6);
     mixer.setBounds(top);
 
-    auto waves = getLocalBounds().reduced(12).withTrimmedTop(ui::MixerView::kPreferredHeight + 8);
-    waves = waves.removeFromTop(std::min(2 * 130 + 6, waves.getHeight() - 20));
-    const int waveHeight = (waves.getHeight() - 6) / 2;
-    waveA.setBounds(waves.removeFromTop(waveHeight));
-    waves.removeFromTop(6);
-    waveB.setBounds(waves.removeFromTop(waveHeight));
+    const int browserHeight = std::max(130, area.getHeight() - 2 * 120 - 12); // waveforms up to ~120 px each
+    browserPanel.setBounds(area.removeFromBottom(browserHeight));
+    area.removeFromBottom(6);
+    const int waveHeight = (area.getHeight() - 6) / 2;
+    waveA.setBounds(area.removeFromTop(waveHeight));
+    area.removeFromTop(6);
+    waveB.setBounds(area.removeFromTop(waveHeight));
 
     keymapOverlay.setBounds(getLocalBounds());
     overlay.setBounds(getWidth() - ui::DebugOverlay::kWidth - kOverlayMargin, kOverlayMargin, ui::DebugOverlay::kWidth,

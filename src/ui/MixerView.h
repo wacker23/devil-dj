@@ -23,7 +23,8 @@ public:
 
     static constexpr int kChannels = 2;
     static constexpr int kPreferredWidth = 372;
-    static constexpr int kPreferredHeight = 430;
+    static constexpr int kPreferredHeight = 430; // full-size knobs and faders
+    static constexpr int kMinimumHeight = 330;   // knob rows shrink, faders keep ~70 px
 
     void resized() override;
     void paint(juce::Graphics& g) override;

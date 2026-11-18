@@ -7,6 +7,7 @@
 #include "ui/Actions.h"
 #include "ui/DebugOverlay.h"
 #include "ui/DeckView.h"
+#include "ui/FileBrowserPanel.h"
 #include "ui/KeyboardController.h"
 #include "ui/KeymapOverlay.h"
 #include "ui/MixerView.h"
@@ -35,8 +36,10 @@ public:
     void toggleDebugOverlay();
     void toggleTestTone();
 
-    // Temporary until the file browser (P1-18) and library (Phase 2): pick a file and load it.
+    // Loading: from the browser panel, a dropped file, or (no file selected) a file chooser.
     void chooseTrackForDeck(engine::DeckId deck);
+    void loadFile(engine::DeckId deck, const juce::File& file);
+    ui::FileBrowserPanel& browser() noexcept { return browserPanel; }
     void unloadDeck(engine::DeckId deck);
 
 private:
@@ -74,6 +77,7 @@ private:
                            [this] { return outputLatencySeconds(); }};
     ui::WaveformView waveB{engine, 1, [this](engine::BufferId id) { return registry.get(id); },
                            [this] { return outputLatencySeconds(); }};
+    ui::FileBrowserPanel browserPanel; // P1-18, bottom
     ui::DebugOverlay overlay;
     ui::KeymapOverlay keymapOverlay; // Ctrl+/ held (P1-17)
     bool testToneOn = false;

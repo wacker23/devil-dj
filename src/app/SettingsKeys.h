@@ -19,4 +19,7 @@ inline const SettingKey<int> outputLayout{"outputLayout", 0};
 // Show the Debug menu (crash tests, log folder) in Release builds too. Debug builds always show it.
 inline const SettingKey<bool> showDebugMenu{"showDebugMenu", false};
 
+// Folder shown in the temporary file browser (P1-18). Empty = the Music folder.
+inline const SettingKey<juce::String> browserFolder{"browserFolder", {}};
+
 } // namespace devildj::app::keys

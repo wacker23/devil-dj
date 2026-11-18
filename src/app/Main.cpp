@@ -54,6 +54,10 @@ public:
         mainComponent = content.get();
         mainWindow = std::make_unique<MainWindow>(getApplicationName(), *settings, std::move(content));
         mainComponent->grabKeyboardFocus();
+        if (const juce::File folder(settings->get(keys::browserFolder)); folder.isDirectory())
+            mainComponent->browser().setFolder(folder);
+        mainComponent->browser().onFolderChanged = [this](const juce::File& folder)
+        { settings->set(keys::browserFolder, folder.getFullPathName()); };
 
         const bool showDebugMenu =
             kDebugBuild || commandLine.contains("--debug-menu") || settings->get(keys::showDebugMenu);

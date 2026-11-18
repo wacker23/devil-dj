@@ -185,7 +185,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
   Hold Ctrl+/ to show a translucent overlay of the current bindings drawn on a keyboard layout.
   Done when: overlay reflects user rebinding.
 
-- [ ] **P1-18 Simple file loading**
+- [x] **P1-18 Simple file loading**
   Temporary file browser panel (folder tree + file list) with "Load to A/B" (Tab/Enter) and drag-and-drop from Windows Explorer onto a deck. Replaced by the library in Phase 2.
   Done when: drag-and-drop and keyboard loading both work.
 

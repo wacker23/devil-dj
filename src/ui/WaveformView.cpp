@@ -158,6 +158,9 @@ void WaveformView::paint(juce::Graphics& g)
     g.drawText(juce::String(juce::roundToInt(visibleSeconds())) + " s" + (s.scratching ? "  SCRATCH" : ""),
                getLocalBounds().reduced(6, 4), juce::Justification::topRight);
 
+    if (isDropHovering())
+        drawDropHighlight(g, area, juce::String("Drop to load deck ") + engine::deckLetter(deck));
+
     const double ms = juce::Time::getMillisecondCounterHiRes() - started;
     paintSum += ms;
     paintMax = std::max(paintMax, ms);
