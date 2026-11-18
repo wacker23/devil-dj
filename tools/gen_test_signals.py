@@ -9,6 +9,8 @@ describing every file. Tests never use real music; they use these.
   sweeps/   logarithmic sine sweep 20 Hz - 20 kHz
   keys/     I-IV-V-I chord loops in all 24 keys (key index 0..23 as in ARCHITECTURE §7, Camelot code)
   padded/   files with leading/trailing silence, and pure silence
+  formats/  one reference signal (440 Hz left, 660 Hz right) as WAV, AIFF, FLAC, Ogg Vorbis and MP3, plus mono,
+            48 kHz and corrupt files, for the decoder (P1-04). AAC/ALAC are encoded by the C++ tests themselves.
 
 Deterministic: the same version of this script always writes identical files. Skips work when the
 manifest says the files are already up to date (use --force to regenerate).
@@ -27,7 +29,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2
 DEFAULT_SAMPLE_RATE = 44_100
 DEFAULT_OUT = Path(__file__).resolve().parent.parent / "tests" / "data" / "generated"
 
@@ -74,15 +76,22 @@ def midi_to_hz(note: float) -> float:
     return 440.0 * 2.0 ** ((note - 69.0) / 12.0)
 
 
-def write(out: Path, rel: str, audio: np.ndarray, sr: int, kind: str, props: dict) -> Entry:
+def write(out: Path, rel: str, audio: np.ndarray, sr: int, kind: str, props: dict, *, mono: bool = False,
+          fmt: str | None = None, subtype: str = "PCM_16") -> Entry:
     path = out / rel
     path.parent.mkdir(parents=True, exist_ok=True)
-    if audio.ndim == 1:
+    if audio.ndim == 1 and not mono:
         audio = np.stack([audio, audio], axis=1)  # stereo, both channels identical
     peak = float(np.max(np.abs(audio))) if audio.size else 0.0
     assert peak <= 1.0, f"{rel} clips (peak {peak})"
-    sf.write(path, audio.astype(np.float32), sr, subtype="PCM_16")
-    return Entry(rel, kind, sr, audio.shape[1], round(audio.shape[0] / sr, 6), int(audio.shape[0]), props)
+    if subtype == "PCM_16":
+        # Quantise once ourselves: libsndfile scales float -> int16 differently per format (WAV vs FLAC).
+        data = np.clip(np.round(audio * 32767.0), -32768, 32767).astype(np.int16)
+    else:
+        data = audio.astype(np.float32)
+    sf.write(path, data, sr, format=fmt, subtype=subtype)
+    channels = 1 if audio.ndim == 1 else audio.shape[1]
+    return Entry(rel, kind, sr, channels, round(audio.shape[0] / sr, 6), int(audio.shape[0]), props)
 
 
 # ---- signals ----
@@ -211,6 +220,52 @@ def generate(out: Path, sr: int) -> list[Entry]:
         "trailing_silence_sec": pad_after}))
 
     entries.append(write(out, "padded/silence_5s.wav", np.zeros(int(5.0 * sr)), sr, "silence", {}))
+
+    entries += generate_formats(out, sr)
+    return entries
+
+
+REF_LEFT_HZ, REF_RIGHT_HZ = 440.0, 660.0
+REF_LEFT_AMP, REF_RIGHT_AMP = 0.5, 0.25
+REF_SECONDS = 5.0
+
+
+def reference_signal(sr: int) -> np.ndarray:
+    """Stereo reference for the decoder tests: different tones left and right so swapped channels show."""
+    t = np.arange(int(round(REF_SECONDS * sr))) / sr
+    left = REF_LEFT_AMP * np.sin(2 * np.pi * REF_LEFT_HZ * t)
+    right = REF_RIGHT_AMP * np.sin(2 * np.pi * REF_RIGHT_HZ * t)
+    return np.stack([left, right], axis=1)
+
+
+def generate_formats(out: Path, sr: int) -> list[Entry]:
+    entries: list[Entry] = []
+    ref = reference_signal(sr)
+    props = {"left_hz": REF_LEFT_HZ, "right_hz": REF_RIGHT_HZ, "left_amp": REF_LEFT_AMP,
+             "right_amp": REF_RIGHT_AMP, "reference": "formats/ref.wav"}
+
+    # Lossless: decoded samples must match the reference exactly (16-bit).
+    for rel, fmt in [("formats/ref.wav", "WAV"), ("formats/ref.aiff", "AIFF"), ("formats/ref.flac", "FLAC")]:
+        entries.append(write(out, rel, ref, sr, "format", {**props, "lossy": False}, fmt=fmt))
+    # Lossy: duration and pitch must match.
+    entries.append(write(out, "formats/ref.ogg", ref, sr, "format", {**props, "lossy": True}, fmt="OGG",
+                         subtype="VORBIS"))
+    entries.append(write(out, "formats/ref.mp3", ref, sr, "format", {**props, "lossy": True}, fmt="MP3",
+                         subtype="MPEG_LAYER_III"))
+
+    t = np.arange(int(round(2.0 * sr))) / sr
+    entries.append(write(out, "formats/mono_440.wav", 0.5 * np.sin(2 * np.pi * 440.0 * t), sr, "format",
+                         {"left_hz": 440.0, "lossy": False, "mono": True}, mono=True))
+
+    rate48 = 48_000
+    t48 = np.arange(int(round(2.0 * rate48))) / rate48
+    entries.append(write(out, "formats/sine_1000hz_48k.wav", 0.5 * np.sin(2 * np.pi * 1000.0 * t48), rate48, "format",
+                         {"left_hz": 1000.0, "right_hz": 1000.0, "lossy": False}))
+
+    # Not audio at all, with an audio extension: decoders must fail cleanly.
+    corrupt = out / "formats/corrupt.wav"
+    corrupt.write_bytes(np.random.default_rng(1234).integers(0, 256, 4096, dtype=np.uint8).tobytes())
+    entries.append(Entry("formats/corrupt.wav", "corrupt", 0, 0, 0.0, 0, {}))
     return entries
 
 

@@ -14,11 +14,14 @@ target_sources(DevilDJTests PRIVATE
     beatmaker/BeatMakerSmokeTests.cpp
     codebeat/CodeBeatSmokeTests.cpp
     dsp/DspSmokeTests.cpp
+    dsp/SincResamplerTests.cpp
     engine/AudioDeviceServiceTests.cpp
     engine/AudioEngineRoutingTests.cpp
     engine/AudioEngineTests.cpp
     engine/EngineSmokeTests.cpp
+    engine/Mp3GaplessTests.cpp
     engine/OutputRouterTests.cpp
+    engine/TrackDecoderTests.cpp
     library/LibrarySmokeTests.cpp
     matcher/MatcherSmokeTests.cpp
     ui/UiSmokeTests.cpp
@@ -27,6 +30,7 @@ target_sources(DevilDJTests PRIVATE
     util/GarbageQueueTests.cpp
     util/LogTests.cpp
     util/RealtimeGuardTests.cpp
+    util/ResultTests.cpp
     util/SpscQueueTests.cpp
     util/TripleBufferTests.cpp
     util/UtilSmokeTests.cpp)
@@ -50,6 +54,7 @@ target_link_libraries(DevilDJTests PRIVATE
     unofficial::sqlite3::sqlite3
     xxHash::xxhash
     devildj::util
+    devildj::dsp
     devildj::compile_options
     juce::juce_recommended_config_flags)
 

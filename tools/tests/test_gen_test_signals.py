@@ -38,11 +38,30 @@ class GeneratedSignalsTests(unittest.TestCase):
         self.assertEqual(len([f for f in files if f.startswith("keys/")]), 24)
         self.assertTrue(any(f.startswith("sweeps/") for f in files))
         self.assertTrue(any(f.startswith("padded/") for f in files))
-        for rel, entry in self.by_file.items():
+        for rel, entry in self.audio_entries():
             info = sf.info(self.out / rel)
-            self.assertEqual(info.samplerate, gen.DEFAULT_SAMPLE_RATE, rel)
-            self.assertEqual(info.channels, 2, rel)
+            self.assertEqual(info.samplerate, entry["sample_rate"], rel)
+            self.assertEqual(info.channels, entry["channels"], rel)
             self.assertEqual(info.frames, entry["frames"], rel)
+        for ext in ["wav", "aiff", "flac", "ogg", "mp3"]:
+            self.assertIn(f"formats/ref.{ext}", files)
+        self.assertIn("formats/corrupt.wav", files)
+
+    def audio_entries(self):
+        return [(rel, e) for rel, e in self.by_file.items() if e["kind"] != "corrupt"]
+
+    def test_lossless_formats_match_the_reference(self):
+        ref, _ = sf.read(self.out / "formats/ref.wav", always_2d=True)
+        for rel in ["formats/ref.aiff", "formats/ref.flac"]:
+            other, _ = sf.read(self.out / rel, always_2d=True)
+            self.assertTrue(np.array_equal(ref, other), rel)
+        # Left 440 Hz at 0.5, right 660 Hz at 0.25: different, so swapped channels would show.
+        self.assertAlmostEqual(np.max(np.abs(ref[:, 0])), 0.5, delta=0.001)
+        self.assertAlmostEqual(np.max(np.abs(ref[:, 1])), 0.25, delta=0.001)
+
+    def test_corrupt_file_is_not_audio(self):
+        with self.assertRaises(Exception):
+            sf.info(self.out / "formats/corrupt.wav")
 
     def test_click_onsets_match_manifest(self):
         for bpm in gen.CLICK_BPMS:
@@ -109,7 +128,7 @@ class GeneratedSignalsTests(unittest.TestCase):
         self.assertEqual(len({gen.camelot(k) for k in range(24)}), 24)
 
     def test_nothing_clips(self):
-        for rel in self.by_file:
+        for rel, _ in self.audio_entries():
             audio, _ = self.read(rel)
             self.assertLess(np.max(np.abs(audio)), 1.0, rel)
 
@@ -118,6 +137,8 @@ class GeneratedSignalsTests(unittest.TestCase):
         try:
             self.assertEqual(gen.main(["--out", str(other)]), 0)
             for rel in self.by_file:
+                if rel.endswith((".mp3", ".ogg")):
+                    continue  # lossy encoders may embed version strings; content is checked elsewhere
                 self.assertEqual((self.out / rel).read_bytes(), (other / rel).read_bytes(), rel)
         finally:
             shutil.rmtree(other, ignore_errors=True)

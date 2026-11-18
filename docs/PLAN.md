@@ -122,7 +122,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
 
 ### Decoding and track loading
 
-- [ ] **P1-04 Decoder abstraction**
+- [x] **P1-04 Decoder abstraction**
   `engine/TrackDecoder`: JUCE readers for WAV/AIFF/FLAC/OGG; Windows Media Foundation `IMFSourceReader` for MP3/AAC/M4A/ALAC. Output float stereo at the device rate (resample at load with a high-quality windowed-sinc resampler if needed).
   Done when: generated test files and one file of each format decode; duration within 1 ms of reference; unit test compares decoded WAV to source.
 

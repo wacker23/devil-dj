@@ -30,6 +30,8 @@ TEST_CASE("Generated test signals match the manifest", "[analysis][testdata]")
     for (const auto& entry : *files)
     {
         const auto rel = entry["file"].toString();
+        if (!rel.endsWithIgnoreCase(".wav") || entry["kind"].toString() == "corrupt")
+            continue; // other formats are covered by the decoder tests (P1-04)
         INFO(rel.toStdString());
         auto reader = openWav(devildj::test::generatedFile(rel));
         REQUIRE(reader != nullptr);

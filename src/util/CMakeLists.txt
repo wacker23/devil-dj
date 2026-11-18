@@ -14,6 +14,7 @@ target_sources(devildj_util PUBLIC
         GarbageQueue.h
         Log.h
         RealtimeGuard.h
+        Result.h
         SpscQueue.h
         TripleBuffer.h)
 

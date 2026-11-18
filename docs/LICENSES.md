@@ -25,7 +25,8 @@ GPL (any version), AGPL, LGPL used via static linking (unless an alternative lic
 | xxHash | Content hashing | BSD-2-Clause | Notices file |
 | zlib (transitive, via TagLib) | Compression inside TagLib | Zlib | Notices file |
 | utfcpp (transitive, via TagLib, header-only) | UTF-8 handling inside TagLib | BSL-1.0 | Notices file |
-| Windows Media Foundation | MP3/AAC/M4A decoding | Part of Windows | System component |
+| Windows Media Foundation | MP3/AAC/M4A/ALAC decoding | Part of Windows | System component |
+| libFLAC, libogg, libvorbis (bundled inside JUCE's juce_audio_formats) | FLAC and Ogg Vorbis decoding | BSD-3-Clause | Comes with JUCE; list in notices file |
 | ONNX Runtime (Phase 6) | ML inference, DirectML | MIT | Notices file |
 | Beat This! weights (Phase 6, optional) | Beat tracking | MIT (code and published weights, per model cards) | Re-verify at integration time |
 | HTDemucs weights (Phase 6) | Stem separation | **Unclear** — sources disagree (MIT vs. non-commercial) | Owner decision before shipping; fall back to another model if not clearly commercial-friendly |
@@ -37,7 +38,7 @@ Used only to build, format or test; nothing from them ends up in the app or inst
 | Tool | Use | Licence |
 | --- | --- | --- |
 | numpy | `tools/gen_test_signals.py` | BSD-3-Clause |
-| soundfile (bundles libsndfile) | `tools/gen_test_signals.py` writes WAVs | BSD-3-Clause (libsndfile: LGPL-2.1, used as a separate dev-time library) |
+| soundfile (bundles libsndfile, LAME, mpg123, libvorbis, libFLAC) | `tools/gen_test_signals.py` writes the WAV/AIFF/FLAC/Ogg/MP3 test files | BSD-3-Clause (libsndfile, LAME, mpg123: LGPL-2.1, used as separate dev-time libraries) |
 | clang-format | Code formatting | Apache-2.0 with LLVM exception |
 
 ## Needs a decision before use
