@@ -38,6 +38,7 @@ target_sources(DevilDJTests PRIVATE
     matcher/MatcherSmokeTests.cpp
     ui/UiSmokeTests.cpp
     ui/DeckViewTests.cpp
+    ui/MixerViewTests.cpp
     ui/WaveformViewTests.cpp
     util/CrashHandlerTests.cpp
     util/FractionTests.cpp

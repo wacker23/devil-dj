@@ -25,6 +25,7 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
 {
     addAndMakeVisible(deckA);
     addAndMakeVisible(deckB);
+    addAndMakeVisible(mixer);
     addAndMakeVisible(waveA);
     addAndMakeVisible(waveB);
     overlay.setExtraLines([this] { return statusLines(); });
@@ -153,8 +154,9 @@ bool MainComponent::handleMixerKey(const juce::KeyPress& key)
             for (int band = 0; band < 3; ++band)
                 if (code == killKeys[ch][band])
                 {
-                    auto& kill = kills[static_cast<std::size_t>(ch)][static_cast<std::size_t>(band)];
-                    kill = !kill;
+                    // Toggle from what the engine has (the mixer knobs may have moved it).
+                    const bool kill = !std::isinf(
+                        engine.readState().channels[static_cast<std::size_t>(ch)].eqDb[static_cast<std::size_t>(band)]);
                     const auto param =
                         static_cast<engine::ChannelParam>(static_cast<int>(engine::ChannelParam::EqLow) + band);
                     engine.send(engine::SetParam{engine::channelParam(ch, param), kill ? -1000.0f : 0.0f});
@@ -207,20 +209,37 @@ void MainComponent::sweepHeldKeys()
             (juce::KeyPress::isKeyCurrentlyDown('H') ? 1 : 0) - (juce::KeyPress::isKeyCurrentlyDown('G') ? 1 : 0);
         if (direction != 0)
         {
+            if (!crossfaderGliding) // start from where the crossfader is (the mixer may have moved it)
+                crossfader = engine.readState().crossfader;
+            crossfaderGliding = true;
             crossfader = std::clamp(crossfader + direction * dt, 0.0, 1.0);
             sendCrossfader();
         }
+        else
+        {
+            crossfaderGliding = false;
+        }
     }
     if (!mods.isShiftDown())
+    {
+        filterSweeping = {};
         return;
+    }
     static constexpr int sweepKeys[2][2] = {{'3', '4'}, {'9', '0'}}; // towards low-pass, towards high-pass
     for (int ch = 0; ch < 2; ++ch)
     {
         const int direction = (juce::KeyPress::isKeyCurrentlyDown(sweepKeys[ch][1]) ? 1 : 0) -
                               (juce::KeyPress::isKeyCurrentlyDown(sweepKeys[ch][0]) ? 1 : 0);
+        auto& sweeping = filterSweeping[static_cast<std::size_t>(ch)];
         if (direction == 0)
+        {
+            sweeping = false;
             continue;
+        }
         auto& knob = filterKnob[static_cast<std::size_t>(ch)];
+        if (!sweeping)
+            knob = engine.readState().channels[static_cast<std::size_t>(ch)].filter;
+        sweeping = true;
         knob = std::clamp(knob + direction * 0.5 * dt, 0.0, 1.0);
         sendFilter(ch);
     }
@@ -415,11 +434,6 @@ void MainComponent::paint(juce::Graphics& g)
 {
     g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
 
-    // Placeholder for the waveforms (P1-14) and the mixer (P1-15) between the decks and the jog strips.
-    g.setColour(juce::Colours::white.withAlpha(0.12f));
-    g.setFont(juce::FontOptions(32.0f, juce::Font::bold));
-    g.drawText("Devil-DJ", getLocalBounds().withTrimmedTop(540).withTrimmedBottom(30), juce::Justification::centred);
-
     // Temporary build-info line; moves to the About box later.
     const auto version = TagLib::runtimeVersion();
     const auto info = juce::String("JUCE ") + juce::String(JUCE_MAJOR_VERSION) + "." +
@@ -438,14 +452,21 @@ double MainComponent::outputLatencySeconds() const
 
 void MainComponent::resized()
 {
-    auto decks = getLocalBounds().reduced(12).removeFromTop(250);
-    deckA.setBounds(decks.removeFromLeft(decks.getWidth() / 2).withTrimmedRight(6));
-    deckB.setBounds(decks.withTrimmedLeft(6));
+    // Top: deck A | mixer | deck B. Below: the two zoomed waveforms.
+    auto top = getLocalBounds().reduced(12).removeFromTop(ui::MixerView::kPreferredHeight);
+    const int deckWidth = (top.getWidth() - ui::MixerView::kPreferredWidth - 12) / 2;
+    deckA.setBounds(top.removeFromLeft(deckWidth).withHeight(250));
+    top.removeFromLeft(6);
+    deckB.setBounds(top.removeFromRight(deckWidth).withHeight(250));
+    top.removeFromRight(6);
+    mixer.setBounds(top);
 
-    auto waves = getLocalBounds().reduced(12).withTrimmedTop(262).removeFromTop(2 * 130 + 6);
-    waveA.setBounds(waves.removeFromTop(130));
+    auto waves = getLocalBounds().reduced(12).withTrimmedTop(ui::MixerView::kPreferredHeight + 8);
+    waves = waves.removeFromTop(std::min(2 * 130 + 6, waves.getHeight() - 20));
+    const int waveHeight = (waves.getHeight() - 6) / 2;
+    waveA.setBounds(waves.removeFromTop(waveHeight));
     waves.removeFromTop(6);
-    waveB.setBounds(waves.removeFromTop(130));
+    waveB.setBounds(waves.removeFromTop(waveHeight));
 
     overlay.setBounds(getWidth() - ui::DebugOverlay::kWidth - kOverlayMargin, kOverlayMargin, ui::DebugOverlay::kWidth,
                       ui::DebugOverlay::kHeight);

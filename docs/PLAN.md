@@ -173,7 +173,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
   `analysis/WaveformBuilder` (run at load for now): per-track arrays at 150 points/s of peak + RMS for low (<250 Hz), mid, high (>2.5 kHz) bands; overview at 1,024 points. `ui/WaveformView` draws the zoomed view centred on the playhead, 3-band colour mode, zoom with Ctrl+wheel, repaints via `juce::VBlankAttachment`, playhead extrapolated from the last `EngineState` timestamp.
   Done when: 60 fps on the target laptop with 2 decks (measure frame time); waveform visibly aligned with audio (manual click-track test).
 
-- [ ] **P1-15 Mixer view**
+- [x] **P1-15 Mixer view**
   Trim, EQ ×3, filter, fader, cue button, meters per channel; crossfader; master level + meter; headphone mix/level. Knobs: drag vertical, scroll wheel, double-click reset, Alt for fine.
   Done when: every control works by mouse, wheel and touch.
 

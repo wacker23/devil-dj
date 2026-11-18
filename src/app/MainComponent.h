@@ -6,6 +6,7 @@
 #include "engine/TrackLoader.h"
 #include "ui/DebugOverlay.h"
 #include "ui/DeckView.h"
+#include "ui/MixerView.h"
 #include "ui/WaveformView.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -49,8 +50,9 @@ private:
     void sendCrossfader();
     double crossfader = 0.5;
     void sendFilter(int channel);
-    std::array<std::array<bool, 3>, 2> kills{};
     std::array<double, 2> filterKnob{0.5, 0.5};
+    std::array<bool, 2> filterSweeping{};
+    bool crossfaderGliding = false;
     double lastSweepSeconds = 0.0;
     juce::VBlankAttachment heldKeySweep{this, [this] { sweepHeldKeys(); }};
 
@@ -63,6 +65,7 @@ private:
     // Deck views (P1-13), left = A, right = B.
     ui::DeckView deckA{engine, 0, [this](engine::BufferId id) { return registry.get(id); }};
     ui::DeckView deckB{engine, 1, [this](engine::BufferId id) { return registry.get(id); }};
+    ui::MixerView mixer{engine}; // P1-15, between the decks
     // Zoomed waveforms (P1-14): drag = scratch / scrub, wheel = nudge, Ctrl+wheel = zoom.
     double outputLatencySeconds() const;
     ui::WaveformView waveA{engine, 0, [this](engine::BufferId id) { return registry.get(id); },
