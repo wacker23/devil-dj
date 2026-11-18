@@ -8,8 +8,9 @@ namespace devildj::app
 {
 
 // Temporary main-window menu bar until the real UI and ui/Actions.h exist (P1-16):
+//   Decks: load / unload a track on deck A or B (until the file browser, P1-18), status overlay
 //   Options: Audio settings...
-//   Debug (optional): load/unload deck A/B, debug overlay, test tone, open log folder, crash tests. Shown in Debug
+//   Debug (optional): debug overlay, test tone, open log folder, crash tests. Shown in Debug
 //   builds, with --debug-menu, or with the showDebugMenu setting.
 class AppMenu final : public juce::MenuBarModel
 {

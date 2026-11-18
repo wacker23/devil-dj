@@ -16,7 +16,7 @@ AppMenu::AppMenu(juce::File logDir, bool debugMenu)
 
 juce::StringArray AppMenu::getMenuBarNames()
 {
-    juce::StringArray names{"Options"};
+    juce::StringArray names{"Decks", "Options"};
     if (showDebugMenu)
         names.add("Debug");
     return names;
@@ -25,17 +25,22 @@ juce::StringArray AppMenu::getMenuBarNames()
 juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::String& menuName)
 {
     juce::PopupMenu menu;
-    if (menuName == "Options")
+    if (menuName == "Decks")
+    {
+        menu.addItem(LoadDeckA, "Load track to deck A...");
+        menu.addItem(LoadDeckB, "Load track to deck B...");
+        menu.addSeparator();
+        menu.addItem(UnloadDeckA, "Unload deck A");
+        menu.addItem(UnloadDeckB, "Unload deck B");
+        menu.addSeparator();
+        menu.addItem(DebugOverlay, "Show status overlay (F12)");
+    }
+    else if (menuName == "Options")
     {
         menu.addItem(AudioSettings, "Audio settings...");
     }
     else if (menuName == "Debug")
     {
-        menu.addItem(LoadDeckA, "Load track to deck A...");
-        menu.addItem(LoadDeckB, "Load track to deck B...");
-        menu.addItem(UnloadDeckA, "Unload deck A");
-        menu.addItem(UnloadDeckB, "Unload deck B");
-        menu.addSeparator();
         menu.addItem(DebugOverlay, "Debug overlay (F12)");
         menu.addItem(TestTone, "Test tone 440 Hz on/off");
         menu.addSeparator();
