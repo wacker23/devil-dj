@@ -4,6 +4,9 @@
 
 #include <taglib/tversionnumber.h>
 
+#include <algorithm>
+#include <cmath>
+
 namespace devildj::app
 {
 
@@ -54,6 +57,9 @@ bool MainComponent::keyPressed(const juce::KeyPress& key)
         toggleDebugOverlay();
         return true;
     }
+    if (handleMixerKey(key))
+        return true;
+
     // Ctrl+W / Ctrl+I: key lock deck A / B (KEYMAP).
     if (key.getModifiers().isCtrlDown() && !key.getModifiers().isShiftDown())
     {
@@ -125,6 +131,72 @@ void MainComponent::handleDeckKeys()
             engine.send(engine::TogglePlay{k.deck});
         }
     }
+}
+
+bool MainComponent::handleMixerKey(const juce::KeyPress& key)
+{
+    const auto mods = key.getModifiers();
+    const int code = key.getKeyCode();
+    if (mods.isCtrlDown() && !mods.isShiftDown()) // EQ kills (toggle)
+    {
+        static constexpr int killKeys[2][3] = {{'A', 'S', 'D'}, {'J', 'K', 'L'}};
+        for (int ch = 0; ch < 2; ++ch)
+            for (int band = 0; band < 3; ++band)
+                if (code == killKeys[ch][band])
+                {
+                    auto& kill = kills[static_cast<std::size_t>(ch)][static_cast<std::size_t>(band)];
+                    kill = !kill;
+                    const auto param =
+                        static_cast<engine::ChannelParam>(static_cast<int>(engine::ChannelParam::EqLow) + band);
+                    engine.send(engine::SetParam{engine::channelParam(ch, param), kill ? -1000.0f : 0.0f});
+                    return true;
+                }
+    }
+    if (mods.isShiftDown() && !mods.isCtrlDown())
+    {
+        if (code == '5' || code == '-') // filter reset
+        {
+            const int ch = code == '5' ? 0 : 1;
+            filterKnob[static_cast<std::size_t>(ch)] = 0.5;
+            sendFilter(ch);
+            return true;
+        }
+        if (code == '3' || code == '4' || code == '9' || code == '0')
+            return true; // swept while held in sweepFilters()
+    }
+    return false;
+}
+
+void MainComponent::sweepFilters()
+{
+    const double now = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+    const double dt = std::clamp(now - lastSweepSeconds, 0.0, 0.1);
+    lastSweepSeconds = now;
+    if (!juce::ModifierKeys::currentModifiers.isShiftDown() || !hasKeyboardFocus(true))
+        return;
+    static constexpr int sweepKeys[2][2] = {{'3', '4'}, {'9', '0'}}; // towards low-pass, towards high-pass
+    for (int ch = 0; ch < 2; ++ch)
+    {
+        const int direction = (juce::KeyPress::isKeyCurrentlyDown(sweepKeys[ch][1]) ? 1 : 0) -
+                              (juce::KeyPress::isKeyCurrentlyDown(sweepKeys[ch][0]) ? 1 : 0);
+        if (direction == 0)
+            continue;
+        auto& knob = filterKnob[static_cast<std::size_t>(ch)];
+        knob = std::clamp(knob + direction * 0.5 * dt, 0.0, 1.0);
+        sendFilter(ch);
+    }
+}
+
+void MainComponent::sendFilter(int channel)
+{
+    engine.send(engine::SetParam{engine::channelParam(channel, engine::ChannelParam::Filter),
+                                 static_cast<float>(filterKnob[static_cast<std::size_t>(channel)])});
+}
+
+void MainComponent::setIsolator(bool on)
+{
+    for (int ch = 0; ch < 2; ++ch)
+        engine.send(engine::SetParam{engine::channelParam(ch, engine::ChannelParam::EqMode), on ? 1.0f : 0.0f});
 }
 
 void MainComponent::toggleDebugOverlay()
@@ -225,9 +297,20 @@ juce::StringArray MainComponent::statusLines()
                       " % (range +-" + juce::String(juce::roundToInt(s.tempoRangePercent)) + ")  bend " +
                       juce::String(s.pitchBendPercent, 1) + " %  rate " + juce::String(s.rate, 4));
         }
+        const auto& c = state.channels[d];
+        const auto band = [](float db) { return std::isinf(db) ? juce::String("KILL") : juce::String(db, 1); };
+        const double knob = c.filter;
+        const juce::String filter =
+            std::abs(knob - 0.5) <= engine::ChannelStrip::kFilterDeadZone ? juce::String("off")
+            : knob < 0.5
+                ? "LP " + juce::String(juce::roundToInt(engine::ChannelStrip::filterTarget(knob).lowPassHz)) + " Hz"
+                : "HP " + juce::String(juce::roundToInt(engine::ChannelStrip::filterTarget(knob).highPassHz)) + " Hz";
+        lines.add(juce::String("   ") + (c.eqMode == 1 ? "ISO" : "EQ") + "  low " + band(c.eqDb[0]) + "  mid " +
+                  band(c.eqDb[1]) + "  high " + band(c.eqDb[2]) + "  filter " + filter);
     }
     lines.add("Keys A: Z cue, X play, 1/2 bend, Shift+1/2 tempo, Shift+Z start, Ctrl+W key lock");
     lines.add("Keys B: M cue, , play, 7/8 bend, Shift+7/8 tempo, Shift+M start, Ctrl+I key lock");
+    lines.add("Mixer: Ctrl+A/S/D, Ctrl+J/K/L kill; hold Shift+3/4, Shift+9/0 filter; Shift+5, Shift+- reset");
     lines.add("Jog strips (bottom): drag = scratch (playing) / scrub (paused), wheel = nudge");
     lines.add("Track buffers: " + juce::String(engine::TrackBuffer::liveCount()) + " alive, " +
               juce::String(static_cast<int>(registry.size())) + " registered, " +

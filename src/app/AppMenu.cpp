@@ -16,7 +16,7 @@ AppMenu::AppMenu(juce::File logDir, bool debugMenu)
 
 juce::StringArray AppMenu::getMenuBarNames()
 {
-    juce::StringArray names{"Decks", "Options"};
+    juce::StringArray names{"Decks", "Mixer", "Options"};
     if (showDebugMenu)
         names.add("Debug");
     return names;
@@ -45,6 +45,14 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
         menu.addSubMenu("Tempo range", ranges);
         menu.addSeparator();
         menu.addItem(DebugOverlay, "Show status overlay (F12)");
+    }
+    else if (menuName == "Mixer")
+    {
+        menu.addItem(Isolator, "Isolator EQ (both channels)", true, isolator);
+        menu.addSeparator();
+        menu.addItem(-1, "Kill low / mid / high: Ctrl+A/S/D (A), Ctrl+J/K/L (B)", false);
+        menu.addItem(-1, "Filter: hold Shift+3 / Shift+4 (A), Shift+9 / Shift+0 (B)", false);
+        menu.addItem(-1, "Filter reset: Shift+5 (A), Shift+- (B)", false);
     }
     else if (menuName == "Options")
     {
@@ -112,6 +120,12 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
         case KeyLockB:
             if (onToggleKeyLock)
                 onToggleKeyLock(menuItemID == KeyLockA ? 0 : 1);
+            break;
+
+        case Isolator:
+            isolator = !isolator;
+            if (onIsolator)
+                onIsolator(isolator);
             break;
 
         case HighQualityResampling:

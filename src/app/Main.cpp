@@ -73,6 +73,7 @@ public:
         menu->onTempoRange = [this](double range) { mainComponent->setTempoRange(range); };
         menu->onHighQualityResampling = [this](bool on) { mainComponent->setHighQualityResampling(on); };
         menu->onToggleKeyLock = [this](int deck) { mainComponent->toggleKeyLock(static_cast<engine::DeckId>(deck)); };
+        menu->onIsolator = [this](bool on) { mainComponent->setIsolator(on); };
         mainWindow->setMenuBar(menu.get());
     }
 

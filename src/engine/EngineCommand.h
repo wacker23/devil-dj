@@ -142,6 +142,13 @@ struct SetKeyShift
     int semitones = 0; // clamped to +-12
 };
 
+// Every knob / fader (ARCHITECTURE 3.2); smoothed on the audio thread. Units per ParamId (EngineIds.h).
+struct SetParam
+{
+    ParamId param = ParamId::ChannelFirst;
+    float value = 0.0f;
+};
+
 // Jog (P1-09): mouse drag on the waveform scratches (playing) or scrubs (paused); the wheel nudges.
 // timeSeconds: when the UI saw the event (any steady clock, e.g. juce::Time::getMillisecondCounterHiRes()/1000).
 // The deck measures hand speed on that clock, so it doesn't matter which audio block picks the command up.
@@ -173,7 +180,7 @@ struct Nudge
 using EngineCommand =
     std::variant<SetTestTone, SetOutputLayout, LoadTrack, UnloadTrack, Play, Pause, TogglePlay, CuePress, CueRelease,
                  Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo, PitchBend, SetInterpolationQuality, SetKeyLock,
-                 SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge>;
+                 SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge, SetParam>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

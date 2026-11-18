@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/ChannelStrip.h"
 #include "engine/Deck.h"
 #include "engine/EngineCommand.h"
 #include "engine/EngineState.h"
@@ -96,6 +97,7 @@ private:
     void apply(const ScratchMove& command) noexcept;
     void apply(const ScratchEnd& command) noexcept;
     void apply(const Nudge& command) noexcept;
+    void apply(const SetParam& command) noexcept;
     void requestTrack(DeckId deck, const TrackBuffer* buffer, BufferId id) noexcept;
     void swapPendingTracks() noexcept;
     void renderDecks(int numSamples) noexcept;
@@ -128,7 +130,8 @@ private:
         BufferId pendingId = 0;
     };
     std::array<DeckSlot, kMaxDecks> decks{};
-    juce::AudioBuffer<float> deckScratch; // 2 x capacity, one deck at a time
+    juce::AudioBuffer<float> deckScratch;            // 2 x capacity, one deck at a time
+    std::array<ChannelStrip, kMaxChannels> strips{}; // channel i = deck i
 
     // Releases that didn't fit into releasedBuffers yet; retried every block.
     static constexpr int kMaxPendingReleases = 16;

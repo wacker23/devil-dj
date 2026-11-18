@@ -40,6 +40,15 @@ private:
     juce::StringArray statusLines();
     void handleDeckKeys();
 
+    // Temporary mixer keys (KEYMAP) until the mixer view (P1-15) and KeyboardController (P1-16).
+    bool handleMixerKey(const juce::KeyPress& key);
+    void sweepFilters(); // Shift+3/4, Shift+9/0 held: filter moves at half the knob range per second
+    void sendFilter(int channel);
+    std::array<std::array<bool, 3>, 2> kills{};
+    std::array<double, 2> filterKnob{0.5, 0.5};
+    double lastSweepSeconds = 0.0;
+    juce::VBlankAttachment filterSweep{this, [this] { sweepFilters(); }};
+
     engine::AudioEngine& engine;
     engine::AudioDeviceService& audio;
     engine::TrackLoader& loader;
@@ -82,6 +91,7 @@ public:
     void setTempoRange(double rangePercent);
     void setHighQualityResampling(bool on);
     void toggleKeyLock(engine::DeckId deck);
+    void setIsolator(bool on);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };

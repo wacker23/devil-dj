@@ -9,8 +9,11 @@ target_sources(devildj_dsp PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${PROJECT_SOURCE_DIR}/src"
     FILES
+        Biquad.h
+        LinearRamp.h
         Resampler.h
         SincResampler.h
+        StateVariableFilter.h
         Stretcher.h)
 
 target_include_directories(devildj_dsp PUBLIC "${PROJECT_SOURCE_DIR}/src")

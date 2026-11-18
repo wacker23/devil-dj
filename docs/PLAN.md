@@ -150,7 +150,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
 
 ### Mixer
 
-- [ ] **P1-10 Channel strip DSP**
+- [x] **P1-10 Channel strip DSP**
   `engine/ChannelStrip`: trim gain (±12 dB), 3-band EQ with two modes — *EQ* (low shelf 70 Hz, peak 1 kHz, high shelf 13 kHz, −26…+6 dB) and *Isolator* (Linkwitz-Riley 4th-order crossovers at 250 Hz / 2.5 kHz, per-band −∞…+6 dB kill) — and a one-knob filter (centre off; left = resonant low-pass, right = high-pass; TPT state-variable filter), channel fader with curve.
   All parameters smoothed (20 ms).
   Done when: frequency-response tests: isolator bands sum flat ±0.1 dB at 0 dB; kill attenuates > 60 dB at band centre; filter cutoff sweeps without clicks.

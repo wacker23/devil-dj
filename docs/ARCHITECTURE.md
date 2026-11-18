@@ -198,7 +198,7 @@ Record tap copies the master (post-limiter) into a lock-free FIFO sized for 2 s;
 | --- | --- |
 | Parameter smoothing | One-pole or linear ramps over 20 ms; all user-facing gains in dB internally |
 | EQ mode | RBJ biquads: low shelf 70 Hz (Q 0.7), peak 1 kHz (Q 0.7), high shelf 13 kHz (Q 0.7); range −26…+6 dB |
-| Isolator mode | Linkwitz-Riley 4th order (two cascaded 2nd-order Butterworth) at 250 Hz and 2.5 kHz with all-pass phase compensation on the low band, so bands sum flat; per-band gain −∞…+6 dB |
+| Isolator mode | Linkwitz-Riley 8th order (Butterworth 4th order squared, 48 dB/oct) at 250 Hz and 2.5 kHz with the matching 4th-order all-pass on the low band, so bands sum flat; per-band gain −∞…+6 dB. (Was LR4; LR4 only takes ~40 dB off a killed band at its centre, P1-10 requires > 60 dB.) |
 | Channel filter | TPT (topology-preserving) state-variable filter; knob < 0.5 → LP 20 kHz→60 Hz (exponential), > 0.5 → HP 20 Hz→10 kHz; resonance setting; dead zone ±2 % around centre |
 | Crossfader curves | Smooth: `gA = cos(x·π/2)`, `gB = sin(x·π/2)`; Linear; Cut: full level until 5 % from the far end |
 | Limiter | 1.5 ms look-ahead, peak detector with 5 ms release, ceiling −0.3 dBFS, true-peak 4× oversampled detector in "high quality" |

@@ -31,6 +31,18 @@ struct DeckState
     std::int8_t transposeSemis = 0; // Key Shift
 };
 
+// Mixer channel settings as the audio thread has them (targets; the sound follows within 20 ms).
+struct ChannelState
+{
+    float trimDb = 0.0f;
+    std::array<float, 3> eqDb{}; // low, mid, high; -inf = kill
+    float filter = 0.5f;
+    float filterResonance = 0.3f;
+    float fader = 1.0f;
+    std::uint8_t eqMode = 0;     // 0 EQ, 1 isolator
+    std::uint8_t faderCurve = 0; // 0 smooth, 1 linear, 2 sharp
+};
+
 // Snapshot published by the audio thread once per block through util::TripleBuffer (ARCHITECTURE §3.3).
 // The UI reads the latest one at display rate. Fields from §3.3 (decks, meters, master clock, ...) are
 // added as each task needs them.
@@ -56,6 +68,7 @@ struct EngineState
     Bus testToneBus = Bus::Master;
 
     std::array<DeckState, kMaxDecks> decks{};
+    std::array<ChannelState, kMaxChannels> channels{};
     std::uint32_t buffersAwaitingRelease = 0; // replaced buffers not yet handed back (queue was full)
 };
 

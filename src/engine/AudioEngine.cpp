@@ -33,6 +33,8 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
     deckScratch.setSize(2, capacity, false, true, false);
     for (auto& slot : decks)
         slot.deck.prepare(sampleRate, capacity);
+    for (auto& strip : strips)
+        strip.prepare(sampleRate, capacity);
     tone.gain.reset(sampleRate, kGainRampSeconds);
     reset();
 }
@@ -71,7 +73,8 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* /*inputs*
 
 void AudioEngine::process(float* const* outputs, int numChannels, int numSamples) noexcept
 {
-    util::ScopedRealtimeContext realtime; // Debug: any allocation from here on is reported
+    util::ScopedRealtimeContext realtime;      // Debug: any allocation from here on is reported
+    const juce::ScopedNoDenormals noDenormals; // decaying filter state must not hit the slow denormal path
     const auto startTicks = juce::Time::getHighResolutionTicks();
 
     retryPendingReleases();
@@ -311,16 +314,61 @@ void AudioEngine::apply(const Nudge& command) noexcept
         decks[command.deck].deck.nudge(command.deltaSamples);
 }
 
+void AudioEngine::apply(const SetParam& command) noexcept
+{
+    if (!isChannelParam(command.param))
+        return;
+    const int index = static_cast<int>(command.param);
+    auto& strip = strips[static_cast<std::size_t>(index / kChannelParamCount)];
+    const double v = command.value;
+    switch (static_cast<ChannelParam>(index % kChannelParamCount))
+    {
+        case ChannelParam::Trim:
+            strip.setTrimDb(v);
+            break;
+        case ChannelParam::EqLow:
+            strip.setBandDb(ChannelStrip::Low, v);
+            break;
+        case ChannelParam::EqMid:
+            strip.setBandDb(ChannelStrip::Mid, v);
+            break;
+        case ChannelParam::EqHigh:
+            strip.setBandDb(ChannelStrip::High, v);
+            break;
+        case ChannelParam::Filter:
+            strip.setFilter(v);
+            break;
+        case ChannelParam::FilterResonance:
+            strip.setFilterResonance(v);
+            break;
+        case ChannelParam::Fader:
+            strip.setFader(v);
+            break;
+        case ChannelParam::EqMode:
+            strip.setEqMode(v >= 0.5 ? ChannelStrip::EqMode::Isolator : ChannelStrip::EqMode::Eq);
+            break;
+        case ChannelParam::FaderCurve:
+            strip.setFaderCurve(v >= 1.5   ? ChannelStrip::FaderCurve::Sharp
+                                : v >= 0.5 ? ChannelStrip::FaderCurve::Linear
+                                           : ChannelStrip::FaderCurve::Smooth);
+            break;
+        case ChannelParam::Count:
+            break;
+    }
+}
+
 void AudioEngine::renderDecks(int numSamples) noexcept
 {
-    // No mixer yet (P1-10/P1-11): every deck goes straight to the master bus.
+    // Deck -> channel strip -> master (crossfader and master section: P1-11).
     float* l = deckScratch.getWritePointer(0);
     float* r = deckScratch.getWritePointer(1);
-    for (auto& slot : decks)
+    for (std::size_t i = 0; i < decks.size(); ++i)
     {
+        auto& slot = decks[i];
         if (slot.deck.track() == nullptr)
             continue;
         slot.deck.render(l, r, numSamples);
+        strips[i].process(l, r, numSamples);
         masterBus.addFrom(0, 0, l, numSamples);
         masterBus.addFrom(1, 0, r, numSamples);
     }
@@ -405,6 +453,19 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         s.keyLock = d.keyLock();
         s.scratching = d.isScratching();
         s.transposeSemis = static_cast<std::int8_t>(d.keyShift());
+    }
+    for (std::size_t i = 0; i < strips.size(); ++i)
+    {
+        const auto& strip = strips[i];
+        auto& c = current.channels[i];
+        c.trimDb = static_cast<float>(strip.trimDb());
+        for (int b = 0; b < ChannelStrip::kBands; ++b)
+            c.eqDb[static_cast<std::size_t>(b)] = static_cast<float>(strip.bandDb(b));
+        c.filter = static_cast<float>(strip.filter());
+        c.filterResonance = static_cast<float>(strip.filterResonance());
+        c.fader = static_cast<float>(strip.fader());
+        c.eqMode = static_cast<std::uint8_t>(strip.eqMode());
+        c.faderCurve = static_cast<std::uint8_t>(strip.faderCurve());
     }
 
     state.write(current);

@@ -12,6 +12,8 @@ target_sources(devildj_engine INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/AudioEngine.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/AudioEngine.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/BufferRegistry.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ChannelStrip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ChannelStrip.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/Deck.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Deck.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/EngineCommand.h"
