@@ -211,7 +211,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   `library/Database` (SQLite, WAL mode, prepared-statement cache, single writer thread + read connections), `library/Migrations` using `PRAGMA user_version`. Schema v1 from `ARCHITECTURE.md` §7.
   Done when: migration tests from empty DB; concurrent read during write test.
 
-- [ ] **P2-02 Track import**
+- [x] **P2-02 Track import**
   `library/Importer`: add files/folders (recursive), skip duplicates by path + content hash (xxHash of first/last 1 MB + size), read tags with TagLib (title, artist, album, genre, year, BPM tag, key tag, comment, artwork), queue analysis.
   Done when: importing 2,000 files takes < 60 s excluding analysis; re-import adds nothing.
 
