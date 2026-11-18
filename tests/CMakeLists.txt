@@ -49,6 +49,7 @@ target_sources(DevilDJTests PRIVATE
     util/RealtimeGuardTests.cpp
     util/ResultTests.cpp
     util/SpscQueueTests.cpp
+    util/ThreadPriorityTests.cpp
     util/TripleBufferTests.cpp
     util/UtilSmokeTests.cpp)
 

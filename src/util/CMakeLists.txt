@@ -2,7 +2,8 @@
 add_library(devildj_util STATIC
     CrashHandler.cpp
     Log.cpp
-    RealtimeGuard.cpp)
+    RealtimeGuard.cpp
+    ThreadPriority.cpp)
 add_library(devildj::util ALIAS devildj_util)
 
 target_sources(devildj_util PUBLIC
@@ -15,6 +16,7 @@ target_sources(devildj_util PUBLIC
         Log.h
         RealtimeGuard.h
         Result.h
+        ThreadPriority.h
         SpscQueue.h
         TripleBuffer.h)
 

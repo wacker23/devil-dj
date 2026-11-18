@@ -1,5 +1,7 @@
 #pragma once
 
+#include "util/ThreadPriority.h"
+
 // A fake audio device type for tests: no hardware, a thread calls the audio callback once per buffer period.
 
 #include <juce_audio_devices/juce_audio_devices.h>
@@ -88,6 +90,8 @@ public:
 private:
     void run()
     {
+        // Like a real driver's callback thread: highest priority, so the test sees what the app sees.
+        devildj::util::setCurrentThreadPriority(devildj::util::audioThreadPriority());
         const int channels = juce::jmax(1, activeOutputs.countNumberOfSetBits());
         juce::AudioBuffer<float> buffer(channels, bufferSamples);
         const auto period = std::chrono::duration<double>(bufferSamples / sampleRate);

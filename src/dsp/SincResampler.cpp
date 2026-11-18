@@ -1,5 +1,7 @@
 #include "dsp/SincResampler.h"
 
+#include "util/ThreadPriority.h"
+
 #include <algorithm>
 #include <cmath>
 #include <numbers>
@@ -174,11 +176,17 @@ std::vector<float> resample(std::span<const float> input, double inRate, double 
 
     std::vector<std::thread> workers;
     const auto chunk = (outLength + threads - 1) / threads;
+    const int priority = util::currentThreadPriority(); // workers run at the caller's priority (loader: low)
     for (std::int64_t i = 0; i < threads; ++i)
     {
         const auto from = i * chunk;
         const auto to = std::min(outLength, from + chunk);
-        workers.emplace_back([&, from, to] { resampleRange(kernel, start, step, from, to, output.data()); });
+        workers.emplace_back(
+            [&, from, to, priority]
+            {
+                util::setCurrentThreadPriority(priority);
+                resampleRange(kernel, start, step, from, to, output.data());
+            });
     }
     for (auto& w : workers)
         w.join();

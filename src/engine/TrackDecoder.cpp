@@ -2,6 +2,7 @@
 
 #include "dsp/SincResampler.h"
 #include "engine/Mp3Gapless.h"
+#include "util/ThreadPriority.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
@@ -341,10 +342,14 @@ DecodeResult decodeTrack(const juce::File& file, const DecodeOptions& options)
     {
         if (cancelled(options))
             return DecodeResult::fail("Cancelled");
-        // Both channels in parallel.
-        auto right =
-            std::async(std::launch::async,
-                       [&] { return dsp::resample(audio.channels[1], audio.sampleRate, options.targetSampleRate); });
+        // Both channels in parallel; the helper runs at the caller's priority (the loader's: low).
+        const int priority = util::currentThreadPriority();
+        auto right = std::async(std::launch::async,
+                                [&, priority]
+                                {
+                                    util::setCurrentThreadPriority(priority);
+                                    return dsp::resample(audio.channels[1], audio.sampleRate, options.targetSampleRate);
+                                });
         audio.channels[0] = dsp::resample(audio.channels[0], audio.sampleRate, options.targetSampleRate);
         audio.channels[1] = right.get();
         track->sampleRate = options.targetSampleRate;
