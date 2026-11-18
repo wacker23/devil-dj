@@ -33,7 +33,7 @@ std::unique_ptr<engine::TrackBuffer> tone(double seconds, double hz)
 struct Rig
 {
     engine::AudioEngine engine;
-    std::unique_ptr<engine::TrackBuffer> a = tone(90.0, 220.0), b = tone(90.0, 330.0);
+    std::unique_ptr<engine::TrackBuffer> a, b;
     double clock = 1000.0;
     std::uint32_t fakeEngineXruns = 0;
     int fakeDeviceXruns = 0;
@@ -62,7 +62,9 @@ struct Rig
                                   [this](const engine::EngineCommand& c) { engine.send(c); },
                                   [] { return util::processMemory().privateMb; }, [this] { return clock; }}};
 
-    Rig()
+    explicit Rig(double trackSeconds = 90.0)
+        : a(tone(trackSeconds, 220.0))
+        , b(tone(trackSeconds, 330.0))
     {
         engine.prepare(kRate, kBlock);
         engine.send(engine::LoadTrack{0, a.get(), 1});
@@ -75,12 +77,13 @@ struct Rig
         for (int i = 0; i < blocks; ++i)
             engine.process(outs, 2, kBlock);
     }
-    // Advances the fake clock by `seconds`, ticking at 10 Hz and running the engine in between (all decks
-    // move at real speed relative to the clock).
-    void run(double seconds)
+    // Advances the fake clock by `seconds`, ticking at 10 Hz and running the engine in between. With realTime
+    // the decks move at real speed relative to the clock; without it only one block runs per tick (enough to
+    // apply the commands and publish state), which keeps the long runs quick in Debug builds.
+    void run(double seconds, bool realTime = true)
     {
         const int ticks = static_cast<int>(seconds * 10.0);
-        const int blocksPerTick = static_cast<int>(std::lround(0.1 * kRate / kBlock));
+        const int blocksPerTick = realTime ? static_cast<int>(std::lround(0.1 * kRate / kBlock)) : 1;
         for (int i = 0; i < ticks; ++i)
         {
             process(blocksPerTick);
@@ -105,7 +108,7 @@ TEST_CASE("Soak test: needs a track on both decks", "[app][soak]")
 
 TEST_CASE("Soak test: plays both decks with key lock, keeps them going and moves the mixer", "[app][soak]")
 {
-    Rig rig;
+    Rig rig(40.0);
     REQUIRE(rig.soak.start({3.0, true}, false).isEmpty());
     rig.run(1.0);
     for (int d = 0; d < 2; ++d)
@@ -124,9 +127,9 @@ TEST_CASE("Soak test: plays both decks with key lock, keeps them going and moves
     CHECK(before.eqDb[0] != after.eqDb[0]);
     CHECK(before.filter != after.filter);
 
-    // 90 s tracks: they jump back before the end and never stop.
+    // 40 s tracks (started at 30 s): they jump back before the end and never stop.
     double lowest = 1e12;
-    for (int i = 0; i < 100; ++i)
+    for (int i = 0; i < 45; ++i)
     {
         rig.run(1.0);
         lowest = std::min(lowest, rig.deck(0).positionSamples);
@@ -134,7 +137,7 @@ TEST_CASE("Soak test: plays both decks with key lock, keeps them going and moves
         REQUIRE(rig.deck(1).playing);
         REQUIRE_FALSE(rig.deck(0).atEnd);
     }
-    CHECK(lowest < 40.0 * kRate); // it went back
+    CHECK(lowest < 10.0 * kRate); // it went back
 
     CHECK(rig.soak.statusLine().startsWith("SOAK TEST"));
 }
@@ -145,13 +148,13 @@ TEST_CASE("Soak test: per-minute stats, finish, report and reset", "[app][soak]"
     juce::String finishedReport;
     rig.soak.onFinished = [&](const juce::String& r) { finishedReport = r; };
     REQUIRE(rig.soak.start({2.5, true}, false).isEmpty());
-    rig.run(61.0);
+    rig.run(61.0, false);
     REQUIRE(rig.soak.minutes().size() == 1);
     CHECK(rig.soak.minutes()[0].engineXruns == 0);
     CHECK(rig.soak.minutes()[0].memoryMb > 1.0);
     rig.fakeEngineXruns = 2; // two blocks over budget in minute 2
     rig.fakeDeviceXruns = 1;
-    rig.run(100.0); // past 2.5 minutes: finishes by itself
+    rig.run(100.0, false); // past 2.5 minutes: finishes by itself
     CHECK_FALSE(rig.soak.isRunning());
     REQUIRE(rig.soak.minutes().size() == 3); // two full minutes and the last half
     CHECK(rig.soak.minutes()[1].engineXruns == 2);
@@ -175,7 +178,7 @@ TEST_CASE("Soak test: a clean run passes; stopping early still reports", "[app][
 {
     Rig rig;
     REQUIRE(rig.soak.start({60.0, true}, false).isEmpty());
-    rig.run(70.0);
+    rig.run(70.0, false);
     rig.soak.stop();
     CHECK(rig.soak.passed());
     CHECK(rig.soak.report().contains("PASS - no glitches"));
