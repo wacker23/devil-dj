@@ -65,8 +65,10 @@ TEST_CASE("Engine: play sends the deck to the master output; pause silences it",
     process(e, out);
     process(e, out);
     CHECK(e.readState().decks[0].playing);
-    CHECK(out.l.back() == 0.25f); // stereo master = the track (no mixer yet)
-    CHECK(out.r.back() == 0.25f);
+    // Deck A sits on the A side of the centred (constant-power) crossfader: -3 dB.
+    const auto centre = static_cast<float>(crossfaderGainA(0.5, CrossfaderCurve::Smooth));
+    CHECK(out.l.back() == 0.25f * centre);
+    CHECK(out.r.back() == 0.25f * centre);
     CHECK(e.readState().decks[0].positionSamples == 2.0 * kBlock);
 
     e.send(Pause{0});
@@ -186,7 +188,8 @@ TEST_CASE("Engine: two decks play together", "[engine][transport]")
     e.send(Play{1});
     process(e, out);
     process(e, out);
-    CHECK(out.l.back() == 0.375f);
+    const auto centre = static_cast<float>(crossfaderGainA(0.5, CrossfaderCurve::Smooth));
+    CHECK(out.l.back() == 0.25f * centre + 0.125f * centre); // A and B both -3 dB at the centre
 }
 
 TEST_CASE("Engine: playing, seeking and cueing a deck doesn't allocate on the audio thread", "[engine][transport]")

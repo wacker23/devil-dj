@@ -252,6 +252,24 @@ double ChannelStrip::processIsolator(int ch, double x, double gLow, double gMid,
 
 void ChannelStrip::process(float* left, float* right, int numSamples) noexcept
 {
+    processPreFader(left, right, numSamples);
+    applyFader(left, right, numSamples);
+}
+
+void ChannelStrip::applyFader(float* left, float* right, int numSamples) noexcept
+{
+    if (!faderGainRamp.isRamping() && faderGainRamp.value() == 1.0)
+        return;
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const double g = faderGainRamp.next();
+        left[i] = static_cast<float>(left[i] * g);
+        right[i] = static_cast<float>(right[i] * g);
+    }
+}
+
+void ChannelStrip::processPreFader(float* left, float* right, int numSamples) noexcept
+{
     float* io[2] = {left, right};
     for (int start = 0; start < numSamples; start += kCoeffInterval)
     {
@@ -268,7 +286,6 @@ void ChannelStrip::process(float* left, float* right, int numSamples) noexcept
         for (int i = start; i < start + n; ++i)
         {
             const double trimG = trimGain.next();
-            const double faderG = faderGainRamp.next();
             const double mix = modeMix.next();
             const double gLow = isoGain[Low].next(), gMid = isoGain[Mid].next(), gHigh = isoGain[High].next();
 
@@ -302,7 +319,7 @@ void ChannelStrip::process(float* left, float* right, int numSamples) noexcept
                     const double hp = highPassState[c].process(highPassCoeffs, y).high;
                     y = dry * y + wl * lp + wh * hp;
                 }
-                io[ch][i] = static_cast<float>(y * faderG);
+                io[ch][i] = static_cast<float>(y);
             }
         }
 

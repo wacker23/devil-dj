@@ -155,7 +155,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
   All parameters smoothed (20 ms).
   Done when: frequency-response tests: isolator bands sum flat ±0.1 dB at 0 dB; kill attenuates > 60 dB at band centre; filter cutoff sweeps without clicks.
 
-- [ ] **P1-11 Crossfader and master**
+- [x] **P1-11 Crossfader and master**
   Crossfader with assign A/THRU/B per channel and curves: smooth (constant power), linear, sharp cut (scratch). Master gain, brick-wall look-ahead limiter (1.5 ms, −0.3 dBFS ceiling), peak + RMS meters per channel and master (in `EngineState`).
   Done when: unit tests for curve values at 0/0.5/1; limiter never exceeds ceiling on a +12 dB test signal.
 

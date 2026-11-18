@@ -49,7 +49,21 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
     else if (menuName == "Mixer")
     {
         menu.addItem(Isolator, "Isolator EQ (both channels)", true, isolator);
+        juce::PopupMenu curves;
+        curves.addItem(CurveSmooth, "Smooth (constant power)", true, crossfaderCurve == 0);
+        curves.addItem(CurveLinear, "Linear", true, crossfaderCurve == 1);
+        curves.addItem(CurveCut, "Cut (scratch)", true, crossfaderCurve == 2);
+        menu.addSubMenu("Crossfader curve", curves);
+        for (int deck = 0; deck < 2; ++deck)
+        {
+            juce::PopupMenu sides;
+            static const char* const names[] = {"A side", "THRU (ignores the crossfader)", "B side"};
+            for (int a = 0; a < 3; ++a)
+                sides.addItem(AssignFirst + deck * 3 + a, names[a], true, assign[deck] == a);
+            menu.addSubMenu(juce::String("Crossfader assign deck ") + (deck == 0 ? "A" : "B"), sides);
+        }
         menu.addSeparator();
+        menu.addItem(-1, "Crossfader: hold G / H to glide, Shift+G / Shift+H snap, B centre", false);
         menu.addItem(-1, "Kill low / mid / high: Ctrl+A/S/D (A), Ctrl+J/K/L (B)", false);
         menu.addItem(-1, "Filter: hold Shift+3 / Shift+4 (A), Shift+9 / Shift+0 (B)", false);
         menu.addItem(-1, "Filter reset: Shift+5 (A), Shift+- (B)", false);
@@ -122,6 +136,14 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
                 onToggleKeyLock(menuItemID == KeyLockA ? 0 : 1);
             break;
 
+        case CurveSmooth:
+        case CurveLinear:
+        case CurveCut:
+            crossfaderCurve = menuItemID - CurveSmooth;
+            if (onCrossfaderCurve)
+                onCrossfaderCurve(crossfaderCurve);
+            break;
+
         case Isolator:
             isolator = !isolator;
             if (onIsolator)
@@ -155,6 +177,13 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
             break;
 
         default:
+            if (menuItemID >= AssignFirst && menuItemID <= AssignLast)
+            {
+                const int deck = (menuItemID - AssignFirst) / 3;
+                assign[deck] = (menuItemID - AssignFirst) % 3;
+                if (onCrossfaderAssign)
+                    onCrossfaderAssign(deck, assign[deck]);
+            }
             break;
     }
 }

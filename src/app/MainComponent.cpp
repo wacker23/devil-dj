@@ -162,17 +162,47 @@ bool MainComponent::handleMixerKey(const juce::KeyPress& key)
             return true;
         }
         if (code == '3' || code == '4' || code == '9' || code == '0')
-            return true; // swept while held in sweepFilters()
+            return true;                // swept while held in sweepHeldKeys()
+        if (code == 'G' || code == 'H') // crossfader snap
+        {
+            crossfader = code == 'G' ? 0.0 : 1.0;
+            sendCrossfader();
+            return true;
+        }
+    }
+    if (!mods.isAnyModifierKeyDown())
+    {
+        if (code == 'B') // crossfader centre
+        {
+            crossfader = 0.5;
+            sendCrossfader();
+            return true;
+        }
+        if (code == 'G' || code == 'H')
+            return true; // glides while held in sweepHeldKeys()
     }
     return false;
 }
 
-void MainComponent::sweepFilters()
+void MainComponent::sweepHeldKeys()
 {
     const double now = juce::Time::getMillisecondCounterHiRes() / 1000.0;
     const double dt = std::clamp(now - lastSweepSeconds, 0.0, 0.1);
     lastSweepSeconds = now;
-    if (!juce::ModifierKeys::currentModifiers.isShiftDown() || !hasKeyboardFocus(true))
+    if (!hasKeyboardFocus(true))
+        return;
+    const auto mods = juce::ModifierKeys::currentModifiers;
+    if (!mods.isAnyModifierKeyDown())
+    {
+        const int direction =
+            (juce::KeyPress::isKeyCurrentlyDown('H') ? 1 : 0) - (juce::KeyPress::isKeyCurrentlyDown('G') ? 1 : 0);
+        if (direction != 0)
+        {
+            crossfader = std::clamp(crossfader + direction * dt, 0.0, 1.0);
+            sendCrossfader();
+        }
+    }
+    if (!mods.isShiftDown())
         return;
     static constexpr int sweepKeys[2][2] = {{'3', '4'}, {'9', '0'}}; // towards low-pass, towards high-pass
     for (int ch = 0; ch < 2; ++ch)
@@ -191,6 +221,22 @@ void MainComponent::sendFilter(int channel)
 {
     engine.send(engine::SetParam{engine::channelParam(channel, engine::ChannelParam::Filter),
                                  static_cast<float>(filterKnob[static_cast<std::size_t>(channel)])});
+}
+
+void MainComponent::sendCrossfader()
+{
+    engine.send(engine::SetParam{engine::ParamId::Crossfader, static_cast<float>(crossfader)});
+}
+
+void MainComponent::setCrossfaderCurve(int curve)
+{
+    engine.send(engine::SetParam{engine::ParamId::CrossfaderCurve, static_cast<float>(curve)});
+}
+
+void MainComponent::setCrossfaderAssign(int deck, int assign)
+{
+    engine.send(engine::SetParam{engine::channelParam(deck, engine::ChannelParam::CrossfaderAssign),
+                                 static_cast<float>(assign)});
 }
 
 void MainComponent::setIsolator(bool on)
@@ -279,6 +325,14 @@ juce::String clock(double samples, double rate)
 }
 } // namespace
 
+namespace
+{
+juce::String levelDb(float linear)
+{
+    return linear < 1e-5f ? juce::String("-inf") : juce::String(20.0 * std::log10(linear), 1);
+}
+} // namespace
+
 juce::StringArray MainComponent::statusLines()
 {
     juce::StringArray lines;
@@ -307,9 +361,17 @@ juce::StringArray MainComponent::statusLines()
                 : "HP " + juce::String(juce::roundToInt(engine::ChannelStrip::filterTarget(knob).highPassHz)) + " Hz";
         lines.add(juce::String("   ") + (c.eqMode == 1 ? "ISO" : "EQ") + "  low " + band(c.eqDb[0]) + "  mid " +
                   band(c.eqDb[1]) + "  high " + band(c.eqDb[2]) + "  filter " + filter);
+        static const char* const sides[] = {"xf A", "xf THRU", "xf B"};
+        lines.add(juce::String("   ") + sides[std::min<int>(c.crossfaderAssign, 2)] + "  meter " +
+                  levelDb(std::max(c.peakL, c.peakR)) + " dB peak, " + levelDb(c.rms) + " dB rms");
     }
     lines.add("Keys A: Z cue, X play, 1/2 bend, Shift+1/2 tempo, Shift+Z start, Ctrl+W key lock");
     lines.add("Keys B: M cue, , play, 7/8 bend, Shift+7/8 tempo, Shift+M start, Ctrl+I key lock");
+    static const char* const curves[] = {"smooth", "linear", "cut"};
+    lines.add("Master: crossfader " + juce::String(state.crossfader, 2) + " (" +
+              curves[std::min<int>(state.crossfaderCurve, 2)] + ")  peak " + levelDb(state.masterPeakL) + " / " +
+              levelDb(state.masterPeakR) + " dB  limiter -" + juce::String(state.limiterGainReductionDb, 1) + " dB");
+    lines.add("Crossfader: hold G / H glide, Shift+G / Shift+H snap, B centre");
     lines.add("Mixer: Ctrl+A/S/D, Ctrl+J/K/L kill; hold Shift+3/4, Shift+9/0 filter; Shift+5, Shift+- reset");
     lines.add("Jog strips (bottom): drag = scratch (playing) / scrub (paused), wheel = nudge");
     lines.add("Track buffers: " + juce::String(engine::TrackBuffer::liveCount()) + " alive, " +

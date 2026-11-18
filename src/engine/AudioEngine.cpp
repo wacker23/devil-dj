@@ -35,6 +35,18 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
         slot.deck.prepare(sampleRate, capacity);
     for (auto& strip : strips)
         strip.prepare(sampleRate, capacity);
+    for (std::size_t i = 0; i < mixer.size(); ++i)
+    {
+        auto& m = mixer[i];
+        if (!mixerInitialised) // default assignment: deck A left, deck B right, others THRU
+            m.assign = i == 0 ? CrossfaderAssign::A : i == 1 ? CrossfaderAssign::B : CrossfaderAssign::Thru;
+        m.crossfaderGain.prepare(sampleRate, ChannelStrip::kSmoothingSeconds);
+        m.meter.prepare(sampleRate);
+    }
+    mixerInitialised = true;
+    masterGain.prepare(sampleRate, ChannelStrip::kSmoothingSeconds);
+    limiter.prepare(sampleRate, capacity);
+    masterMeter.prepare(sampleRate);
     tone.gain.reset(sampleRate, kGainRampSeconds);
     reset();
 }
@@ -46,6 +58,14 @@ void AudioEngine::reset() noexcept
     tone.gain.setCurrentAndTargetValue(tone.on ? tone.gain.getTargetValue() : 0.0f);
     masterBus.clear();
     cueBus.clear();
+    for (auto& m : mixer)
+    {
+        m.crossfaderGain.snap(crossfaderGain(m.assign, crossfaderPosition, crossfaderCurve));
+        m.meter.reset();
+    }
+    masterGain.snap(masterGainDb <= -100.0 ? 0.0 : std::pow(10.0, masterGainDb / 20.0));
+    limiter.reset();
+    masterMeter.reset();
 
     const auto processed = current.commandsProcessed;
     current = EngineState{};
@@ -103,6 +123,7 @@ void AudioEngine::renderChunk(float* const* outputs, int numChannels, int offset
 
     renderDecks(numSamples);
     renderTestTone(numSamples);
+    renderMaster(numSamples);
     swapPendingTracks(); // decks that finished fading out can take their new track now
 
     // Point at this chunk of each device output channel.
@@ -314,8 +335,50 @@ void AudioEngine::apply(const Nudge& command) noexcept
         decks[command.deck].deck.nudge(command.deltaSamples);
 }
 
+void AudioEngine::updateCrossfaderGains() noexcept
+{
+    for (auto& m : mixer)
+        m.crossfaderGain.setTarget(crossfaderGain(m.assign, crossfaderPosition, crossfaderCurve));
+}
+
+void AudioEngine::renderMaster(int numSamples) noexcept
+{
+    // Master gain -> brick-wall limiter -> meter. The cue bus is not limited.
+    float* l = masterBus.getWritePointer(0);
+    float* r = masterBus.getWritePointer(1);
+    if (masterGain.isRamping() || masterGain.value() != 1.0)
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const auto g = static_cast<float>(masterGain.next());
+            l[i] *= g;
+            r[i] *= g;
+        }
+    limiter.process(l, r, numSamples);
+    blockGainReductionDb = std::max(blockGainReductionDb, limiter.lastGainReductionDb());
+    masterMeter.process(l, r, numSamples);
+}
+
 void AudioEngine::apply(const SetParam& command) noexcept
 {
+    switch (command.param)
+    {
+        case ParamId::Crossfader:
+            crossfaderPosition = std::clamp(static_cast<double>(command.value), 0.0, 1.0);
+            updateCrossfaderGains();
+            return;
+        case ParamId::CrossfaderCurve:
+            crossfaderCurve = command.value >= 1.5   ? CrossfaderCurve::Cut
+                              : command.value >= 0.5 ? CrossfaderCurve::Linear
+                                                     : CrossfaderCurve::Smooth;
+            updateCrossfaderGains();
+            return;
+        case ParamId::MasterGain:
+            masterGainDb = command.value <= -100.0f ? -100.0 : std::min(6.0, static_cast<double>(command.value));
+            masterGain.setTarget(masterGainDb <= -100.0 ? 0.0 : std::pow(10.0, masterGainDb / 20.0));
+            return;
+        default:
+            break;
+    }
     if (!isChannelParam(command.param))
         return;
     const int index = static_cast<int>(command.param);
@@ -352,6 +415,13 @@ void AudioEngine::apply(const SetParam& command) noexcept
                                 : v >= 0.5 ? ChannelStrip::FaderCurve::Linear
                                            : ChannelStrip::FaderCurve::Smooth);
             break;
+        case ChannelParam::CrossfaderAssign:
+        {
+            auto& m = mixer[static_cast<std::size_t>(index / kChannelParamCount)];
+            m.assign = v >= 1.5 ? CrossfaderAssign::B : v >= 0.5 ? CrossfaderAssign::Thru : CrossfaderAssign::A;
+            m.crossfaderGain.setTarget(crossfaderGain(m.assign, crossfaderPosition, crossfaderCurve));
+            break;
+        }
         case ChannelParam::Count:
             break;
     }
@@ -359,16 +429,30 @@ void AudioEngine::apply(const SetParam& command) noexcept
 
 void AudioEngine::renderDecks(int numSamples) noexcept
 {
-    // Deck -> channel strip -> master (crossfader and master section: P1-11).
+    // Deck -> channel strip (pre-fader meter) -> fader -> crossfader -> master bus.
     float* l = deckScratch.getWritePointer(0);
     float* r = deckScratch.getWritePointer(1);
     for (std::size_t i = 0; i < decks.size(); ++i)
     {
         auto& slot = decks[i];
+        auto& m = mixer[i];
         if (slot.deck.track() == nullptr)
+        {
+            m.meter.processSilence(numSamples);
+            m.crossfaderGain.skip(numSamples);
             continue;
+        }
         slot.deck.render(l, r, numSamples);
-        strips[i].process(l, r, numSamples);
+        strips[i].processPreFader(l, r, numSamples);
+        m.meter.process(l, r, numSamples);
+        strips[i].applyFader(l, r, numSamples);
+        if (m.crossfaderGain.isRamping() || m.crossfaderGain.value() != 1.0)
+            for (int s = 0; s < numSamples; ++s)
+            {
+                const auto g = static_cast<float>(m.crossfaderGain.next());
+                l[s] *= g;
+                r[s] *= g;
+            }
         masterBus.addFrom(0, 0, l, numSamples);
         masterBus.addFrom(1, 0, r, numSamples);
     }
@@ -466,7 +550,21 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         c.fader = static_cast<float>(strip.fader());
         c.eqMode = static_cast<std::uint8_t>(strip.eqMode());
         c.faderCurve = static_cast<std::uint8_t>(strip.faderCurve());
+        const auto& m = mixer[i];
+        c.crossfaderAssign = static_cast<std::uint8_t>(m.assign);
+        c.peakL = m.meter.peakLeft();
+        c.peakR = m.meter.peakRight();
+        c.rms = m.meter.rms();
     }
+    current.crossfader = static_cast<float>(crossfaderPosition);
+    current.crossfaderCurve = static_cast<std::uint8_t>(crossfaderCurve);
+    current.masterGainDb = static_cast<float>(masterGainDb);
+    current.masterPeakL = masterMeter.peakLeft();
+    current.masterPeakR = masterMeter.peakRight();
+    current.masterRms = masterMeter.rms();
+    current.limiterGainReductionDb = blockGainReductionDb;
+    blockGainReductionDb = 0.0f;
+    current.masterLatencySamples = limiter.latencySamples();
 
     state.write(current);
 }

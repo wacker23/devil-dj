@@ -42,12 +42,16 @@ private:
 
     // Temporary mixer keys (KEYMAP) until the mixer view (P1-15) and KeyboardController (P1-16).
     bool handleMixerKey(const juce::KeyPress& key);
-    void sweepFilters(); // Shift+3/4, Shift+9/0 held: filter moves at half the knob range per second
+    // Keys held: Shift+3/4, Shift+9/0 move the filter at half the knob range per second; G / H glide the
+    // crossfader across in 1 s.
+    void sweepHeldKeys();
+    void sendCrossfader();
+    double crossfader = 0.5;
     void sendFilter(int channel);
     std::array<std::array<bool, 3>, 2> kills{};
     std::array<double, 2> filterKnob{0.5, 0.5};
     double lastSweepSeconds = 0.0;
-    juce::VBlankAttachment filterSweep{this, [this] { sweepFilters(); }};
+    juce::VBlankAttachment heldKeySweep{this, [this] { sweepHeldKeys(); }};
 
     engine::AudioEngine& engine;
     engine::AudioDeviceService& audio;
@@ -92,6 +96,8 @@ public:
     void setHighQualityResampling(bool on);
     void toggleKeyLock(engine::DeckId deck);
     void setIsolator(bool on);
+    void setCrossfaderCurve(int curve);
+    void setCrossfaderAssign(int deck, int assign);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };

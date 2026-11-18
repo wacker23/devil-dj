@@ -1,5 +1,6 @@
 # dsp: pure signal processing, no JUCE, no knowledge of decks or tracks (ARCHITECTURE §2). Normal static library.
 add_library(devildj_dsp STATIC
+    Limiter.cpp
     Resampler.cpp
     SignalsmithStretcher.cpp
     SincResampler.cpp)
@@ -10,6 +11,8 @@ target_sources(devildj_dsp PUBLIC
     BASE_DIRS "${PROJECT_SOURCE_DIR}/src"
     FILES
         Biquad.h
+        LevelMeter.h
+        Limiter.h
         LinearRamp.h
         Resampler.h
         SincResampler.h

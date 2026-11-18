@@ -1,6 +1,9 @@
 #pragma once
 
+#include "dsp/LevelMeter.h"
+#include "dsp/Limiter.h"
 #include "engine/ChannelStrip.h"
+#include "engine/Crossfader.h"
 #include "engine/Deck.h"
 #include "engine/EngineCommand.h"
 #include "engine/EngineState.h"
@@ -132,6 +135,23 @@ private:
     std::array<DeckSlot, kMaxDecks> decks{};
     juce::AudioBuffer<float> deckScratch;            // 2 x capacity, one deck at a time
     std::array<ChannelStrip, kMaxChannels> strips{}; // channel i = deck i
+    struct MixerChannel
+    {
+        CrossfaderAssign assign = CrossfaderAssign::Thru;
+        dsp::LinearRamp crossfaderGain; // this channel's side of the crossfader, 20 ms
+        dsp::LevelMeter meter;          // pre-fader
+    };
+    std::array<MixerChannel, kMaxChannels> mixer{};
+    double crossfaderPosition = 0.5;
+    CrossfaderCurve crossfaderCurve = CrossfaderCurve::Smooth;
+    double masterGainDb = 0.0;
+    dsp::LinearRamp masterGain;
+    dsp::Limiter limiter;
+    dsp::LevelMeter masterMeter;
+    float blockGainReductionDb = 0.0f;
+    bool mixerInitialised = false;
+    void updateCrossfaderGains() noexcept;
+    void renderMaster(int numSamples) noexcept;
 
     // Releases that didn't fit into releasedBuffers yet; retried every block.
     static constexpr int kMaxPendingReleases = 16;

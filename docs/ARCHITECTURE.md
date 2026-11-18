@@ -201,7 +201,7 @@ Record tap copies the master (post-limiter) into a lock-free FIFO sized for 2 s;
 | Isolator mode | Linkwitz-Riley 8th order (Butterworth 4th order squared, 48 dB/oct) at 250 Hz and 2.5 kHz with the matching 4th-order all-pass on the low band, so bands sum flat; per-band gain −∞…+6 dB. (Was LR4; LR4 only takes ~40 dB off a killed band at its centre, P1-10 requires > 60 dB.) |
 | Channel filter | TPT (topology-preserving) state-variable filter; knob < 0.5 → LP 20 kHz→60 Hz (exponential), > 0.5 → HP 20 Hz→10 kHz; resonance setting; dead zone ±2 % around centre |
 | Crossfader curves | Smooth: `gA = cos(x·π/2)`, `gB = sin(x·π/2)`; Linear; Cut: full level until 5 % from the far end |
-| Limiter | 1.5 ms look-ahead, peak detector with 5 ms release, ceiling −0.3 dBFS, true-peak 4× oversampled detector in "high quality" |
+| Limiter | 1.5 ms look-ahead, peak detector with 5 ms release, ceiling −0.3 dBFS, true-peak 4× oversampled detector in "high quality". Gain = per-sample requirement (ceiling / peak), min-held over look-ahead + 1 samples, released, then averaged over the look-ahead, so the output provably stays under the ceiling; latency = look-ahead (72 samples at 48 kHz), published as `masterLatencySamples` |
 | Resampler | Cubic Hermite (default), 16-tap Kaiser-windowed sinc (high quality) |
 | Stretcher | `dsp::Stretcher` interface; `SignalsmithStretcher` with `presetDefault(channels, sampleRate)`; transposition in semitones; latency exposed via `getLatencySamples()` |
 | Reverb | 8-line feedback delay network, Householder matrix, damping LP per line, pre-delay; tempo-free |

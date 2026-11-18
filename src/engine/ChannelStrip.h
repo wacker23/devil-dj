@@ -56,7 +56,10 @@ public:
 
     void prepare(double sampleRate, int maxBlockSize) noexcept;
     void reset() noexcept;
-    void process(float* left, float* right, int numSamples) noexcept;
+    void process(float* left, float* right, int numSamples) noexcept; // = processPreFader + applyFader
+    // Split for taps between the two (channel meters, and the cue bus in P1-12).
+    void processPreFader(float* left, float* right, int numSamples) noexcept;
+    void applyFader(float* left, float* right, int numSamples) noexcept;
 
     void setTrimDb(double db) noexcept;
     void setEqMode(EqMode mode) noexcept;

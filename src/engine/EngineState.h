@@ -39,8 +39,12 @@ struct ChannelState
     float filter = 0.5f;
     float filterResonance = 0.3f;
     float fader = 1.0f;
-    std::uint8_t eqMode = 0;     // 0 EQ, 1 isolator
-    std::uint8_t faderCurve = 0; // 0 smooth, 1 linear, 2 sharp
+    std::uint8_t eqMode = 0;           // 0 EQ, 1 isolator
+    std::uint8_t faderCurve = 0;       // 0 smooth, 1 linear, 2 sharp
+    std::uint8_t crossfaderAssign = 1; // 0 A, 1 THRU, 2 B
+
+    // Meters, linear (0 dBFS = 1): pre-fader, so they show what trim and EQ do. Peaks fall at 20 dB/s.
+    float peakL = 0.0f, peakR = 0.0f, rms = 0.0f;
 };
 
 // Snapshot published by the audio thread once per block through util::TripleBuffer (ARCHITECTURE §3.3).
@@ -69,6 +73,14 @@ struct EngineState
 
     std::array<DeckState, kMaxDecks> decks{};
     std::array<ChannelState, kMaxChannels> channels{};
+
+    // Mixer master section (P1-11).
+    float crossfader = 0.5f;
+    std::uint8_t crossfaderCurve = 0; // 0 smooth, 1 linear, 2 cut
+    float masterGainDb = 0.0f;
+    float masterPeakL = 0.0f, masterPeakR = 0.0f, masterRms = 0.0f; // after the limiter, linear
+    float limiterGainReductionDb = 0.0f;                            // largest in the last block (>= 0)
+    int masterLatencySamples = 0;                                   // limiter look-ahead
     std::uint32_t buffersAwaitingRelease = 0; // replaced buffers not yet handed back (queue was full)
 };
 
