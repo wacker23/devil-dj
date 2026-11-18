@@ -49,14 +49,34 @@ private:
     bool testToneOn = false;
 
     // Temporary deck keys (KEYMAP.md) until the KeyboardController (P1-16): Z/X deck A, M/, deck B.
+    //   Z/X cue/play A, M/, cue/play B; 1/2 and 7/8 pitch bend (hold); Shift+1/2, Shift+7/8 tempo -/+ 0.1 %.
+    enum class KeyRole
+    {
+        Cue,
+        Play,
+        BendDown,
+        BendUp,
+    };
     struct DeckKey
     {
         int keyCode;
         engine::DeckId deck;
-        bool isCue; // false = play/pause
+        KeyRole role;
         bool down = false;
     };
-    std::array<DeckKey, 4> deckKeys{{{'Z', 0, true}, {'X', 0, false}, {'M', 1, true}, {',', 1, false}}};
+    std::array<DeckKey, 8> deckKeys{{{'Z', 0, KeyRole::Cue},
+                                     {'X', 0, KeyRole::Play},
+                                     {'1', 0, KeyRole::BendDown},
+                                     {'2', 0, KeyRole::BendUp},
+                                     {'M', 1, KeyRole::Cue},
+                                     {',', 1, KeyRole::Play},
+                                     {'7', 1, KeyRole::BendDown},
+                                     {'8', 1, KeyRole::BendUp}}};
+
+public:
+    void resetTempo(engine::DeckId deck);
+    void setTempoRange(double rangePercent);
+    void setHighQualityResampling(bool on);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };

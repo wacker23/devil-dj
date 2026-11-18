@@ -237,6 +237,44 @@ void AudioEngine::apply(const Seek& command) noexcept
         decks[command.deck].deck.seek(command.samplePos);
 }
 
+void AudioEngine::apply(const SetTempo& command) noexcept
+{
+    if (command.deck < kMaxDecks)
+        decks[command.deck].deck.setTempoPercent(command.percent);
+}
+
+void AudioEngine::apply(const NudgeTempo& command) noexcept
+{
+    if (command.deck < kMaxDecks)
+        decks[command.deck].deck.nudgeTempo(command.deltaPercent);
+}
+
+void AudioEngine::apply(const SetTempoRange& command) noexcept
+{
+    if (command.deck < kMaxDecks)
+        decks[command.deck].deck.setTempoRange(command.rangePercent);
+}
+
+void AudioEngine::apply(const ResetTempo& command) noexcept
+{
+    if (command.deck < kMaxDecks)
+        decks[command.deck].deck.resetTempo();
+}
+
+void AudioEngine::apply(const PitchBend& command) noexcept
+{
+    if (command.deck < kMaxDecks)
+        decks[command.deck].deck.setPitchBend(command.percent);
+}
+
+void AudioEngine::apply(const SetInterpolationQuality& command) noexcept
+{
+    const auto q = command.quality == InterpolationQuality::High ? dsp::Resampler::Quality::Sinc16
+                                                                 : dsp::Resampler::Quality::Hermite;
+    for (auto& slot : decks)
+        slot.deck.setInterpolation(q);
+}
+
 void AudioEngine::renderDecks(int numSamples) noexcept
 {
     // No mixer yet (P1-10/P1-11): every deck goes straight to the master bus.
@@ -324,7 +362,10 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         s.atEnd = d.isAtEnd();
         s.positionSamples = d.position();
         s.cuePointSamples = d.cuePoint();
-        s.rate = 1.0;
+        s.rate = d.rate();
+        s.tempoPercent = d.tempoPercent();
+        s.tempoRangePercent = d.tempoRange();
+        s.pitchBendPercent = d.pitchBendPercent();
     }
 
     state.write(current);

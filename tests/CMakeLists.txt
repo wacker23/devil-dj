@@ -14,11 +14,13 @@ target_sources(DevilDJTests PRIVATE
     beatmaker/BeatMakerSmokeTests.cpp
     codebeat/CodeBeatSmokeTests.cpp
     dsp/DspSmokeTests.cpp
+    dsp/ResamplerTests.cpp
     dsp/SincResamplerTests.cpp
     engine/AudioDeviceServiceTests.cpp
     engine/AudioEngineDeckTests.cpp
     engine/AudioEngineRoutingTests.cpp
     engine/AudioEngineTests.cpp
+    engine/DeckTempoTests.cpp
     engine/DeckTests.cpp
     engine/EngineSmokeTests.cpp
     engine/Mp3GaplessTests.cpp

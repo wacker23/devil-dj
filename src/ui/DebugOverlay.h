@@ -31,8 +31,8 @@ public:
 
     void paint(juce::Graphics& g) override;
 
-    static constexpr int kWidth = 380;
-    static constexpr int kHeight = 300;
+    static constexpr int kWidth = 430;
+    static constexpr int kHeight = 360;
 
 private:
     void onVBlank(double timestampSeconds);

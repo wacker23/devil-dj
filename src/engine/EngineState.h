@@ -22,7 +22,10 @@ struct DeckState
     bool atEnd = false;
     double positionSamples = 0.0;
     double cuePointSamples = 0.0;
-    double rate = 1.0; // effective playback rate (tempo arrives in P1-07)
+    double rate = 1.0; // effective playback rate = (1 + tempo) x (1 + bend)
+    double tempoPercent = 0.0;
+    double tempoRangePercent = 10.0;
+    double pitchBendPercent = 0.0; // current (slewed) bend
 };
 
 // Snapshot published by the audio thread once per block through util::TripleBuffer (ARCHITECTURE §3.3).

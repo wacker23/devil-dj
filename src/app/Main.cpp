@@ -69,6 +69,9 @@ public:
         menu->onToggleTestTone = [this] { mainComponent->toggleTestTone(); };
         menu->onLoadTrack = [this](int deck) { mainComponent->chooseTrackForDeck(static_cast<engine::DeckId>(deck)); };
         menu->onUnloadTrack = [this](int deck) { mainComponent->unloadDeck(static_cast<engine::DeckId>(deck)); };
+        menu->onResetTempo = [this](int deck) { mainComponent->resetTempo(static_cast<engine::DeckId>(deck)); };
+        menu->onTempoRange = [this](double range) { mainComponent->setTempoRange(range); };
+        menu->onHighQualityResampling = [this](bool on) { mainComponent->setHighQualityResampling(on); };
         mainWindow->setMenuBar(menu.get());
     }
 

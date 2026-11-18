@@ -52,7 +52,16 @@ bool MainComponent::keyPressed(const juce::KeyPress& key)
         toggleDebugOverlay();
         return true;
     }
-    // Deck keys are handled on press/release edges in keyStateChanged (no key repeat); swallow the repeats.
+    // Shift + bend key = fine tempo step; repeats while held (KEYMAP: tempo -/+ 0.1 %).
+    if (key.getModifiers().isShiftDown())
+        for (const auto& k : deckKeys)
+            if ((k.role == KeyRole::BendDown || k.role == KeyRole::BendUp) && key.getKeyCode() == k.keyCode)
+            {
+                engine.send(engine::NudgeTempo{k.deck, k.role == KeyRole::BendUp ? 0.1 : -0.1});
+                return true;
+            }
+
+    // Other deck keys are handled on press/release edges in keyStateChanged (no key repeat); swallow the repeats.
     for (const auto& k : deckKeys)
         if (static_cast<int>(juce::CharacterFunctions::toUpperCase(static_cast<juce::juce_wchar>(key.getKeyCode()))) ==
             k.keyCode)
@@ -76,7 +85,16 @@ void MainComponent::handleDeckKeys()
             continue;
         k.down = down;
 
-        if (k.isCue)
+        if (k.role == KeyRole::BendDown || k.role == KeyRole::BendUp)
+        {
+            // Hold to bend; Shift turns these keys into tempo steps (keyPressed). Releasing always ends the bend.
+            const double amount =
+                k.role == KeyRole::BendUp ? engine::Deck::kMaxPitchBendPercent : -engine::Deck::kMaxPitchBendPercent;
+            engine.send(engine::PitchBend{k.deck, down && !shift ? amount : 0.0});
+            continue;
+        }
+
+        if (k.role == KeyRole::Cue)
         {
             if (down && shift)
                 engine.send(engine::Seek{k.deck, 0.0}); // Shift+Z / Shift+M: jump to track start
@@ -103,6 +121,23 @@ void MainComponent::toggleTestTone()
 {
     testToneOn = !testToneOn;
     engine.send(engine::SetTestTone{testToneOn, 440.0f, -18.0f});
+}
+
+void MainComponent::resetTempo(engine::DeckId deck)
+{
+    engine.send(engine::ResetTempo{deck});
+}
+
+void MainComponent::setTempoRange(double rangePercent)
+{
+    for (engine::DeckId d = 0; d < 2; ++d)
+        engine.send(engine::SetTempoRange{d, rangePercent});
+}
+
+void MainComponent::setHighQualityResampling(bool on)
+{
+    engine.send(engine::SetInterpolationQuality{on ? engine::InterpolationQuality::High
+                                                   : engine::InterpolationQuality::Standard});
 }
 
 MainComponent::~MainComponent()
@@ -162,9 +197,13 @@ juce::StringArray MainComponent::statusLines()
             const juce::String what = s.cuePreview ? "CUE" : s.playing ? "PLAY" : s.atEnd ? "END" : "pause";
             lines.add("   " + what + "  " + clock(s.positionSamples, state.sampleRate) + " / " +
                       clock(s.lengthSamples, state.sampleRate) + "  cue " + clock(s.cuePointSamples, state.sampleRate));
+            lines.add("   tempo " + juce::String(s.tempoPercent >= 0 ? "+" : "") + juce::String(s.tempoPercent, 1) +
+                      " % (range +-" + juce::String(juce::roundToInt(s.tempoRangePercent)) + ")  bend " +
+                      juce::String(s.pitchBendPercent, 1) + " %  rate " + juce::String(s.rate, 4));
         }
     }
-    lines.add("Keys: Z cue / X play (A), M cue / , play (B), Shift+Z/M = start");
+    lines.add("Keys A: Z cue, X play, 1/2 bend, Shift+1/2 tempo, Shift+Z start");
+    lines.add("Keys B: M cue, , play, 7/8 bend, Shift+7/8 tempo, Shift+M start");
     lines.add("Track buffers: " + juce::String(engine::TrackBuffer::liveCount()) + " alive, " +
               juce::String(static_cast<int>(registry.size())) + " registered, " +
               juce::String(juce::roundToInt(static_cast<double>(registry.memoryBytes()) / (1024.0 * 1024.0))) + " MB");

@@ -88,8 +88,50 @@ struct Seek
     double samplePos = 0.0; // in samples of the loaded TrackBuffer (= device rate)
 };
 
-using EngineCommand = std::variant<SetTestTone, SetOutputLayout, LoadTrack, UnloadTrack, Play, Pause, TogglePlay,
-                                   CuePress, CueRelease, Seek>;
+// Tempo and pitch (P1-07).
+struct SetTempo
+{
+    DeckId deck = 0;
+    double percent = 0.0; // clamped to the deck's range
+};
+
+struct NudgeTempo // fine steps (e.g. +-0.1 %)
+{
+    DeckId deck = 0;
+    double deltaPercent = 0.0;
+};
+
+struct SetTempoRange
+{
+    DeckId deck = 0;
+    double rangePercent = 10.0; // 6, 10, 16 or 50
+};
+
+struct ResetTempo
+{
+    DeckId deck = 0;
+};
+
+struct PitchBend // temporary; send 0 when the bend key is released
+{
+    DeckId deck = 0;
+    double percent = 0.0; // clamped to +-4
+};
+
+enum class InterpolationQuality : std::uint8_t
+{
+    Standard = 0, // cubic Hermite
+    High = 1,     // 16-tap sinc
+};
+
+struct SetInterpolationQuality
+{
+    InterpolationQuality quality = InterpolationQuality::Standard;
+};
+
+using EngineCommand =
+    std::variant<SetTestTone, SetOutputLayout, LoadTrack, UnloadTrack, Play, Pause, TogglePlay, CuePress, CueRelease,
+                 Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo, PitchBend, SetInterpolationQuality>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

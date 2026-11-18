@@ -84,6 +84,12 @@ private:
     void apply(const CuePress& command) noexcept;
     void apply(const CueRelease& command) noexcept;
     void apply(const Seek& command) noexcept;
+    void apply(const SetTempo& command) noexcept;
+    void apply(const NudgeTempo& command) noexcept;
+    void apply(const SetTempoRange& command) noexcept;
+    void apply(const ResetTempo& command) noexcept;
+    void apply(const PitchBend& command) noexcept;
+    void apply(const SetInterpolationQuality& command) noexcept;
     void requestTrack(DeckId deck, const TrackBuffer* buffer, BufferId id) noexcept;
     void swapPendingTracks() noexcept;
     void renderDecks(int numSamples) noexcept;

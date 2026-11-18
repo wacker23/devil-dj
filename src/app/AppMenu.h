@@ -22,6 +22,9 @@ public:
     std::function<void()> onToggleTestTone;
     std::function<void(int deck)> onLoadTrack;
     std::function<void(int deck)> onUnloadTrack;
+    std::function<void(int deck)> onResetTempo;
+    std::function<void(double rangePercent)> onTempoRange;
+    std::function<void(bool on)> onHighQualityResampling;
 
     juce::StringArray getMenuBarNames() override;
     juce::PopupMenu getMenuForIndex(int topLevelMenuIndex, const juce::String& menuName) override;
@@ -37,6 +40,13 @@ private:
         LoadDeckB,
         UnloadDeckA,
         UnloadDeckB,
+        ResetTempoA,
+        ResetTempoB,
+        TempoRange6,
+        TempoRange10,
+        TempoRange16,
+        TempoRange50,
+        HighQualityResampling,
         CrashUiThread,
         CrashWorkerThread,
         OpenLogFolder,
@@ -44,6 +54,8 @@ private:
 
     juce::File logDirectory;
     bool showDebugMenu;
+    double tempoRange = 10.0;
+    bool highQuality = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AppMenu)
 };

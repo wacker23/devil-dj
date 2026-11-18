@@ -136,7 +136,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
   `engine/Deck`: play/pause, cue (CDJ-style: paused → set cue at playhead; playing → jump to cue and pause; hold → preview, release returns), seek, position in samples (double), end-of-track handling, 2 ms micro-fades on every jump to avoid clicks.
   Done when: unit tests for cue logic state machine; no clicks on jumps (test: max sample delta at jump < threshold).
 
-- [ ] **P1-07 Tempo and pitch**
+- [x] **P1-07 Tempo and pitch**
   Tempo fader with ranges ±6/±10/±16/±50 %, fine steps; pitch bend (temporary ± up to 4 %, ramped); tempo reset. Without key lock: variable-rate playback via high-quality interpolation (`dsp/Resampler`, cubic Hermite for speed, optional sinc).
   Done when: playing a 120 BPM click at +8 % measures 129.6 BPM ±0.05 in a test.
 

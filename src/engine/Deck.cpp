@@ -12,10 +12,39 @@ namespace
 constexpr float kHalfPi = static_cast<float>(std::numbers::pi / 2.0);
 }
 
-void Deck::prepare(double newSampleRate) noexcept
+void Deck::prepare(double newSampleRate)
 {
     sampleRate = newSampleRate > 0.0 ? newSampleRate : 48000.0;
     fadeSamples = std::max(1, static_cast<int>(std::lround(kFadeSeconds * sampleRate)));
+    resampler.prepare();
+}
+
+// ---- tempo ----
+
+void Deck::setTempoPercent(double percent) noexcept
+{
+    tempo = std::clamp(percent, -range, range);
+}
+
+void Deck::nudgeTempo(double deltaPercent) noexcept
+{
+    setTempoPercent(tempo + deltaPercent);
+}
+
+void Deck::setTempoRange(double rangePercent) noexcept
+{
+    constexpr double ranges[] = {6.0, 10.0, 16.0, 50.0};
+    double best = ranges[0];
+    for (double r : ranges)
+        if (std::abs(r - rangePercent) < std::abs(best - rangePercent))
+            best = r;
+    range = best;
+    setTempoPercent(tempo);
+}
+
+void Deck::setPitchBend(double percent) noexcept
+{
+    bendTarget = std::clamp(percent, -kMaxPitchBendPercent, kMaxPitchBendPercent);
 }
 
 void Deck::setTrack(const TrackBuffer* track) noexcept
@@ -182,17 +211,9 @@ void Deck::jumpTo(double samplePosition) noexcept
 
 // ---- rendering ----
 
-float Deck::readSample(int channel, double position) const noexcept
+float Deck::readSample(int channel, double position, double rate) const noexcept
 {
-    const int len = length();
-    if (position < 0.0 || position >= len)
-        return 0.0f;
-    const auto i = static_cast<int>(position);
-    const auto frac = static_cast<float>(position - i);
-    const float* data = buffer->audio.getReadPointer(channel);
-    const float a = data[i];
-    const float b = i + 1 < len ? data[i + 1] : 0.0f;
-    return a + frac * (b - a);
+    return resampler.read(buffer->audio.getReadPointer(channel), length(), position, rate);
 }
 
 void Deck::render(float* left, float* right, int numSamples) noexcept
@@ -202,18 +223,22 @@ void Deck::render(float* left, float* right, int numSamples) noexcept
     if (buffer == nullptr)
         return;
 
-    constexpr double rate = 1.0; // tempo arrives in P1-07
     const double len = length();
+    const double bendStep = kPitchBendSlewPercentPerSecond / sampleRate;
 
     for (int i = 0; i < numSamples; ++i)
     {
         float l = 0.0f, r = 0.0f;
 
+        if (bend != bendTarget) // slew the pitch bend so the rate never jumps
+            bend = bend < bendTarget ? std::min(bendTarget, bend + bendStep) : std::max(bendTarget, bend - bendStep);
+        const double rate = this->rate();
+
         if (state != Transport::Paused)
         {
             const float g = currentMainGain();
-            l += readSample(0, playhead) * g;
-            r += readSample(1, playhead) * g;
+            l += readSample(0, playhead, rate) * g;
+            r += readSample(1, playhead, rate) * g;
             playhead += rate;
             if (mainFadeRemaining > 0)
                 --mainFadeRemaining;
@@ -233,8 +258,8 @@ void Deck::render(float* left, float* right, int numSamples) noexcept
                 continue;
             const float progress = 1.0f - static_cast<float>(t.remaining) / static_cast<float>(fadeSamples);
             const float g = t.startGain * std::cos(kHalfPi * progress);
-            l += readSample(0, t.position) * g;
-            r += readSample(1, t.position) * g;
+            l += readSample(0, t.position, rate) * g;
+            r += readSample(1, t.position, rate) * g;
             t.position += rate;
             if (--t.remaining <= 0)
                 t.active = false;
