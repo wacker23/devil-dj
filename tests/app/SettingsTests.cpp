@@ -58,7 +58,7 @@ TEST_CASE("Settings app keys have the documented defaults", "[app][Settings]")
 
     CHECK(settings.get(keys::mainWindowState).isEmpty()); // empty = centre the window
     CHECK(settings.get(keys::showDebugMenu) == false);
-    CHECK(settings.get(keys::outputLayout) == 0); // stereo master only
+    CHECK(settings.get(keys::outputLayout) == 0);          // stereo master only
     CHECK(settings.get(keys::audioDeviceState).isEmpty()); // system default device
 }
 

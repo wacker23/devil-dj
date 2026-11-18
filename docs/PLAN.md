@@ -116,7 +116,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
   `engine/AudioEngine` implements `juce::AudioIODeviceCallback`. Owns `CommandQueue` (SpscQueue of `EngineCommand` — a `std::variant` of POD structs), publishes `EngineState` via TripleBuffer once per block, enters `ScopedRealtimeContext` inside the callback, measures CPU load per block.
   Done when: engine outputs silence with a test tone command; CPU meter visible in a debug overlay.
 
-- [ ] **P1-03 Output routing**
+- [x] **P1-03 Output routing**
   Output layouts: (a) stereo master only; (b) 4-channel device: master 1/2, cue 3/4; (c) **split mode** on a stereo device: master summed to mono in left, cue mono in right. Configurable in settings.
   Done when: each layout verified with a test tone panned per bus; documented in settings tooltip.
 
