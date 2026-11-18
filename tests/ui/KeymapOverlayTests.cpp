@@ -73,7 +73,7 @@ TEST_CASE("Overlay labels: what each key does alone, with Shift and with Ctrl", 
     CHECK(labels.at(scan::M).deck == 1);
     CHECK(labels.at(scan::G).plain == "XF <");
     CHECK(labels.at(scan::G).deck == -1);
-    CHECK(labels.at(scan::Space).plain.empty()); // Space alone is deliberately unbound in the main view
+    CHECK(labels.at(scan::Space).plain.empty());     // Space alone is deliberately unbound in the main view
     CHECK(labels.at(scan::Space).ctrl == "Preview"); // Ctrl+Space previews the selected track
 }
 
