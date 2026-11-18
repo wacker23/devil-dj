@@ -72,6 +72,7 @@ public:
         menu->onResetTempo = [this](int deck) { mainComponent->resetTempo(static_cast<engine::DeckId>(deck)); };
         menu->onTempoRange = [this](double range) { mainComponent->setTempoRange(range); };
         menu->onHighQualityResampling = [this](bool on) { mainComponent->setHighQualityResampling(on); };
+        menu->onToggleKeyLock = [this](int deck) { mainComponent->toggleKeyLock(static_cast<engine::DeckId>(deck)); };
         mainWindow->setMenuBar(menu.get());
     }
 

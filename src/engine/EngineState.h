@@ -26,6 +26,8 @@ struct DeckState
     double tempoPercent = 0.0;
     double tempoRangePercent = 10.0;
     double pitchBendPercent = 0.0; // current (slewed) bend
+    bool keyLock = false;
+    std::int8_t transposeSemis = 0; // Key Shift
 };
 
 // Snapshot published by the audio thread once per block through util::TripleBuffer (ARCHITECTURE §3.3).

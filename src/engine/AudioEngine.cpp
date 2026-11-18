@@ -32,7 +32,7 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
     cueBus.setSize(2, capacity, false, true, false);
     deckScratch.setSize(2, capacity, false, true, false);
     for (auto& slot : decks)
-        slot.deck.prepare(sampleRate);
+        slot.deck.prepare(sampleRate, capacity);
     tone.gain.reset(sampleRate, kGainRampSeconds);
     reset();
 }
@@ -275,6 +275,18 @@ void AudioEngine::apply(const SetInterpolationQuality& command) noexcept
         slot.deck.setInterpolation(q);
 }
 
+void AudioEngine::apply(const SetKeyLock& command) noexcept
+{
+    if (command.deck < kMaxDecks)
+        decks[command.deck].deck.setKeyLock(command.on);
+}
+
+void AudioEngine::apply(const SetKeyShift& command) noexcept
+{
+    if (command.deck < kMaxDecks)
+        decks[command.deck].deck.setKeyShift(command.semitones);
+}
+
 void AudioEngine::renderDecks(int numSamples) noexcept
 {
     // No mixer yet (P1-10/P1-11): every deck goes straight to the master bus.
@@ -366,6 +378,8 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         s.tempoPercent = d.tempoPercent();
         s.tempoRangePercent = d.tempoRange();
         s.pitchBendPercent = d.pitchBendPercent();
+        s.keyLock = d.keyLock();
+        s.transposeSemis = static_cast<std::int8_t>(d.keyShift());
     }
 
     state.write(current);

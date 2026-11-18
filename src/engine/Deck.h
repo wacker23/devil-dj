@@ -1,10 +1,13 @@
 #pragma once
 
 #include "dsp/Resampler.h"
+#include "dsp/Stretcher.h"
 #include "engine/TrackBuffer.h"
 
 #include <array>
 #include <cstdint>
+#include <memory>
+#include <vector>
 
 namespace devildj::engine
 {
@@ -18,6 +21,11 @@ namespace devildj::engine
 // steps nudge it; pitch bend is a temporary +-4 % that slews (40 %/s) so it never jumps. Without key lock the
 // track is read at that rate through dsp::Resampler (cubic Hermite, or 16-tap sinc in high-quality mode), so
 // pitch follows tempo like a turntable. Tempo survives loading a new track, like a CDJ's tempo fader.
+//
+// Key lock (P1-08): the main read head goes through dsp::Stretcher instead, so tempo changes keep the pitch;
+// Key Shift transposes in semitones on top. The stretcher delays audio; the deck feeds it ahead of the
+// playhead and `position()` stays what the listener hears. Jump fades still work: the old position fades out
+// through the resampler while the stretched audio fades in.
 //
 // CDJ cue button:
 //   paused, cue pressed   -> the cue point moves to the playhead, and playback previews from it while held
@@ -41,8 +49,8 @@ public:
     static constexpr double kMaxPitchBendPercent = 4.0;
     static constexpr double kPitchBendSlewPercentPerSecond = 40.0;
 
-    // Not real-time safe (builds resampler tables).
-    void prepare(double sampleRate);
+    // Not real-time safe (builds resampler tables, the stretcher and its buffers).
+    void prepare(double sampleRate, int maxBlockSize = 4096);
 
     // Puts a new track on the deck (or nullptr to empty it): paused at 0, cue at 0. The caller must make sure
     // nothing still reads the old buffer (see isSilent()).
@@ -65,6 +73,12 @@ public:
     // Target bend in percent (clamped to +-kMaxPitchBendPercent); the actual bend slews towards it.
     void setPitchBend(double percent) noexcept;
     void setInterpolation(dsp::Resampler::Quality quality) noexcept { resampler.setQuality(quality); }
+
+    // Key lock on/off (crossfades if playing) and Key Shift in semitones (only heard with key lock on).
+    void setKeyLock(bool on) noexcept;
+    void setKeyShift(int semitones) noexcept;
+    bool keyLock() const noexcept { return keyLockOn; }
+    int keyShift() const noexcept { return keyShiftSemitones; }
 
     double tempoPercent() const noexcept { return tempo; }
     double tempoRange() const noexcept { return range; }
@@ -100,6 +114,9 @@ private:
     void spawnTail(double position, float gain) noexcept;
     float currentMainGain() const noexcept;
     float readSample(int channel, double position, double rate) const noexcept;
+    void primeStretcher(double rate) noexcept;
+    void renderStretched(int numSamples, double playheadEnd, double rateEnd) noexcept;
+    void readFrames(std::int64_t from, int count, float* left, float* right) const noexcept;
 
     const TrackBuffer* buffer = nullptr;
     double sampleRate = 48000.0;
@@ -118,6 +135,17 @@ private:
     double range = 10.0;     // percent
     double bend = 0.0;       // percent, current (slewing)
     double bendTarget = 0.0; // percent
+
+    // Key lock.
+    std::unique_ptr<dsp::Stretcher> stretcher;
+    bool keyLockOn = false;
+    int keyShiftSemitones = 0;
+    bool stretcherPrimed = false;
+    std::int64_t feedPosition = 0; // next input sample to hand to the stretcher
+    int maxBlock = 4096;
+    int maxInput = 8192;
+    std::vector<float> stretchInL, stretchInR, stretchOutL, stretchOutR, seekL, seekR;
+    std::vector<double> blockRates; // per-sample rate of the current block
 
     static constexpr int kMaxTails = 4;
     std::array<Tail, kMaxTails> tails{};

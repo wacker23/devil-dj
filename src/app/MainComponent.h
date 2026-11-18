@@ -77,6 +77,7 @@ public:
     void resetTempo(engine::DeckId deck);
     void setTempoRange(double rangePercent);
     void setHighQualityResampling(bool on);
+    void toggleKeyLock(engine::DeckId deck);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };

@@ -20,6 +20,7 @@ target_sources(DevilDJTests PRIVATE
     engine/AudioEngineDeckTests.cpp
     engine/AudioEngineRoutingTests.cpp
     engine/AudioEngineTests.cpp
+    engine/DeckKeyLockTests.cpp
     engine/DeckTempoTests.cpp
     engine/DeckTests.cpp
     engine/EngineSmokeTests.cpp

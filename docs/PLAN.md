@@ -140,7 +140,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
   Tempo fader with ranges ±6/±10/±16/±50 %, fine steps; pitch bend (temporary ± up to 4 %, ramped); tempo reset. Without key lock: variable-rate playback via high-quality interpolation (`dsp/Resampler`, cubic Hermite for speed, optional sinc).
   Done when: playing a 120 BPM click at +8 % measures 129.6 BPM ±0.05 in a test.
 
-- [ ] **P1-08 Key lock (Master Tempo)**
+- [x] **P1-08 Key lock (Master Tempo)**
   `dsp/Stretcher` interface with `SignalsmithStretcher` implementation (MIT). Handles latency compensation so the displayed position matches what is heard. Key lock toggle per deck; transpose in semitones for later Key Shift.
   Done when: 440 Hz sine at +10 % tempo stays 440 Hz ±1 Hz with key lock; CPU for 2 decks with key lock < 15 % of the 256-sample budget at 48 kHz on the target laptop (measure and log).
 

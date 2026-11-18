@@ -90,6 +90,8 @@ private:
     void apply(const ResetTempo& command) noexcept;
     void apply(const PitchBend& command) noexcept;
     void apply(const SetInterpolationQuality& command) noexcept;
+    void apply(const SetKeyLock& command) noexcept;
+    void apply(const SetKeyShift& command) noexcept;
     void requestTrack(DeckId deck, const TrackBuffer* buffer, BufferId id) noexcept;
     void swapPendingTracks() noexcept;
     void renderDecks(int numSamples) noexcept;

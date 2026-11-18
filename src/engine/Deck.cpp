@@ -12,11 +12,47 @@ namespace
 constexpr float kHalfPi = static_cast<float>(std::numbers::pi / 2.0);
 }
 
-void Deck::prepare(double newSampleRate)
+void Deck::prepare(double newSampleRate, int maxBlockSize)
 {
     sampleRate = newSampleRate > 0.0 ? newSampleRate : 48000.0;
     fadeSamples = std::max(1, static_cast<int>(std::lround(kFadeSeconds * sampleRate)));
     resampler.prepare();
+
+    maxBlock = std::max(1, maxBlockSize);
+    maxInput = 2 * maxBlock + 64; // fastest playback: +50 % tempo x +4 % bend
+    if (stretcher == nullptr)
+        stretcher = dsp::makeSignalsmithStretcher();
+    stretcher->prepare(2, sampleRate);
+    stretcher->setTransposeSemitones(keyShiftSemitones);
+    const auto seekLength = static_cast<std::size_t>(stretcher->seekLength());
+    for (auto* v : {&stretchInL, &stretchInR})
+        v->assign(static_cast<std::size_t>(maxInput), 0.0f);
+    for (auto* v : {&stretchOutL, &stretchOutR})
+        v->assign(static_cast<std::size_t>(maxBlock), 0.0f);
+    for (auto* v : {&seekL, &seekR})
+        v->assign(seekLength, 0.0f);
+    blockRates.assign(static_cast<std::size_t>(maxBlock), 1.0);
+    stretcherPrimed = false;
+}
+
+void Deck::setKeyLock(bool on) noexcept
+{
+    if (on == keyLockOn)
+        return;
+    if (state != Transport::Paused) // switch sound sources with the usual 2 ms crossfade
+    {
+        spawnTail(playhead, currentMainGain());
+        mainFadeRemaining = fadeSamples;
+    }
+    keyLockOn = on;
+    stretcherPrimed = false;
+}
+
+void Deck::setKeyShift(int semitones) noexcept
+{
+    keyShiftSemitones = std::clamp(semitones, -12, 12);
+    if (stretcher != nullptr)
+        stretcher->setTransposeSemitones(keyShiftSemitones);
 }
 
 // ---- tempo ----
@@ -57,6 +93,7 @@ void Deck::setTrack(const TrackBuffer* track) noexcept
     cueHeldAfterBackCue = false;
     mainFadeRemaining = 0;
     tails = {};
+    stretcherPrimed = false;
 }
 
 bool Deck::isSilent() const noexcept
@@ -185,6 +222,7 @@ float Deck::currentMainGain() const noexcept
 void Deck::startSounding() noexcept
 {
     mainFadeRemaining = fadeSamples;
+    stretcherPrimed = false;
 }
 
 void Deck::stopSounding() noexcept
@@ -202,6 +240,7 @@ void Deck::jumpTo(double samplePosition) noexcept
         mainFadeRemaining = fadeSamples;
     }
     playhead = samplePosition;
+    stretcherPrimed = false;
     if (atEnd && state != Transport::Paused)
     {
         state = Transport::Paused; // jumped to the very end: nothing to play
@@ -216,6 +255,47 @@ float Deck::readSample(int channel, double position, double rate) const noexcept
     return resampler.read(buffer->audio.getReadPointer(channel), length(), position, rate);
 }
 
+void Deck::readFrames(std::int64_t from, int count, float* left, float* right) const noexcept
+{
+    const auto len = static_cast<std::int64_t>(length());
+    const float* l = buffer->audio.getReadPointer(0);
+    const float* r = buffer->audio.getReadPointer(1);
+    for (int i = 0; i < count; ++i)
+    {
+        const auto p = from + i;
+        const bool inside = p >= 0 && p < len;
+        left[i] = inside ? l[p] : 0.0f;
+        right[i] = inside ? r[p] : 0.0f;
+    }
+}
+
+// Heard position = input fed - inputLatency - outputLatency x rate. Prime so the next output is the playhead.
+void Deck::primeStretcher(double rate) noexcept
+{
+    const auto lead = static_cast<double>(stretcher->inputLatency()) + stretcher->outputLatency() * rate;
+    const auto end = static_cast<std::int64_t>(std::llround(playhead + lead));
+    const int n = stretcher->seekLength();
+    readFrames(end - n, n, seekL.data(), seekR.data());
+    const float* in[] = {seekL.data(), seekR.data()};
+    stretcher->reset();
+    stretcher->seek(in, n, rate);
+    feedPosition = end;
+    stretcherPrimed = true;
+}
+
+void Deck::renderStretched(int numSamples, double playheadEnd, double rateEnd) noexcept
+{
+    const auto lead = static_cast<double>(stretcher->inputLatency()) + stretcher->outputLatency() * rateEnd;
+    const auto target = static_cast<std::int64_t>(std::llround(playheadEnd + lead));
+    const int count = static_cast<int>(std::clamp<std::int64_t>(target - feedPosition, 0, maxInput));
+    readFrames(feedPosition, count, stretchInL.data(), stretchInR.data());
+    feedPosition += count;
+
+    const float* in[] = {stretchInL.data(), stretchInR.data()};
+    float* out[] = {stretchOutL.data(), stretchOutR.data()};
+    stretcher->process(in, count, out, numSamples);
+}
+
 void Deck::render(float* left, float* right, int numSamples) noexcept
 {
     std::fill(left, left + numSamples, 0.0f);
@@ -223,22 +303,52 @@ void Deck::render(float* left, float* right, int numSamples) noexcept
     if (buffer == nullptr)
         return;
 
+    if (numSamples > maxBlock) // larger than prepared: split (keeps the scratch buffers big enough)
+    {
+        for (int done = 0; done < numSamples; done += maxBlock)
+            render(left + done, right + done, std::min(maxBlock, numSamples - done));
+        return;
+    }
+
     const double len = length();
     const double bendStep = kPitchBendSlewPercentPerSecond / sampleRate;
+
+    // Rates for this block (the bend slews per sample), so key lock knows how far the playhead will move.
+    double playheadEnd = playhead;
+    for (int i = 0; i < numSamples; ++i)
+    {
+        if (bend != bendTarget)
+            bend = bend < bendTarget ? std::min(bendTarget, bend + bendStep) : std::max(bendTarget, bend - bendStep);
+        blockRates[static_cast<std::size_t>(i)] = this->rate();
+        playheadEnd += blockRates[static_cast<std::size_t>(i)];
+    }
+
+    const bool stretched = keyLockOn && state != Transport::Paused && stretcher != nullptr;
+    if (stretched)
+    {
+        if (!stretcherPrimed)
+            primeStretcher(blockRates[0]);
+        renderStretched(numSamples, playheadEnd, blockRates[static_cast<std::size_t>(numSamples - 1)]);
+    }
 
     for (int i = 0; i < numSamples; ++i)
     {
         float l = 0.0f, r = 0.0f;
-
-        if (bend != bendTarget) // slew the pitch bend so the rate never jumps
-            bend = bend < bendTarget ? std::min(bendTarget, bend + bendStep) : std::max(bendTarget, bend - bendStep);
-        const double rate = this->rate();
+        const double rate = blockRates[static_cast<std::size_t>(i)];
 
         if (state != Transport::Paused)
         {
             const float g = currentMainGain();
-            l += readSample(0, playhead, rate) * g;
-            r += readSample(1, playhead, rate) * g;
+            if (stretched)
+            {
+                l += stretchOutL[static_cast<std::size_t>(i)] * g;
+                r += stretchOutR[static_cast<std::size_t>(i)] * g;
+            }
+            else
+            {
+                l += readSample(0, playhead, rate) * g;
+                r += readSample(1, playhead, rate) * g;
+            }
             playhead += rate;
             if (mainFadeRemaining > 0)
                 --mainFadeRemaining;

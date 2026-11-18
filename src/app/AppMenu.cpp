@@ -33,6 +33,8 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
         menu.addItem(UnloadDeckA, "Unload deck A");
         menu.addItem(UnloadDeckB, "Unload deck B");
         menu.addSeparator();
+        menu.addItem(KeyLockA, "Key lock deck A (Ctrl+W)");
+        menu.addItem(KeyLockB, "Key lock deck B (Ctrl+I)");
         menu.addItem(ResetTempoA, "Reset tempo deck A");
         menu.addItem(ResetTempoB, "Reset tempo deck B");
         juce::PopupMenu ranges;
@@ -104,6 +106,12 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
                                                       : 50.0;
             if (onTempoRange)
                 onTempoRange(tempoRange);
+            break;
+
+        case KeyLockA:
+        case KeyLockB:
+            if (onToggleKeyLock)
+                onToggleKeyLock(menuItemID == KeyLockA ? 0 : 1);
             break;
 
         case HighQualityResampling:

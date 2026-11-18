@@ -52,6 +52,21 @@ bool MainComponent::keyPressed(const juce::KeyPress& key)
         toggleDebugOverlay();
         return true;
     }
+    // Ctrl+W / Ctrl+I: key lock deck A / B (KEYMAP).
+    if (key.getModifiers().isCtrlDown() && !key.getModifiers().isShiftDown())
+    {
+        if (key.getKeyCode() == 'W')
+        {
+            toggleKeyLock(0);
+            return true;
+        }
+        if (key.getKeyCode() == 'I')
+        {
+            toggleKeyLock(1);
+            return true;
+        }
+    }
+
     // Shift + bend key = fine tempo step; repeats while held (KEYMAP: tempo -/+ 0.1 %).
     if (key.getModifiers().isShiftDown())
         for (const auto& k : deckKeys)
@@ -140,6 +155,12 @@ void MainComponent::setHighQualityResampling(bool on)
                                                    : engine::InterpolationQuality::Standard});
 }
 
+void MainComponent::toggleKeyLock(engine::DeckId deck)
+{
+    const bool on = engine.readState().decks[deck].keyLock;
+    engine.send(engine::SetKeyLock{deck, !on});
+}
+
 MainComponent::~MainComponent()
 {
     loader.callbacks = {}; // the loader outlives this component; don't let late results call into it
@@ -197,13 +218,14 @@ juce::StringArray MainComponent::statusLines()
             const juce::String what = s.cuePreview ? "CUE" : s.playing ? "PLAY" : s.atEnd ? "END" : "pause";
             lines.add("   " + what + "  " + clock(s.positionSamples, state.sampleRate) + " / " +
                       clock(s.lengthSamples, state.sampleRate) + "  cue " + clock(s.cuePointSamples, state.sampleRate));
-            lines.add("   tempo " + juce::String(s.tempoPercent >= 0 ? "+" : "") + juce::String(s.tempoPercent, 1) +
-                      " % (range +-" + juce::String(juce::roundToInt(s.tempoRangePercent)) + ")  bend " +
+            lines.add(juce::String("   ") + (s.keyLock ? "KEY LOCK  " : "") + "tempo " +
+                      juce::String(s.tempoPercent >= 0 ? "+" : "") + juce::String(s.tempoPercent, 1) + " % (range +-" +
+                      juce::String(juce::roundToInt(s.tempoRangePercent)) + ")  bend " +
                       juce::String(s.pitchBendPercent, 1) + " %  rate " + juce::String(s.rate, 4));
         }
     }
-    lines.add("Keys A: Z cue, X play, 1/2 bend, Shift+1/2 tempo, Shift+Z start");
-    lines.add("Keys B: M cue, , play, 7/8 bend, Shift+7/8 tempo, Shift+M start");
+    lines.add("Keys A: Z cue, X play, 1/2 bend, Shift+1/2 tempo, Shift+Z start, Ctrl+W key lock");
+    lines.add("Keys B: M cue, , play, 7/8 bend, Shift+7/8 tempo, Shift+M start, Ctrl+I key lock");
     lines.add("Track buffers: " + juce::String(engine::TrackBuffer::liveCount()) + " alive, " +
               juce::String(static_cast<int>(registry.size())) + " registered, " +
               juce::String(juce::roundToInt(static_cast<double>(registry.memoryBytes()) / (1024.0 * 1024.0))) + " MB");

@@ -129,9 +129,22 @@ struct SetInterpolationQuality
     InterpolationQuality quality = InterpolationQuality::Standard;
 };
 
-using EngineCommand =
-    std::variant<SetTestTone, SetOutputLayout, LoadTrack, UnloadTrack, Play, Pause, TogglePlay, CuePress, CueRelease,
-                 Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo, PitchBend, SetInterpolationQuality>;
+// Key lock (P1-08): tempo changes keep the pitch. Key Shift transposes in semitones (needs key lock).
+struct SetKeyLock
+{
+    DeckId deck = 0;
+    bool on = false;
+};
+
+struct SetKeyShift
+{
+    DeckId deck = 0;
+    int semitones = 0; // clamped to +-12
+};
+
+using EngineCommand = std::variant<SetTestTone, SetOutputLayout, LoadTrack, UnloadTrack, Play, Pause, TogglePlay,
+                                   CuePress, CueRelease, Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo,
+                                   PitchBend, SetInterpolationQuality, SetKeyLock, SetKeyShift>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

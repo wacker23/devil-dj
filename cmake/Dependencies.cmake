@@ -13,6 +13,23 @@ FetchContent_Declare(
     GIT_PROGRESS TRUE)
 FetchContent_MakeAvailable(juce)
 
+# Signalsmith Stretch + Signalsmith Linear (its FFT/STFT helper): key lock / transpose (P1-08). Both MIT,
+# header-only. Linear is declared here first so Stretch's own nested FetchContent of it is skipped and the
+# licence checker sees it. SYSTEM: their headers don't count towards our /W4 /WX.
+FetchContent_Declare(
+    signalsmith-linear
+    GIT_REPOSITORY https://github.com/Signalsmith-Audio/linear.git
+    GIT_TAG 0.6.6
+    GIT_SHALLOW TRUE
+    SYSTEM)
+FetchContent_Declare(
+    signalsmith-stretch
+    GIT_REPOSITORY https://github.com/Signalsmith-Audio/signalsmith-stretch.git
+    GIT_TAG 1.4.0
+    GIT_SHALLOW TRUE
+    SYSTEM)
+FetchContent_MakeAvailable(signalsmith-linear signalsmith-stretch)
+
 # vcpkg manifest packages (vcpkg.json). Triplet x64-windows-static: static libraries and static CRT.
 find_package(unofficial-sqlite3 CONFIG REQUIRED) # SQLite: public domain
 find_package(TagLib CONFIG REQUIRED)             # TagLib: MPL-1.1 (used unmodified); pulls in zlib + utfcpp

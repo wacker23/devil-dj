@@ -25,6 +25,7 @@ public:
     std::function<void(int deck)> onResetTempo;
     std::function<void(double rangePercent)> onTempoRange;
     std::function<void(bool on)> onHighQualityResampling;
+    std::function<void(int deck)> onToggleKeyLock;
 
     juce::StringArray getMenuBarNames() override;
     juce::PopupMenu getMenuForIndex(int topLevelMenuIndex, const juce::String& menuName) override;
@@ -47,6 +48,8 @@ private:
         TempoRange16,
         TempoRange50,
         HighQualityResampling,
+        KeyLockA,
+        KeyLockB,
         CrashUiThread,
         CrashWorkerThread,
         OpenLogFolder,
