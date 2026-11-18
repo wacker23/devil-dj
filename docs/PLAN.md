@@ -177,7 +177,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
   Trim, EQ ×3, filter, fader, cue button, meters per channel; crossfader; master level + meter; headphone mix/level. Knobs: drag vertical, scroll wheel, double-click reset, Alt for fine.
   Done when: every control works by mouse, wheel and touch.
 
-- [ ] **P1-16 Action system + keyboard controller v1**
+- [x] **P1-16 Action system + keyboard controller v1**
   `ui/Actions.h` enumerates every bindable action (`CommandId`); `ui/KeyboardController` maps physical scan codes (`juce::KeyPress` + raw key code) to actions with press/release/hold semantics; default map from `docs/KEYMAP.md` (transport, pitch bend, crossfader, load). Ignores key repeat; works with Korean IME active. Includes a unit test that fails if two actions share a key + modifier in the same focus context.
   Done when: Phase 1 actions in KEYMAP work; unit test for the binding table; manual test with IME on.
 

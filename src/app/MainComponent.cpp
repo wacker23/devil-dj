@@ -1,6 +1,7 @@
 #include "MainComponent.h"
 
 #include "engine/TrackDecoder.h"
+#include "util/Log.h"
 
 #include <taglib/tversionnumber.h>
 
@@ -48,200 +49,173 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
         if (deck < deckStatus.size())
             deckStatus[deck] = "failed: " + file.getFileName() + " - " + error;
     };
+    registerActions();
+    keyHook = std::make_unique<ui::PhysicalKeyHook>([this](const ui::KeyboardController::KeyEvent& e)
+                                                    { return onPhysicalKey(e); });
+    if (!keyHook->isInstalled())
+        util::logWarning("Keyboard hook not installed: performance keys are unavailable");
     setWantsKeyboardFocus(true);
     setSize(1280, 800);
 }
 
-// Temporary key handling until the KeyboardController binds keys by scan code (P1-16).
-bool MainComponent::keyPressed(const juce::KeyPress& key)
+// ---- keys (P1-16): physical key -> KeyboardController -> ActionDispatcher -> handlers below ----
+
+bool MainComponent::onPhysicalKey(const ui::KeyboardController::KeyEvent& e)
 {
-    if (key.getKeyCode() == juce::KeyPress::F12Key)
+    // Only while the main window has the keyboard (dialogs and file choosers get their keys untouched).
+    auto* peer = getPeer();
+    if (peer == nullptr || !peer->isFocused())
     {
-        toggleDebugOverlay();
-        return true;
+        keyboard.releaseAll();
+        return false;
     }
-    if (handleMixerKey(key))
-        return true;
-
-    // Ctrl+W / Ctrl+I: key lock deck A / B (KEYMAP).
-    if (key.getModifiers().isCtrlDown() && !key.getModifiers().isShiftDown())
-    {
-        if (key.getKeyCode() == 'W')
-        {
-            toggleKeyLock(0);
-            return true;
-        }
-        if (key.getKeyCode() == 'I')
-        {
-            toggleKeyLock(1);
-            return true;
-        }
-    }
-
-    // Shift + bend key = fine tempo step; repeats while held (KEYMAP: tempo -/+ 0.1 %).
-    if (key.getModifiers().isShiftDown())
-        for (const auto& k : deckKeys)
-            if ((k.role == KeyRole::BendDown || k.role == KeyRole::BendUp) && key.getKeyCode() == k.keyCode)
-            {
-                engine.send(engine::NudgeTempo{k.deck, k.role == KeyRole::BendUp ? 0.1 : -0.1});
-                return true;
-            }
-
-    // Other deck keys are handled on press/release edges in keyStateChanged (no key repeat); swallow the repeats.
-    for (const auto& k : deckKeys)
-        if (static_cast<int>(juce::CharacterFunctions::toUpperCase(static_cast<juce::juce_wchar>(key.getKeyCode()))) ==
-            k.keyCode)
-            return true;
-    return false;
+    const auto* focused = juce::Component::getCurrentlyFocusedComponent();
+    const bool typing = dynamic_cast<const juce::TextInputTarget*>(focused) != nullptr;
+    return keyboard.handle(e, ui::KeyContext::Main, typing);
 }
 
-bool MainComponent::keyStateChanged(bool /*isKeyDown*/)
+void MainComponent::registerActions()
 {
-    handleDeckKeys();
-    return false;
-}
-
-void MainComponent::handleDeckKeys()
-{
-    const bool shift = juce::ModifierKeys::currentModifiers.isShiftDown();
-    for (auto& k : deckKeys)
+    using DA = ui::DeckAction;
+    using GA = ui::GlobalAction;
+    using Phase = ui::ActionPhase;
+    const auto onPress = [this](ui::CommandId id, std::function<void()> f)
     {
-        const bool down = juce::KeyPress::isKeyCurrentlyDown(k.keyCode);
-        if (down == k.down)
-            continue;
-        k.down = down;
+        actions.setHandler(id,
+                           [f = std::move(f)](Phase p)
+                           {
+                               if (p == Phase::Press)
+                                   f();
+                           });
+    };
 
-        if (k.role == KeyRole::BendDown || k.role == KeyRole::BendUp)
-        {
-            // Hold to bend; Shift turns these keys into tempo steps (keyPressed). Releasing always ends the bend.
-            const double amount =
-                k.role == KeyRole::BendUp ? engine::Deck::kMaxPitchBendPercent : -engine::Deck::kMaxPitchBendPercent;
-            engine.send(engine::PitchBend{k.deck, down && !shift ? amount : 0.0});
-            continue;
-        }
-
-        if (k.role == KeyRole::Cue)
-        {
-            if (down && shift)
-                engine.send(engine::Seek{k.deck, 0.0}); // Shift+Z / Shift+M: jump to track start
-            else if (down)
-                engine.send(engine::CuePress{k.deck});
-            else
-                engine.send(engine::CueRelease{k.deck});
-        }
-        else if (down)
-        {
-            engine.send(engine::TogglePlay{k.deck});
-        }
-    }
-}
-
-bool MainComponent::handleMixerKey(const juce::KeyPress& key)
-{
-    const auto mods = key.getModifiers();
-    const int code = key.getKeyCode();
-    if (mods.isCtrlDown() && !mods.isShiftDown()) // EQ kills, headphone CUE (toggles)
+    for (engine::DeckId d = 0; d < 2; ++d)
     {
-        if (code == 'E' || code == 'O')
-        {
-            const int ch = code == 'E' ? 0 : 1;
-            const bool on = !engine.readState().channels[static_cast<std::size_t>(ch)].cue;
-            engine.send(engine::SetParam{engine::channelParam(ch, engine::ChannelParam::Cue), on ? 1.0f : 0.0f});
-            return true;
-        }
-        static constexpr int killKeys[2][3] = {{'A', 'S', 'D'}, {'J', 'K', 'L'}};
-        for (int ch = 0; ch < 2; ++ch)
-            for (int band = 0; band < 3; ++band)
-                if (code == killKeys[ch][band])
+        const auto cmd = [d](DA a) { return ui::deckCommand(d, a); };
+        actions.setHandler(cmd(DA::Cue),
+                           [this, d](Phase p)
+                           {
+                               if (p == Phase::Press)
+                                   engine.send(engine::CuePress{d});
+                               else if (p == Phase::Release)
+                                   engine.send(engine::CueRelease{d});
+                           });
+        onPress(cmd(DA::Play), [this, d] { engine.send(engine::TogglePlay{d}); });
+        for (const auto [action, sign] : {std::pair{DA::BendDown, -1.0}, std::pair{DA::BendUp, 1.0}})
+            actions.setHandler(cmd(action),
+                               [this, d, sign = sign](Phase p)
+                               {
+                                   if (p == Phase::Press)
+                                       engine.send(engine::PitchBend{d, sign * engine::Deck::kMaxPitchBendPercent});
+                                   else if (p == Phase::Release)
+                                       engine.send(engine::PitchBend{d, 0.0});
+                               });
+        for (const auto [action, step] : {std::pair{DA::TempoDown, -0.1}, std::pair{DA::TempoUp, 0.1}})
+            actions.setHandler(cmd(action),
+                               [this, d, step = step](Phase p)
+                               {
+                                   if (p != Phase::Release)
+                                       engine.send(engine::NudgeTempo{d, step});
+                               });
+        actions.setHandler(cmd(DA::FilterToLowPass), [](Phase) {}); // swept every frame while held
+        actions.setHandler(cmd(DA::FilterToHighPass), [](Phase) {});
+        onPress(cmd(DA::FilterReset),
+                [this, d]
                 {
-                    // Toggle from what the engine has (the mixer knobs may have moved it).
-                    const bool kill = !std::isinf(
-                        engine.readState().channels[static_cast<std::size_t>(ch)].eqDb[static_cast<std::size_t>(band)]);
-                    const auto param =
-                        static_cast<engine::ChannelParam>(static_cast<int>(engine::ChannelParam::EqLow) + band);
-                    engine.send(engine::SetParam{engine::channelParam(ch, param), kill ? -1000.0f : 0.0f});
-                    return true;
+                    filterKnob[d] = 0.5;
+                    sendFilter(d);
+                });
+        onPress(cmd(DA::JumpToStart), [this, d] { engine.send(engine::Seek{d, 0.0}); });
+        for (int band = 0; band < 3; ++band)
+            onPress(cmd(static_cast<DA>(static_cast<int>(DA::KillLow) + band)),
+                    [this, d, band]
+                    {
+                        // Toggle from what the engine has (the mixer knobs may have moved it).
+                        const bool kill =
+                            !std::isinf(engine.readState().channels[d].eqDb[static_cast<std::size_t>(band)]);
+                        const auto param =
+                            static_cast<engine::ChannelParam>(static_cast<int>(engine::ChannelParam::EqLow) + band);
+                        engine.send(engine::SetParam{engine::channelParam(d, param), kill ? -1000.0f : 0.0f});
+                    });
+        onPress(cmd(DA::KeyLock), [this, d] { toggleKeyLock(d); });
+        onPress(cmd(DA::HeadphoneCue),
+                [this, d]
+                {
+                    const bool on = !engine.readState().channels[d].cue;
+                    engine.send(engine::SetParam{engine::channelParam(d, engine::ChannelParam::Cue), on ? 1.0f : 0.0f});
+                });
+        onPress(cmd(DA::Load), [this, d] { chooseTrackForDeck(d); });
+    }
+
+    actions.setHandler(ui::globalCommand(GA::CrossfaderLeft), [](Phase) {}); // glides every frame while held
+    actions.setHandler(ui::globalCommand(GA::CrossfaderRight), [](Phase) {});
+    for (const auto [action, position] :
+         {std::pair{GA::CrossfaderSnapLeft, 0.0}, std::pair{GA::CrossfaderSnapRight, 1.0},
+          std::pair{GA::CrossfaderCentre, 0.5}})
+        onPress(ui::globalCommand(action),
+                [this, position = position]
+                {
+                    crossfader = position;
+                    sendCrossfader();
+                });
+    onPress(ui::globalCommand(GA::DebugOverlay), [this] { toggleDebugOverlay(); });
+    onPress(ui::globalCommand(GA::FullScreen),
+            [this]
+            {
+                if (auto* window = findParentComponentOfClass<juce::ResizableWindow>())
+                    window->setFullScreen(!window->isFullScreen());
+            });
+    onPress(ui::globalCommand(GA::Panic),
+            [this]
+            {
+                keyboard.releaseAll(); // ends cue previews, bends, glides
+                for (engine::DeckId d = 0; d < 2; ++d)
+                {
+                    engine.send(engine::PitchBend{d, 0.0});
+                    engine.send(engine::ScratchEnd{d});
                 }
-    }
-    if (mods.isShiftDown() && !mods.isCtrlDown())
-    {
-        if (code == '5' || code == '-') // filter reset
-        {
-            const int ch = code == '5' ? 0 : 1;
-            filterKnob[static_cast<std::size_t>(ch)] = 0.5;
-            sendFilter(ch);
-            return true;
-        }
-        if (code == '3' || code == '4' || code == '9' || code == '0')
-            return true;                // swept while held in sweepHeldKeys()
-        if (code == 'G' || code == 'H') // crossfader snap
-        {
-            crossfader = code == 'G' ? 0.0 : 1.0;
-            sendCrossfader();
-            return true;
-        }
-    }
-    if (!mods.isAnyModifierKeyDown())
-    {
-        if (code == 'B') // crossfader centre
-        {
-            crossfader = 0.5;
-            sendCrossfader();
-            return true;
-        }
-        if (code == 'G' || code == 'H')
-            return true; // glides while held in sweepHeldKeys()
-    }
-    return false;
+            });
 }
 
 void MainComponent::sweepHeldKeys()
 {
+    using DA = ui::DeckAction;
     const double now = juce::Time::getMillisecondCounterHiRes() / 1000.0;
     const double dt = std::clamp(now - lastSweepSeconds, 0.0, 0.1);
     lastSweepSeconds = now;
-    if (!hasKeyboardFocus(true))
-        return;
-    const auto mods = juce::ModifierKeys::currentModifiers;
-    if (!mods.isAnyModifierKeyDown())
+
+    // Crossfader glide (G / H held): across in 1 s, starting from where the crossfader is.
+    const int direction = (keyboard.isHeld(ui::globalCommand(ui::GlobalAction::CrossfaderRight)) ? 1 : 0) -
+                          (keyboard.isHeld(ui::globalCommand(ui::GlobalAction::CrossfaderLeft)) ? 1 : 0);
+    if (direction != 0)
     {
-        const int direction =
-            (juce::KeyPress::isKeyCurrentlyDown('H') ? 1 : 0) - (juce::KeyPress::isKeyCurrentlyDown('G') ? 1 : 0);
-        if (direction != 0)
-        {
-            if (!crossfaderGliding) // start from where the crossfader is (the mixer may have moved it)
-                crossfader = engine.readState().crossfader;
-            crossfaderGliding = true;
-            crossfader = std::clamp(crossfader + direction * dt, 0.0, 1.0);
-            sendCrossfader();
-        }
-        else
-        {
-            crossfaderGliding = false;
-        }
+        if (!crossfaderGliding)
+            crossfader = engine.readState().crossfader;
+        crossfaderGliding = true;
+        crossfader = std::clamp(crossfader + direction * dt, 0.0, 1.0);
+        sendCrossfader();
     }
-    if (!mods.isShiftDown())
+    else
     {
-        filterSweeping = {};
-        return;
+        crossfaderGliding = false;
     }
-    static constexpr int sweepKeys[2][2] = {{'3', '4'}, {'9', '0'}}; // towards low-pass, towards high-pass
-    for (int ch = 0; ch < 2; ++ch)
+
+    // Filter sweep (Shift+3 / Shift+4, Shift+9 / Shift+0 held): half the knob range per second.
+    for (engine::DeckId d = 0; d < 2; ++d)
     {
-        const int direction = (juce::KeyPress::isKeyCurrentlyDown(sweepKeys[ch][1]) ? 1 : 0) -
-                              (juce::KeyPress::isKeyCurrentlyDown(sweepKeys[ch][0]) ? 1 : 0);
-        auto& sweeping = filterSweeping[static_cast<std::size_t>(ch)];
-        if (direction == 0)
+        const int dir = (keyboard.isHeld(ui::deckCommand(d, DA::FilterToHighPass)) ? 1 : 0) -
+                        (keyboard.isHeld(ui::deckCommand(d, DA::FilterToLowPass)) ? 1 : 0);
+        auto& sweeping = filterSweeping[d];
+        if (dir == 0)
         {
             sweeping = false;
             continue;
         }
-        auto& knob = filterKnob[static_cast<std::size_t>(ch)];
         if (!sweeping)
-            knob = engine.readState().channels[static_cast<std::size_t>(ch)].filter;
+            filterKnob[d] = engine.readState().channels[d].filter;
         sweeping = true;
-        knob = std::clamp(knob + direction * 0.5 * dt, 0.0, 1.0);
-        sendFilter(ch);
+        filterKnob[d] = std::clamp(filterKnob[d] + dir * 0.5 * dt, 0.0, 1.0);
+        sendFilter(d);
     }
 }
 

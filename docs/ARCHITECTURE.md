@@ -324,6 +324,7 @@ Waveform cache format `.wfm`: header (magic `DDJW`, version u16, sample rate u32
 
 - `MainComponent` hosts layout areas: top (deck A, mixer, deck B), centre (waveforms), bottom (browser / Beat Maker / Code Beat tabs), side panels (sampler, FX, next-track).
 - All user actions go through `ui::ActionDispatcher::perform(CommandId, ActionPhase)`; components, `KeyboardController`, MIDI Learn and the phone remote all call it.
+- Keys: `ui::PhysicalKeyHook` (a `WH_KEYBOARD` hook on the UI thread only) reads the hardware scan code of each key message before the IME or JUCE see it, and `ui::KeyboardController` maps scan code + modifiers to a `CommandId` per focus context (Main, Beat Maker, Code Beat; a focused text field takes all keys). JUCE also detaches the IME from windows whose focused component isn't a text input.
 - Views never hold engine pointers; they read `EngineState` (latest) and send `EngineCommand`s.
 - `juce::VBlankAttachment` drives waveform and meter repaints; other components repaint on change.
 - Look and feel: `ui::DevilLookAndFeel` with design tokens (colours, radii, type scale) in one header so themes can switch.

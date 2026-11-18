@@ -3,9 +3,13 @@ add_library(devildj_ui INTERFACE)
 add_library(devildj::ui ALIAS devildj_ui)
 
 target_sources(devildj_ui INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/Actions.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Actions.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/DebugOverlay.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/DeckView.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/DeckView.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/KeyboardController.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/KeyboardController.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/MixerControls.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/MixerControls.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/MixerView.cpp"

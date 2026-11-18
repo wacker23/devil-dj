@@ -4,6 +4,8 @@ Left hand plays Deck A, right hand plays Deck B. Bindings use **physical key pos
 
 Performance keys are active whenever no text field (search box, code editor, rename field) has focus. A unit test checks that the default map has no conflicts.
 
+Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / reset, jump to start, EQ kills, key lock, headphone cue, load (Tab / Enter open the file chooser for deck A / B until the browser exists), crossfader glide / snap / centre, full screen (F11), debug overlay (F12), panic (Esc: releases holds and bends). Every other key below is already reserved for its action and does nothing until the feature exists.
+
 ## Decks
 
 | Action | Deck A | Deck B |

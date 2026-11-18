@@ -4,8 +4,10 @@
 #include "engine/AudioEngine.h"
 #include "engine/BufferRegistry.h"
 #include "engine/TrackLoader.h"
+#include "ui/Actions.h"
 #include "ui/DebugOverlay.h"
 #include "ui/DeckView.h"
+#include "ui/KeyboardController.h"
 #include "ui/MixerView.h"
 #include "ui/WaveformView.h"
 
@@ -28,8 +30,6 @@ public:
 
     void paint(juce::Graphics& g) override;
     void resized() override;
-    bool keyPressed(const juce::KeyPress& key) override;
-    bool keyStateChanged(bool isKeyDown) override;
 
     void toggleDebugOverlay();
     void toggleTestTone();
@@ -40,12 +40,13 @@ public:
 
 private:
     juce::StringArray statusLines();
-    void handleDeckKeys();
-
-    // Temporary mixer keys (KEYMAP) until the mixer view (P1-15) and KeyboardController (P1-16).
-    bool handleMixerKey(const juce::KeyPress& key);
-    // Keys held: Shift+3/4, Shift+9/0 move the filter at half the knob range per second; G / H glide the
-    // crossfader across in 1 s.
+    // Keys (P1-16): every action is a CommandId; the KeyboardController turns physical keys into actions.
+    void registerActions();
+    bool onPhysicalKey(const ui::KeyboardController::KeyEvent& e);
+    ui::ActionDispatcher actions;
+    ui::KeyboardController keyboard{actions};
+    std::unique_ptr<ui::PhysicalKeyHook> keyHook;
+    // Held keys: filter sweeps and crossfader glides move every frame.
     void sweepHeldKeys();
     void sendCrossfader();
     double crossfader = 0.5;
@@ -74,31 +75,6 @@ private:
                            [this] { return outputLatencySeconds(); }};
     ui::DebugOverlay overlay;
     bool testToneOn = false;
-
-    // Temporary deck keys (KEYMAP.md) until the KeyboardController (P1-16): Z/X deck A, M/, deck B.
-    //   Z/X cue/play A, M/, cue/play B; 1/2 and 7/8 pitch bend (hold); Shift+1/2, Shift+7/8 tempo -/+ 0.1 %.
-    enum class KeyRole
-    {
-        Cue,
-        Play,
-        BendDown,
-        BendUp,
-    };
-    struct DeckKey
-    {
-        int keyCode;
-        engine::DeckId deck;
-        KeyRole role;
-        bool down = false;
-    };
-    std::array<DeckKey, 8> deckKeys{{{'Z', 0, KeyRole::Cue},
-                                     {'X', 0, KeyRole::Play},
-                                     {'1', 0, KeyRole::BendDown},
-                                     {'2', 0, KeyRole::BendUp},
-                                     {'M', 1, KeyRole::Cue},
-                                     {',', 1, KeyRole::Play},
-                                     {'7', 1, KeyRole::BendDown},
-                                     {'8', 1, KeyRole::BendUp}}};
 
 public:
     void resetTempo(engine::DeckId deck);
