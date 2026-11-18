@@ -197,7 +197,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
   Debug overlay toggle (F12) showing CPU per block, xruns, memory. 60-minute run with two decks looping, key lock on, EQ moving.
   Done when: zero xruns at 256 samples / 48 kHz on the target laptop, or the smallest safe buffer is documented.
 
-**Phase 1 gate:** load two MP3s, play both, change tempo with key lock, EQ and crossfade between them, cue in headphones — all from the keyboard.
+**Phase 1 gate:** load two MP3s, play both, change tempo with key lock, EQ and crossfade between them, cue in headphones — all from the keyboard. **Passed 2026-11-19** (owner, keyboard only; 60-minute soak PASS, 0 xruns).
 
 ---
 
@@ -207,7 +207,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
 
 ### Library
 
-- [ ] **P2-01 Database layer**
+- [x] **P2-01 Database layer**
   `library/Database` (SQLite, WAL mode, prepared-statement cache, single writer thread + read connections), `library/Migrations` using `PRAGMA user_version`. Schema v1 from `ARCHITECTURE.md` §7.
   Done when: migration tests from empty DB; concurrent read during write test.
 

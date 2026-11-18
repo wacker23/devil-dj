@@ -35,6 +35,7 @@ target_sources(DevilDJTests PRIVATE
     engine/OutputRouterTests.cpp
     engine/TrackDecoderTests.cpp
     engine/TrackLoaderTests.cpp
+    library/DatabaseTests.cpp
     library/LibrarySmokeTests.cpp
     library/TagReaderTests.cpp
     matcher/MatcherSmokeTests.cpp
