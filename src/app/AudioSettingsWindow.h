@@ -4,16 +4,19 @@
 #include "engine/AudioEngine.h"
 #include "engine/OutputRouter.h"
 
-#include <juce_audio_utils/juce_audio_utils.h>
+#include <juce_gui_basics/juce_gui_basics.h>
 
+#include <array>
 #include <functional>
 
 namespace devildj::app
 {
 
-// Temporary audio settings page (P1-01, P1-03): output layout, JUCE's device selector (type, device, sample
-// rate, buffer size), test tones for master and cue, and a live status line with latency, xruns, CPU and
-// routing. Replaced by the full page in P1-19.
+// Audio settings page (P1-19), laid out as the three things to do when setting up a laptop and headphones:
+//   1 Sound card  - driver, output device, sample rate, buffer size (with the delay each buffer gives)
+//   2 Headphones  - output layout: speakers only / split cable (left ear master, right ear cue) / 4-channel
+//   3 Check       - test tone in the speakers and in the headphones, latency, glitch counter, CPU
+// Changes apply immediately. Done when: the owner can set up the laptop + headphones without help.
 class AudioSettingsComponent final : public juce::Component, private juce::Timer
 {
 public:
@@ -29,27 +32,57 @@ public:
     void resized() override;
     void paint(juce::Graphics& g) override;
 
+    // Text helpers (public for tests).
+    static juce::String bufferText(int samples, double sampleRate); // "256 samples  (5.3 ms)"
+    enum class LatencyRating
+    {
+        Great, // <= 12 ms: fine for scratching
+        Good,  // <= 25 ms: fine for mixing
+        High,  // more: noticeable; try a smaller buffer or another driver
+    };
+    static LatencyRating rateLatency(double totalMs) noexcept;
     static juce::String layoutTooltip();
+
+    // Controls, exposed for tests.
+    juce::ComboBox& driverBox() noexcept { return driver; }
+    juce::ComboBox& deviceBox() noexcept { return device; }
+    juce::ComboBox& rateBox() noexcept { return rate; }
+    juce::ComboBox& bufferBox() noexcept { return buffer; }
+    juce::TextButton& layoutButton(engine::OutputLayout l) noexcept
+    {
+        return layoutButtons[static_cast<std::size_t>(l)];
+    }
+    juce::TextButton& toneSpeakersButton() noexcept { return toneSpeakers; }
+    juce::TextButton& toneHeadphonesButton() noexcept { return toneHeadphones; }
+    juce::TextButton& toneStopButton() noexcept { return toneStop; }
+    juce::TextButton& resetGlitchesButton() noexcept { return resetGlitches; }
+    int glitchesSinceReset() const noexcept;
+    void refreshFromDevice(); // re-reads the device lists and choices (timer does this when they change)
 
 private:
     void timerCallback() override;
     void playTone(engine::Bus bus);
     void stopTone();
+    void showError(const juce::String& error);
+    void selectLayout(engine::OutputLayout layout);
 
     engine::AudioDeviceService& audio;
     engine::AudioEngine& engine;
     Callbacks callbacks;
 
     juce::TooltipWindow tooltips{this, 400};
-    juce::Label layoutLabel;
-    juce::ComboBox layoutBox;
-    juce::AudioDeviceSelectorComponent selector;
-    juce::Label toneLabel;
-    juce::TextButton toneMaster{"Tone: master"};
-    juce::TextButton toneCue{"Tone: cue"};
-    juce::TextButton toneStop{"Stop"};
-    juce::Label status;
+    juce::ComboBox driver, device, rate, buffer;
+    juce::Label bufferHint, errorLabel;
+    std::array<juce::TextButton, engine::kNumOutputLayouts> layoutButtons;
+    juce::TextButton toneSpeakers{"Tone in speakers"}, toneHeadphones{"Tone in headphones"}, toneStop{"Stop tone"};
+    juce::TextButton resetGlitches{"Reset"};
     bool toneOn = false;
+    int glitchBaseline = 0;
+    juce::String shownSetup; // what the combos show, to notice outside changes
+    engine::AudioDeviceStatus status;
+
+    juce::Rectangle<int> section1, section2, section3, readouts;
+    std::array<juce::Rectangle<int>, 4> rowLabels; // Driver, Output, Sample rate, Buffer
 };
 
 // Opens the settings page as a non-modal dialog window owned by JUCE (closes itself).

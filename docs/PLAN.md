@@ -189,7 +189,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
   Temporary file browser panel (folder tree + file list) with "Load to A/B" (Tab/Enter) and drag-and-drop from Windows Explorer onto a deck. Replaced by the library in Phase 2.
   Done when: drag-and-drop and keyboard loading both work.
 
-- [ ] **P1-19 Audio settings page**
+- [x] **P1-19 Audio settings page**
   Device, sample rate, buffer size, output layout, latency readout, test tone button, xrun counter.
   Done when: owner can set up her laptop + headphones without help (manual test).
 

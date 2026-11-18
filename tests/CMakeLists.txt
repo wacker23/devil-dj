@@ -11,6 +11,7 @@ target_sources(DevilDJTests PRIVATE
     analysis/TestSignalTests.cpp
     analysis/WaveformBuilderTests.cpp
     app/AppSmokeTests.cpp
+    app/AudioSettingsTests.cpp
     app/SettingsTests.cpp
     beatmaker/BeatMakerSmokeTests.cpp
     codebeat/CodeBeatSmokeTests.cpp
