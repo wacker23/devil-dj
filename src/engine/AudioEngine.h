@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/Deck.h"
 #include "engine/EngineCommand.h"
 #include "engine/EngineState.h"
 #include "engine/OutputRouter.h"
@@ -77,6 +78,15 @@ private:
     void apply(const SetOutputLayout& command) noexcept;
     void apply(const LoadTrack& command) noexcept;
     void apply(const UnloadTrack& command) noexcept;
+    void apply(const Play& command) noexcept;
+    void apply(const Pause& command) noexcept;
+    void apply(const TogglePlay& command) noexcept;
+    void apply(const CuePress& command) noexcept;
+    void apply(const CueRelease& command) noexcept;
+    void apply(const Seek& command) noexcept;
+    void requestTrack(DeckId deck, const TrackBuffer* buffer, BufferId id) noexcept;
+    void swapPendingTracks() noexcept;
+    void renderDecks(int numSamples) noexcept;
     void releaseBuffer(BufferId id) noexcept;
     void retryPendingReleases() noexcept;
     void renderChunk(float* const* outputs, int numChannels, int offset, int numSamples) noexcept;
@@ -95,12 +105,18 @@ private:
     juce::AudioBuffer<float> cueBus;    // 2 x capacity
     OutputLayout layout = OutputLayout::StereoMaster;
 
+    // A deck plus the registry id of its buffer. A new track for a deck that is still sounding waits in
+    // `pending` until the deck has faded out (2 ms), so the old buffer is never released while being read.
     struct DeckSlot
     {
-        const TrackBuffer* buffer = nullptr;
+        Deck deck;
         BufferId id = 0;
+        bool hasPending = false;
+        const TrackBuffer* pendingBuffer = nullptr;
+        BufferId pendingId = 0;
     };
     std::array<DeckSlot, kMaxDecks> decks{};
+    juce::AudioBuffer<float> deckScratch; // 2 x capacity, one deck at a time
 
     // Releases that didn't fit into releasedBuffers yet; retried every block.
     static constexpr int kMaxPendingReleases = 16;

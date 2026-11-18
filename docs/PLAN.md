@@ -132,7 +132,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
 
 ### Deck playback
 
-- [ ] **P1-06 Deck transport**
+- [x] **P1-06 Deck transport**
   `engine/Deck`: play/pause, cue (CDJ-style: paused → set cue at playhead; playing → jump to cue and pause; hold → preview, release returns), seek, position in samples (double), end-of-track handling, 2 ms micro-fades on every jump to avoid clicks.
   Done when: unit tests for cue logic state machine; no clicks on jumps (test: max sample delta at jump < threshold).
 

@@ -10,12 +10,19 @@
 namespace devildj::engine
 {
 
-// What the engine knows about one deck (more fields arrive with P1-06 transport).
-struct DeckSlotState
+// One deck as the UI sees it (ARCHITECTURE §3.3; more fields arrive with tempo, sync, loops, ...).
+struct DeckState
 {
     bool loaded = false;
     BufferId bufferId = 0;
     int lengthSamples = 0;
+
+    bool playing = false;    // playing or cue preview
+    bool cuePreview = false; // cue button held from pause
+    bool atEnd = false;
+    double positionSamples = 0.0;
+    double cuePointSamples = 0.0;
+    double rate = 1.0; // effective playback rate (tempo arrives in P1-07)
 };
 
 // Snapshot published by the audio thread once per block through util::TripleBuffer (ARCHITECTURE §3.3).
@@ -42,7 +49,7 @@ struct EngineState
     float testToneHz = 0.0f;
     Bus testToneBus = Bus::Master;
 
-    std::array<DeckSlotState, kMaxDecks> decks{};
+    std::array<DeckState, kMaxDecks> decks{};
     std::uint32_t buffersAwaitingRelease = 0; // replaced buffers not yet handed back (queue was full)
 };
 

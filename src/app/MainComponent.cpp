@@ -52,7 +52,44 @@ bool MainComponent::keyPressed(const juce::KeyPress& key)
         toggleDebugOverlay();
         return true;
     }
+    // Deck keys are handled on press/release edges in keyStateChanged (no key repeat); swallow the repeats.
+    for (const auto& k : deckKeys)
+        if (static_cast<int>(juce::CharacterFunctions::toUpperCase(static_cast<juce::juce_wchar>(key.getKeyCode()))) ==
+            k.keyCode)
+            return true;
     return false;
+}
+
+bool MainComponent::keyStateChanged(bool /*isKeyDown*/)
+{
+    handleDeckKeys();
+    return false;
+}
+
+void MainComponent::handleDeckKeys()
+{
+    const bool shift = juce::ModifierKeys::currentModifiers.isShiftDown();
+    for (auto& k : deckKeys)
+    {
+        const bool down = juce::KeyPress::isKeyCurrentlyDown(k.keyCode);
+        if (down == k.down)
+            continue;
+        k.down = down;
+
+        if (k.isCue)
+        {
+            if (down && shift)
+                engine.send(engine::Seek{k.deck, 0.0}); // Shift+Z / Shift+M: jump to track start
+            else if (down)
+                engine.send(engine::CuePress{k.deck});
+            else
+                engine.send(engine::CueRelease{k.deck});
+        }
+        else if (down)
+        {
+            engine.send(engine::TogglePlay{k.deck});
+        }
+    }
 }
 
 void MainComponent::toggleDebugOverlay()
@@ -99,11 +136,35 @@ void MainComponent::unloadDeck(engine::DeckId deck)
     deckStatus[deck] = "empty";
 }
 
-juce::StringArray MainComponent::statusLines() const
+namespace
+{
+juce::String clock(double samples, double rate)
+{
+    if (rate <= 0.0)
+        return "--:--.-";
+    const double seconds = samples / rate;
+    const int minutes = static_cast<int>(seconds / 60.0);
+    const double rest = seconds - minutes * 60.0;
+    return juce::String(minutes).paddedLeft('0', 2) + ":" + juce::String(rest, 1).paddedLeft('0', 4);
+}
+} // namespace
+
+juce::StringArray MainComponent::statusLines()
 {
     juce::StringArray lines;
+    const auto& state = engine.readState();
     for (engine::DeckId d = 0; d < deckStatus.size(); ++d)
+    {
         lines.add(juce::String("Deck ") + engine::deckLetter(d) + ": " + deckStatus[d]);
+        const auto& s = state.decks[d];
+        if (s.loaded)
+        {
+            const juce::String what = s.cuePreview ? "CUE" : s.playing ? "PLAY" : s.atEnd ? "END" : "pause";
+            lines.add("   " + what + "  " + clock(s.positionSamples, state.sampleRate) + " / " +
+                      clock(s.lengthSamples, state.sampleRate) + "  cue " + clock(s.cuePointSamples, state.sampleRate));
+        }
+    }
+    lines.add("Keys: Z cue / X play (A), M cue / , play (B), Shift+Z/M = start");
     lines.add("Track buffers: " + juce::String(engine::TrackBuffer::liveCount()) + " alive, " +
               juce::String(static_cast<int>(registry.size())) + " registered, " +
               juce::String(juce::roundToInt(static_cast<double>(registry.memoryBytes()) / (1024.0 * 1024.0))) + " MB");

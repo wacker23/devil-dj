@@ -55,7 +55,41 @@ struct UnloadTrack
     DeckId deck = 0;
 };
 
-using EngineCommand = std::variant<SetTestTone, SetOutputLayout, LoadTrack, UnloadTrack>;
+// Transport (P1-06; names as in ARCHITECTURE §3.2). `quantized` is honoured from P2-20.
+struct Play
+{
+    DeckId deck = 0;
+    bool quantized = false;
+};
+
+struct Pause
+{
+    DeckId deck = 0;
+};
+
+struct TogglePlay
+{
+    DeckId deck = 0;
+};
+
+struct CuePress
+{
+    DeckId deck = 0;
+};
+
+struct CueRelease
+{
+    DeckId deck = 0;
+};
+
+struct Seek
+{
+    DeckId deck = 0;
+    double samplePos = 0.0; // in samples of the loaded TrackBuffer (= device rate)
+};
+
+using EngineCommand = std::variant<SetTestTone, SetOutputLayout, LoadTrack, UnloadTrack, Play, Pause, TogglePlay,
+                                   CuePress, CueRelease, Seek>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

@@ -16,8 +16,10 @@ target_sources(DevilDJTests PRIVATE
     dsp/DspSmokeTests.cpp
     dsp/SincResamplerTests.cpp
     engine/AudioDeviceServiceTests.cpp
+    engine/AudioEngineDeckTests.cpp
     engine/AudioEngineRoutingTests.cpp
     engine/AudioEngineTests.cpp
+    engine/DeckTests.cpp
     engine/EngineSmokeTests.cpp
     engine/Mp3GaplessTests.cpp
     engine/OutputRouterTests.cpp

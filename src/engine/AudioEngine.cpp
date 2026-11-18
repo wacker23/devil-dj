@@ -14,12 +14,6 @@ namespace
 constexpr double kGainRampSeconds = 0.020;
 constexpr float kLoadSmoothing = 0.1f; // one-pole coefficient per block
 constexpr float kPeakDecay = 0.995f;   // per block (~4 s to halve at 512 samples / 48 kHz)
-
-template <class... Ts>
-struct Overloaded : Ts...
-{
-    using Ts::operator()...;
-};
 } // namespace
 
 bool AudioEngine::send(const EngineCommand& command) noexcept
@@ -36,6 +30,9 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
     capacity = std::max(maxBlockSize, 1);
     masterBus.setSize(2, capacity, false, true, false);
     cueBus.setSize(2, capacity, false, true, false);
+    deckScratch.setSize(2, capacity, false, true, false);
+    for (auto& slot : decks)
+        slot.deck.prepare(sampleRate);
     tone.gain.reset(sampleRate, kGainRampSeconds);
     reset();
 }
@@ -101,7 +98,9 @@ void AudioEngine::renderChunk(float* const* outputs, int numChannels, int offset
     masterBus.clear(0, numSamples);
     cueBus.clear(0, numSamples);
 
+    renderDecks(numSamples);
     renderTestTone(numSamples);
+    swapPendingTracks(); // decks that finished fading out can take their new track now
 
     // Point at this chunk of each device output channel.
     float* chunk[kMaxOutputChannels] = {};
@@ -121,10 +120,7 @@ void AudioEngine::drainCommands() noexcept
     EngineCommand command;
     for (int i = 0; i < kMaxCommandsPerBlock && commands.tryPop(command); ++i)
     {
-        std::visit(Overloaded{[this](const SetTestTone& c) { apply(c); },
-                              [this](const SetOutputLayout& c) { apply(c); }, [this](const LoadTrack& c) { apply(c); },
-                              [this](const UnloadTrack& c) { apply(c); }},
-                   command);
+        std::visit([this](const auto& c) { apply(c); }, command);
         ++current.commandsProcessed;
     }
 }
@@ -168,27 +164,92 @@ void AudioEngine::apply(const LoadTrack& command) noexcept
         releaseBuffer(command.bufferId); // nowhere to put it: give it straight back
         return;
     }
-    auto& slot = decks[command.deck];
-    if (slot.id != 0 && slot.id != command.bufferId)
-        releaseBuffer(slot.id);
-    slot.buffer = command.buffer;
-    slot.id = command.bufferId;
-
-    auto& s = current.decks[command.deck];
-    s.loaded = slot.buffer != nullptr;
-    s.bufferId = slot.id;
-    s.lengthSamples = slot.buffer != nullptr ? slot.buffer->numSamples() : 0;
+    requestTrack(command.deck, command.buffer, command.bufferId);
 }
 
 void AudioEngine::apply(const UnloadTrack& command) noexcept
 {
-    if (command.deck >= kMaxDecks)
-        return;
-    auto& slot = decks[command.deck];
-    if (slot.id != 0)
-        releaseBuffer(slot.id);
-    slot = {};
-    current.decks[command.deck] = {};
+    if (command.deck < kMaxDecks)
+        requestTrack(command.deck, nullptr, 0);
+}
+
+void AudioEngine::requestTrack(DeckId deckId, const TrackBuffer* buffer, BufferId id) noexcept
+{
+    auto& slot = decks[deckId];
+    if (slot.hasPending && slot.pendingId != id)
+        releaseBuffer(slot.pendingId); // superseded before it was ever used
+    slot.hasPending = true;
+    slot.pendingBuffer = buffer;
+    slot.pendingId = id;
+    slot.deck.pause(); // fade out first if it was sounding
+    swapPendingTracks();
+}
+
+void AudioEngine::swapPendingTracks() noexcept
+{
+    for (auto& slot : decks)
+    {
+        if (!slot.hasPending || !slot.deck.isSilent())
+            continue;
+        if (slot.id != 0 && slot.id != slot.pendingId)
+            releaseBuffer(slot.id); // nothing reads it any more
+        slot.deck.setTrack(slot.pendingBuffer);
+        slot.id = slot.pendingId;
+        slot.hasPending = false;
+        slot.pendingBuffer = nullptr;
+        slot.pendingId = 0;
+    }
+}
+
+void AudioEngine::apply(const Play& command) noexcept
+{
+    if (command.deck < kMaxDecks && !decks[command.deck].hasPending)
+        decks[command.deck].deck.play();
+}
+
+void AudioEngine::apply(const Pause& command) noexcept
+{
+    if (command.deck < kMaxDecks)
+        decks[command.deck].deck.pause();
+}
+
+void AudioEngine::apply(const TogglePlay& command) noexcept
+{
+    if (command.deck < kMaxDecks && !decks[command.deck].hasPending)
+        decks[command.deck].deck.togglePlay();
+}
+
+void AudioEngine::apply(const CuePress& command) noexcept
+{
+    if (command.deck < kMaxDecks && !decks[command.deck].hasPending)
+        decks[command.deck].deck.cuePress();
+}
+
+void AudioEngine::apply(const CueRelease& command) noexcept
+{
+    if (command.deck < kMaxDecks)
+        decks[command.deck].deck.cueRelease();
+}
+
+void AudioEngine::apply(const Seek& command) noexcept
+{
+    if (command.deck < kMaxDecks && !decks[command.deck].hasPending)
+        decks[command.deck].deck.seek(command.samplePos);
+}
+
+void AudioEngine::renderDecks(int numSamples) noexcept
+{
+    // No mixer yet (P1-10/P1-11): every deck goes straight to the master bus.
+    float* l = deckScratch.getWritePointer(0);
+    float* r = deckScratch.getWritePointer(1);
+    for (auto& slot : decks)
+    {
+        if (slot.deck.track() == nullptr)
+            continue;
+        slot.deck.render(l, r, numSamples);
+        masterBus.addFrom(0, 0, l, numSamples);
+        masterBus.addFrom(1, 0, r, numSamples);
+    }
 }
 
 void AudioEngine::releaseBuffer(BufferId id) noexcept
@@ -250,6 +311,21 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
     current.outputChannels = numChannels;
     current.cueRouted = cueIsRouted(layout, numChannels);
     current.buffersAwaitingRelease = static_cast<std::uint32_t>(numPendingReleases);
+    for (std::size_t i = 0; i < decks.size(); ++i)
+    {
+        const auto& slot = decks[i];
+        const auto& d = slot.deck;
+        auto& s = current.decks[i];
+        s.loaded = d.track() != nullptr;
+        s.bufferId = slot.id;
+        s.lengthSamples = d.length();
+        s.playing = d.isPlaying();
+        s.cuePreview = d.transport() == Deck::Transport::CuePreview;
+        s.atEnd = d.isAtEnd();
+        s.positionSamples = d.position();
+        s.cuePointSamples = d.cuePoint();
+        s.rate = 1.0;
+    }
 
     state.write(current);
 }
