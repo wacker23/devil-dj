@@ -10,6 +10,8 @@ target_sources(devildj_ui INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/DeckView.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/KeyboardController.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/KeyboardController.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/KeymapOverlay.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/KeymapOverlay.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/MixerControls.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/MixerControls.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/MixerView.cpp"

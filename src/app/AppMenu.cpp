@@ -84,6 +84,10 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
     {
         menu.addItem(AudioSettings, "Audio settings...");
         menu.addItem(HighQualityResampling, "High-quality resampling (sinc)", true, highQuality);
+        menu.addSeparator();
+        menu.addItem(OpenKeymapFolder, "Open keymap folder (keymap.json)");
+        menu.addItem(ReloadKeymap, "Reload keymap");
+        menu.addItem(-1, "Hold Ctrl + / to see the keyboard map", false);
     }
     else if (menuName == "Debug")
     {
@@ -160,6 +164,16 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
             isolator = !isolator;
             if (onIsolator)
                 onIsolator(isolator);
+            break;
+
+        case ReloadKeymap:
+            if (onReloadKeymap)
+                onReloadKeymap();
+            break;
+
+        case OpenKeymapFolder:
+            if (onOpenKeymapFolder)
+                onOpenKeymapFolder();
             break;
 
         case HighQualityResampling:

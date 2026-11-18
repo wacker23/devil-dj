@@ -13,6 +13,7 @@
 #endif
 
 #include <algorithm>
+#include <cctype>
 
 namespace devildj::ui
 {
@@ -117,6 +118,133 @@ const char* scan::name(std::uint16_t code) noexcept
         if (n.code == code)
             return n.text;
     return "?";
+}
+
+std::uint16_t scan::fromName(const std::string& text) noexcept
+{
+    // Every code name() knows, matched without case ("pageup" = "PageUp").
+    for (int code = 1; code < 0x200; ++code)
+    {
+        const std::string n = name(static_cast<std::uint16_t>(code));
+        if (n == "?" || n.size() != text.size())
+            continue;
+        bool same = true;
+        for (std::size_t i = 0; i < n.size() && same; ++i)
+            same = std::tolower(static_cast<unsigned char>(n[i])) == std::tolower(static_cast<unsigned char>(text[i]));
+        if (same)
+            return static_cast<std::uint16_t>(code);
+    }
+    return 0;
+}
+
+std::optional<KeyChord> parseChord(const std::string& text)
+{
+    KeyChord chord;
+    std::size_t start = 0;
+    while (true)
+    {
+        // Modifiers are the parts before a '+' (the key itself can't contain '+').
+        const auto plus = text.find('+', start);
+        if (plus == std::string::npos || plus + 1 >= text.size())
+            break;
+        std::string part = text.substr(start, plus - start);
+        for (auto& c : part)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (part == "ctrl" || part == "control")
+            chord.modifiers |= mods::Ctrl;
+        else if (part == "shift")
+            chord.modifiers |= mods::Shift;
+        else if (part == "alt")
+            chord.modifiers |= mods::Alt;
+        else
+            return std::nullopt;
+        start = plus + 1;
+    }
+    chord.scanCode = scan::fromName(text.substr(start));
+    if (chord.scanCode == 0)
+        return std::nullopt;
+    return chord;
+}
+
+std::string contextName(KeyContext context)
+{
+    switch (context)
+    {
+        case KeyContext::BeatMaker:
+            return "beatmaker";
+        case KeyContext::CodeBeat:
+            return "codebeat";
+        case KeyContext::Main:
+        default:
+            return "main";
+    }
+}
+
+std::optional<KeyContext> parseContext(const std::string& text)
+{
+    for (auto c : {KeyContext::Main, KeyContext::BeatMaker, KeyContext::CodeBeat})
+        if (contextName(c) == text)
+            return c;
+    return std::nullopt;
+}
+
+std::vector<KeyBinding> applyKeymapOverrides(std::vector<KeyBinding> base, const std::string& json,
+                                             std::vector<std::string>& errors)
+{
+    const auto parsed = juce::JSON::parse(juce::String::fromUTF8(json.c_str()));
+    const auto* list = parsed.getProperty("bindings", juce::var()).getArray();
+    if (list == nullptr)
+    {
+        errors.push_back(json.empty() ? "empty file" : "no \"bindings\" list (or not valid JSON)");
+        return base;
+    }
+    for (const auto& entry : *list)
+    {
+        const std::string action = entry.getProperty("action", "").toString().toStdString();
+        const std::string key = entry.getProperty("key", "").toString().toStdString();
+        const std::string contextText = entry.getProperty("context", "main").toString().toStdString();
+        const auto command = commandFromKey(action);
+        const auto context = parseContext(contextText);
+        if (!command)
+        {
+            errors.push_back("unknown action \"" + action + "\"");
+            continue;
+        }
+        if (!context)
+        {
+            errors.push_back("unknown context \"" + contextText + "\" for " + action);
+            continue;
+        }
+        std::optional<KeyChord> chord;
+        if (!key.empty())
+        {
+            chord = parseChord(key);
+            if (!chord || scan::isModifier(chord->scanCode))
+            {
+                errors.push_back("unknown key \"" + key + "\" for " + action);
+                continue;
+            }
+        }
+        // The action moves: drop its old keys in this context, and whatever held the new chord.
+        std::erase_if(base, [&](const KeyBinding& b)
+                      { return b.context == *context && (b.command == *command || (chord && b.chord == *chord)); });
+        if (chord)
+            base.push_back({*chord, *command, *context});
+    }
+    return base;
+}
+
+std::string exampleKeymapJson()
+{
+    return R"({
+  "version": 1,
+  "comment": "Devil-DJ keymap. Each entry moves one action to a new key (\"\" = no key). Keys: Z, Shift+B, Ctrl+Shift+N, F5, Up, ... (US key positions). Action names: deckA.Cue, deckB.Play, global.CrossfaderCentre, ... (Hold Ctrl+/ in the app to see the current map.) After editing: Options > Reload keymap.",
+  "bindings": [
+    { "action": "deckA.Cue", "key": "Z" },
+    { "action": "global.CrossfaderCentre", "key": "B" }
+  ]
+}
+)";
 }
 
 std::string describeChord(const KeyChord& chord)
@@ -360,6 +488,12 @@ bool KeyboardController::handle(const KeyEvent& e, KeyContext focus, bool textIn
     held[e.scanCode] = *command;
     dispatcher.perform(*command, ActionPhase::Press);
     return true;
+}
+
+void KeyboardController::setBindings(std::vector<KeyBinding> newBindings)
+{
+    releaseAll();
+    bindings = std::move(newBindings);
 }
 
 bool KeyboardController::isHeld(CommandId id) const

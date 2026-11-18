@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -33,7 +34,8 @@ constexpr std::uint16_t LeftShift = 0x2A, RightShift = 0x36, LeftCtrl = 0x1D, Ri
                         LeftAlt = 0x38, RightAlt = kExtended | 0x38, LeftWin = kExtended | 0x5B,
                         RightWin = kExtended | 0x5C;
 bool isModifier(std::uint16_t code) noexcept;
-const char* name(std::uint16_t code) noexcept; // "Z", ",", "F12", "Up", ... ("?" if unknown)
+const char* name(std::uint16_t code) noexcept;            // "Z", ",", "F12", "Up", ... ("?" if unknown)
+std::uint16_t fromName(const std::string& name) noexcept; // inverse of name(), any case; 0 if unknown
 } // namespace scan
 
 namespace mods
@@ -68,7 +70,19 @@ struct KeyBinding
 std::vector<KeyBinding> defaultKeymap();
 // Chords bound to more than one action in the same context (the default map must have none).
 std::vector<std::pair<KeyBinding, KeyBinding>> findConflicts(const std::vector<KeyBinding>& bindings);
-std::string describeChord(const KeyChord& chord); // "Ctrl+Shift+N"
+std::string describeChord(const KeyChord& chord);            // "Ctrl+Shift+N"
+std::optional<KeyChord> parseChord(const std::string& text); // "Ctrl+Shift+N", "Shift+,", "F12"; nullopt if bad
+std::string contextName(KeyContext context);                 // "main", "beatmaker", "codebeat"
+std::optional<KeyContext> parseContext(const std::string& text);
+
+// User keymap (Documents\Devil-DJ\Keymaps\keymap.json): overrides on top of a base map.
+//   { "version": 1, "bindings": [ { "action": "deckA.Cue", "key": "Ctrl+Shift+Z", "context": "main" },
+//                                 { "action": "global.Quantize", "key": "" } ] }   ("" = no key)
+// Binding an action moves it (its old keys in that context go) and takes the chord from whatever had it.
+// Problems (unknown action / key / context, bad JSON) go to `errors` and that entry is skipped.
+std::vector<KeyBinding> applyKeymapOverrides(std::vector<KeyBinding> base, const std::string& json,
+                                             std::vector<std::string>& errors);
+std::string exampleKeymapJson();
 
 // Turns physical key events into actions with press / release / repeat semantics (P1-16):
 //   - a key's release always releases the action its press started, even if the modifiers changed meanwhile
@@ -94,6 +108,8 @@ public:
     bool isHeld(CommandId id) const; // pressed and not yet released
     void releaseAll();               // focus lost / window deactivated: release every held action
     std::optional<CommandId> lookup(const KeyChord& chord, KeyContext focus) const;
+    const std::vector<KeyBinding>& currentBindings() const noexcept { return bindings; }
+    void setBindings(std::vector<KeyBinding> newBindings); // releases anything held first
 
 private:
     ActionDispatcher& dispatcher;

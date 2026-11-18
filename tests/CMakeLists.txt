@@ -39,6 +39,7 @@ target_sources(DevilDJTests PRIVATE
     ui/UiSmokeTests.cpp
     ui/DeckViewTests.cpp
     ui/KeyboardControllerTests.cpp
+    ui/KeymapOverlayTests.cpp
     ui/MixerViewTests.cpp
     ui/WaveformViewTests.cpp
     util/CrashHandlerTests.cpp

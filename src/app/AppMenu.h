@@ -26,6 +26,8 @@ public:
     std::function<void(int deck)> onResetTempo;
     std::function<void(double rangePercent)> onTempoRange;
     std::function<void(bool on)> onHighQualityResampling;
+    std::function<void()> onReloadKeymap;
+    std::function<void()> onOpenKeymapFolder;
     std::function<void(int deck)> onToggleKeyLock;
     std::function<void(bool on)> onIsolator;
     std::function<void(int curve)> onCrossfaderCurve;             // 0 smooth, 1 linear, 2 cut
@@ -54,6 +56,8 @@ private:
         TempoRange16,
         TempoRange50,
         HighQualityResampling,
+        ReloadKeymap,
+        OpenKeymapFolder,
         KeyLockA,
         KeyLockB,
         CrashUiThread,

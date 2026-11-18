@@ -181,7 +181,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
   `ui/Actions.h` enumerates every bindable action (`CommandId`); `ui/KeyboardController` maps physical scan codes (`juce::KeyPress` + raw key code) to actions with press/release/hold semantics; default map from `docs/KEYMAP.md` (transport, pitch bend, crossfader, load). Ignores key repeat; works with Korean IME active. Includes a unit test that fails if two actions share a key + modifier in the same focus context.
   Done when: Phase 1 actions in KEYMAP work; unit test for the binding table; manual test with IME on.
 
-- [ ] **P1-17 Keymap overlay**
+- [x] **P1-17 Keymap overlay**
   Hold Ctrl+/ to show a translucent overlay of the current bindings drawn on a keyboard layout.
   Done when: overlay reflects user rebinding.
 

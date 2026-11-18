@@ -30,7 +30,8 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     addAndMakeVisible(waveA);
     addAndMakeVisible(waveB);
     overlay.setExtraLines([this] { return statusLines(); });
-    addChildComponent(overlay); // added last: on top of the jog strips
+    addChildComponent(overlay);       // on top of the decks and waveforms
+    addChildComponent(keymapOverlay); // above everything while Ctrl+/ is held
 
     loader.callbacks.onProgress = [this](engine::DeckId deck, const juce::File& file, double fraction)
     {
@@ -50,6 +51,7 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
             deckStatus[deck] = "failed: " + file.getFileName() + " - " + error;
     };
     registerActions();
+    reloadKeymap();
     keyHook = std::make_unique<ui::PhysicalKeyHook>([this](const ui::KeyboardController::KeyEvent& e)
                                                     { return onPhysicalKey(e); });
     if (!keyHook->isInstalled())
@@ -159,6 +161,20 @@ void MainComponent::registerActions()
                     sendCrossfader();
                 });
     onPress(ui::globalCommand(GA::DebugOverlay), [this] { toggleDebugOverlay(); });
+    actions.setHandler(ui::globalCommand(GA::KeymapOverlay),
+                       [this](Phase p)
+                       {
+                           if (p == Phase::Press)
+                           {
+                               keymapOverlay.setBindings(keyboard.currentBindings());
+                               keymapOverlay.setVisible(true);
+                               keymapOverlay.toFront(false);
+                           }
+                           else if (p == Phase::Release)
+                           {
+                               keymapOverlay.setVisible(false);
+                           }
+                       });
     onPress(ui::globalCommand(GA::FullScreen),
             [this]
             {
@@ -419,6 +435,42 @@ void MainComponent::paint(juce::Graphics& g)
     g.drawText(info, getLocalBounds().reduced(12), juce::Justification::bottomLeft);
 }
 
+juce::File MainComponent::keymapFolder()
+{
+    return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("Devil-DJ/Keymaps");
+}
+
+void MainComponent::reloadKeymap()
+{
+    const auto file = keymapFolder().getChildFile("keymap.json");
+    auto bindings = ui::defaultKeymap();
+    juce::String status = "default keys";
+    if (file.existsAsFile())
+    {
+        std::vector<std::string> errors;
+        bindings = ui::applyKeymapOverrides(std::move(bindings), file.loadFileAsString().toStdString(), errors);
+        status =
+            "keymap.json loaded" +
+            (errors.empty() ? juce::String() : ", " + juce::String(static_cast<int>(errors.size())) + " problem(s)");
+        for (const auto& e : errors)
+            util::logWarning("Keymap {}: {}", file.getFullPathName().toStdString(), e);
+        util::logInfo("Keymap: {} ({} problems)", file.getFullPathName().toStdString(), errors.size());
+    }
+    keyboard.setBindings(std::move(bindings));
+    keymapOverlay.setStatus(status);
+    keymapOverlay.setBindings(keyboard.currentBindings());
+}
+
+void MainComponent::openKeymapFolder()
+{
+    const auto folder = keymapFolder();
+    folder.createDirectory();
+    const auto example = folder.getChildFile("keymap.example.json");
+    if (!example.existsAsFile())
+        example.replaceWithText(juce::String::fromUTF8(ui::exampleKeymapJson().c_str()));
+    folder.startAsProcess();
+}
+
 double MainComponent::outputLatencySeconds() const
 {
     return audio.getStatus().totalOutputLatencyMs / 1000.0;
@@ -442,6 +494,7 @@ void MainComponent::resized()
     waves.removeFromTop(6);
     waveB.setBounds(waves.removeFromTop(waveHeight));
 
+    keymapOverlay.setBounds(getLocalBounds());
     overlay.setBounds(getWidth() - ui::DebugOverlay::kWidth - kOverlayMargin, kOverlayMargin, ui::DebugOverlay::kWidth,
                       ui::DebugOverlay::kHeight);
 }

@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -193,9 +194,11 @@ constexpr DeckAction commandDeckAction(CommandId id) noexcept
     return static_cast<DeckAction>(static_cast<int>(id) % kDeckActionCount);
 }
 
-std::string commandName(CommandId id); // "Deck A: Cue (hold to preview)", "Crossfader to centre"
-std::string commandKey(CommandId id);  // stable id for files: "deckA.Cue", "global.CrossfaderCentre"
-bool commandRepeats(CommandId id);     // fires again while the key is held (tempo steps, list moves)
+std::string commandName(CommandId id);      // "Deck A: Cue (hold to preview)", "Crossfader to centre"
+std::string commandKey(CommandId id);       // stable id for files: "deckA.Cue", "global.CrossfaderCentre"
+bool commandRepeats(CommandId id);          // fires again while the key is held (tempo steps, list moves)
+std::string commandShortName(CommandId id); // fits on a keycap: "Cue", "Bend -", "Kill LO", "XF <"
+std::optional<CommandId> commandFromKey(const std::string& key); // inverse of commandKey()
 std::vector<CommandId> allCommands();
 
 // How an action is triggered: a key going down, the same key coming up, or auto-repeat while held.

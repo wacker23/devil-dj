@@ -2,6 +2,8 @@
 
 Left hand plays Deck A, right hand plays Deck B. Bindings use **physical key positions** (scan codes on a US-layout keyboard), so they work with any input language, including the Korean IME. Every binding can be changed in the keymap editor and exported as JSON.
 
+Hold **Ctrl + /** to see the current map drawn on a keyboard. To change keys before the keymap editor exists, put a `keymap.json` in `Documents\Devil-DJ\Keymaps` (Options > Open keymap folder creates the folder and a `keymap.example.json`), then Options > Reload keymap. Each entry moves one action to a new key, e.g. `{ "action": "deckA.Cue", "key": "C" }`; `"key": ""` removes a key. Action names are `deckA.` / `deckB.` + the deck action (Cue, Play, BendDown, KillLow, ...) or `global.` + the global action (CrossfaderCentre, Quantize, ...), as listed in `src/ui/Actions.h`.
+
 Performance keys are active whenever no text field (search box, code editor, rename field) has focus. A unit test checks that the default map has no conflicts.
 
 Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / reset, jump to start, EQ kills, key lock, headphone cue, load (Tab / Enter open the file chooser for deck A / B until the browser exists), crossfader glide / snap / centre, full screen (F11), debug overlay (F12), panic (Esc: releases holds and bends). Every other key below is already reserved for its action and does nothing until the feature exists.

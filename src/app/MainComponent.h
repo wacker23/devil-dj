@@ -8,6 +8,7 @@
 #include "ui/DebugOverlay.h"
 #include "ui/DeckView.h"
 #include "ui/KeyboardController.h"
+#include "ui/KeymapOverlay.h"
 #include "ui/MixerView.h"
 #include "ui/WaveformView.h"
 
@@ -74,6 +75,7 @@ private:
     ui::WaveformView waveB{engine, 1, [this](engine::BufferId id) { return registry.get(id); },
                            [this] { return outputLatencySeconds(); }};
     ui::DebugOverlay overlay;
+    ui::KeymapOverlay keymapOverlay; // Ctrl+/ held (P1-17)
     bool testToneOn = false;
 
 public:
@@ -86,6 +88,11 @@ public:
     void setCrossfaderAssign(int deck, int assign);
     void setCueMix(double mix);
     void setHeadphoneLevel(double db);
+
+    // User keymap (P1-17): Documents\Devil-DJ\Keymaps\keymap.json on top of the KEYMAP.md defaults.
+    static juce::File keymapFolder();
+    void reloadKeymap();
+    void openKeymapFolder();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };
