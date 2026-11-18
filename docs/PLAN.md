@@ -193,7 +193,7 @@ Goal: two decks play real files with key lock; a mixer with EQ, filter, faders a
   Device, sample rate, buffer size, output layout, latency readout, test tone button, xrun counter.
   Done when: owner can set up her laptop + headphones without help (manual test).
 
-- [ ] **P1-20 Soak test**
+- [x] **P1-20 Soak test**
   Debug overlay toggle (F12) showing CPU per block, xruns, memory. 60-minute run with two decks looping, key lock on, EQ moving.
   Done when: zero xruns at 256 samples / 48 kHz on the target laptop, or the smallest safe buffer is documented.
 
