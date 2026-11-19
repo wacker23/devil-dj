@@ -226,7 +226,7 @@ LibraryBrowser::LibraryBrowser(library::Database* db, juce::File artworkFolder, 
     loadB.onClick = [this] { loadSelected(1); };
     loadA.setTooltip("Load the selected track to deck A (Tab)");
     loadB.setTooltip("Load the selected track to deck B (Enter)");
-    for (auto* l : {&statusLabel, &countLabel})
+    for (auto* l : {&statusLabel, &countLabel, &activityLabel})
     {
         l->setColour(juce::Label::textColourId, kDim);
         l->setFont(juce::FontOptions(12.0f));
@@ -309,7 +309,8 @@ LibraryBrowser::LibraryBrowser(library::Database* db, juce::File artworkFolder, 
     refreshFilterChoices();
 
     for (auto* c : std::initializer_list<juce::Component*>{&treeView, &trackTable, &importButton, &sizeButton, &loadA,
-                                                           &loadB, &statusLabel, &countLabel, &search, &filterButton})
+                                                           &loadB, &statusLabel, &countLabel, &search, &filterButton,
+                                                           &activityLabel})
         addAndMakeVisible(c);
     for (auto* c : std::initializer_list<juce::Component*>{&bpmLabel, &bpmFrom, &bpmDash, &bpmTo, &keyBox, &ratingBox,
                                                            &colourBox, &genreBox, &tagBox, &clearButton})
@@ -363,6 +364,7 @@ LibraryBrowser::~LibraryBrowser()
         bridge->owner = nullptr;
     }
     cancelPendingUpdate();
+    stopTimer();
     trackTable.getHeader().removeListener(this);
     treeView.setRootItem(nullptr);
 }
@@ -888,6 +890,27 @@ void LibraryBrowser::expand()
 
 void LibraryBrowser::handleAsyncUpdate()
 {
+    applyLibraryChanges(false);
+}
+
+void LibraryBrowser::timerCallback()
+{
+    stopTimer();
+    applyLibraryChanges(true);
+}
+
+void LibraryBrowser::applyLibraryChanges(bool now)
+{
+    constexpr double kMinIntervalMs = 400.0;
+    const double t = juce::Time::getMillisecondCounterHiRes();
+    if (!now && t - lastRefreshMs < kMinIntervalMs)
+    {
+        if (!isTimerRunning())
+            startTimer(static_cast<int>(kMinIntervalMs - (t - lastRefreshMs)) + 1);
+        return; // the changes stay noted in the bridge until then
+    }
+    stopTimer();
+    lastRefreshMs = t;
     bool tracks = false, playlists = false;
     if (bridge != nullptr)
     {
@@ -934,6 +957,16 @@ void LibraryBrowser::refreshFromLibrary(bool tracks, bool playlists)
 void LibraryBrowser::setBig(bool big)
 {
     sizeButton.setButtonText(big ? "SMALLER" : "BIGGER");
+}
+
+void LibraryBrowser::setActivity(const juce::String& text)
+{
+    if (text == activityLabel.getText())
+        return;
+    const bool layout = text.isEmpty() != activityLabel.getText().isEmpty();
+    activityLabel.setText(text, juce::dontSendNotification);
+    if (layout)
+        resized();
 }
 
 void LibraryBrowser::setStatus(const juce::String& text)
@@ -1214,6 +1247,7 @@ void LibraryBrowser::resized()
     sizeButton.setBounds(top.removeFromRight(84));
     top.removeFromRight(10);
     countLabel.setBounds(top.removeFromRight(130));
+    activityLabel.setBounds(top.removeFromRight(activityLabel.getText().isEmpty() ? 0 : 230));
     search.setBounds(top.removeFromLeft(std::clamp(top.getWidth() / 3, 160, 340)));
     top.removeFromLeft(6);
     filterButton.setBounds(top.removeFromLeft(70));

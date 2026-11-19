@@ -66,13 +66,14 @@ class ImportJob final : public juce::Thread
 {
 public:
     ImportJob(library::Database& d, juce::Array<juce::File> in, juce::File art, ui::LibraryBrowser& b,
-              std::optional<std::int64_t> parent)
+              std::optional<std::int64_t> parent, analysis::AnalysisService* a)
         : juce::Thread("Library import")
         , db(d)
         , inputs(std::move(in))
         , artwork(std::move(art))
         , browser(&b)
         , playlistParent(parent)
+        , analyzer(a)
     {
     }
     ~ImportJob() override { stopThread(10000); }
@@ -88,6 +89,8 @@ public:
         library::ImportOptions options;
         options.artworkCacheDir = toPath(artwork);
         options.isCancelled = [this] { return threadShouldExit(); };
+        if (analyzer != nullptr) // new tracks go straight to the analysis queue (P2-12)
+            options.queueAnalysis = [a = analyzer](std::int64_t id) { a->enqueue(id); };
         options.onProgress = [this](int done, int total)
         { post("Adding to the library... " + juce::String(done) + " / " + juce::String(total)); };
         // Libraries from other software (P2-09): tracks, cues, tempo markers and playlists.
@@ -192,7 +195,27 @@ private:
     juce::File artwork;
     juce::Component::SafePointer<ui::LibraryBrowser> browser;
     std::optional<std::int64_t> playlistParent;
+    analysis::AnalysisService* analyzer = nullptr;
 };
+
+// The analysis service's decoder: the engine's (Media Foundation / JUCE readers) at the file's own rate.
+util::Result<analysis::DecodedAudio> decodeForAnalysis(const std::filesystem::path& file, const std::atomic<bool>& cancel)
+{
+    using R = util::Result<analysis::DecodedAudio>;
+    engine::DecodeOptions options;
+    options.cancel = &cancel;
+    auto decoded = engine::decodeTrack(juce::File(juce::String(file.wstring().c_str())), options);
+    if (!decoded)
+        return R::fail(decoded.error());
+    std::shared_ptr<engine::TrackBuffer> buffer = std::move(decoded).value();
+    analysis::DecodedAudio a;
+    a.left = buffer->audio.getReadPointer(0);
+    a.right = buffer->audio.getNumChannels() > 1 ? buffer->audio.getReadPointer(1) : a.left;
+    a.numSamples = buffer->audio.getNumSamples();
+    a.sampleRate = buffer->sampleRate;
+    a.owner = buffer;
+    return R::ok(std::move(a));
+}
 } // namespace
 
 MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDeviceService& audioService,
@@ -223,6 +246,15 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     libraryBrowser->onSearchDone = [this] { grabKeyboardFocus(); }; // the decks' keys work again
     libraryBrowser->onImportPlaylist = [this](std::optional<std::int64_t> parent) { importPlaylistFile(parent); };
     libraryBrowser->onCheckMissing = [this] { checkMissingFiles(false); };
+    if (libraryDb != nullptr)
+    {
+        analysisService = std::make_unique<analysis::AnalysisService>(*libraryDb, &decodeForAnalysis);
+        analysisTotal = analysisService->queueOutdated();
+        if (analysisTotal > 0)
+            util::logInfo("Analysis: {} tracks to analyze", analysisTotal);
+        analysisProgress = std::make_unique<juce::TimedCallback>([this] { showAnalysisProgress(); });
+        analysisProgress->startTimer(500);
+    }
     libraryBrowser->onRelocate = [this](const std::vector<std::int64_t>& ids) { relocateMissingFiles(ids); };
     if (libraryDb != nullptr)
         juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this)]
@@ -550,11 +582,32 @@ MainComponent::~MainComponent()
 {
     loader.callbacks = {}; // the loader outlives this component; don't let late results call into it
     importJob = nullptr;   // stops a running import (between batches) before the browser goes
+    analysisProgress = nullptr;
+    analysisService = nullptr; // stops the workers (a track in progress stays not analyzed)
 }
 
 juce::File MainComponent::artworkFolder()
 {
     return juce::File::getSpecialLocation(juce::File::windowsLocalAppData).getChildFile("Devil-DJ/cache/artwork");
+}
+
+void MainComponent::showAnalysisProgress()
+{
+    if (analysisService == nullptr)
+        return;
+    const auto s = analysisService->status();
+    if (s.idle())
+    {
+        if (analysisTotal > 0)
+            util::logInfo("Analysis: done ({} analyzed, {} failed)", s.done, s.failed);
+        analysisTotal = 0;
+        libraryBrowser->setActivity({});
+        return;
+    }
+    // "Analyzing 12 of 500" - the total grows when an import adds tracks.
+    analysisTotal = std::max(analysisTotal, s.done + s.failed + s.running + s.queued);
+    const int finished = std::min(analysisTotal, s.done + s.failed);
+    libraryBrowser->setActivity("Analyzing " + juce::String(finished + 1) + " of " + juce::String(analysisTotal));
 }
 
 void MainComponent::toggleBrowserSize()
@@ -692,8 +745,8 @@ void MainComponent::importToLibrary(const juce::Array<juce::File>& filesOrFolder
                                    });
         return;
     }
-    importJob =
-        std::make_unique<ImportJob>(*libraryDb, filesOrFolders, artworkFolder(), *libraryBrowser, playlistParent);
+    importJob = std::make_unique<ImportJob>(*libraryDb, filesOrFolders, artworkFolder(), *libraryBrowser, playlistParent,
+                                            analysisService.get());
     importJob->startThread(juce::Thread::Priority::low);
 }
 

@@ -253,7 +253,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
 
 ### Analysis
 
-- [ ] **P2-12 Analysis service**
+- [x] **P2-12 Analysis service**
   `analysis/AnalysisService`: job queue, worker pool (cores − 1, lowest priority), progress per track, `analysis_version` per result so upgrades re-analyze. Decodes to mono 22.05 kHz for analysis plus waveform data at full rate.
   Done when: 500 tracks analyze in the background while two decks play with no xruns.
 

@@ -15,6 +15,7 @@ void setCurrentThreadPriority(int priority) noexcept;
 // Priorities for tests and helpers (OS values). Background = below normal; Audio = time critical (what
 // real audio drivers use for their callback thread).
 int backgroundThreadPriority() noexcept;
+int lowestThreadPriority() noexcept; // the analysis workers (P2-12): below everything else the app runs
 int audioThreadPriority() noexcept;
 
 } // namespace devildj::util

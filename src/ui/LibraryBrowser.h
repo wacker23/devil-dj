@@ -40,7 +40,8 @@ class LibraryBrowser final : public juce::Component,
                              public juce::FileDragAndDropTarget,
                              private juce::TableListBoxModel,
                              private juce::TableHeaderComponent::Listener,
-                             private juce::AsyncUpdater
+                             private juce::AsyncUpdater,
+                             private juce::Timer
 {
 public:
     enum class View
@@ -101,6 +102,8 @@ public:
     juce::File selectedTrackFile() const;
     void selectTrack(std::int64_t trackId);
     void setStatus(const juce::String& text); // e.g. import progress
+    void setActivity(const juce::String& text); // background work, e.g. "Analyzing 12 of 500" (P2-12)
+    juce::String activity() const { return activityLabel.getText(); }
     juce::String status() const { return statusLabel.getText(); }
     bool artworkShown() const noexcept { return artwork.isValid(); }
 
@@ -164,7 +167,11 @@ public:
     // Re-reads tracks and playlists now (normally done after a change notification).
     void refreshFromLibrary(bool tracks, bool playlists);
     // Handles change notifications that are waiting for the message loop now (tests have no running loop).
-    void handlePendingLibraryChanges() { handleUpdateNowIfNeeded(); }
+    void handlePendingLibraryChanges()
+    {
+        cancelPendingUpdate();
+        applyLibraryChanges(true);
+    }
 
     void resized() override;
     void paint(juce::Graphics& g) override;
@@ -196,6 +203,10 @@ private:
     void tableSortOrderChanged(juce::TableHeaderComponent*) override;
 
     void handleAsyncUpdate() override;
+    void timerCallback() override;
+    // Refreshes at most ~2.5 times a second (analysis results stream in); `now` skips the limit.
+    void applyLibraryChanges(bool now);
+    double lastRefreshMs = 0.0;
 
     friend class Item;
     void itemSelected(View v, std::int64_t playlistId);
@@ -277,7 +288,7 @@ private:
     TrackTable trackTable{*this};
     FileBrowserPanel fileBrowser;
     juce::TextButton importButton{"IMPORT"}, sizeButton{"BIGGER"}, loadA{"LOAD A"}, loadB{"LOAD B"};
-    juce::Label statusLabel, countLabel;
+    juce::Label statusLabel, countLabel, activityLabel;
     juce::TextEditor search, bpmFrom, bpmTo;
     juce::TextButton filterButton{"FILTER"}, clearButton{"CLEAR"};
     juce::ComboBox keyBox, ratingBox, colourBox, genreBox, tagBox;

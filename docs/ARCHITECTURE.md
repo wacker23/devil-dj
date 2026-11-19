@@ -223,6 +223,8 @@ AnalysisJob(trackId) ──▶ decode (mono 22.05 kHz + full-rate stereo for wav
 
 Each analyzer is a pure function `Result analyze(const AnalysisInput&, const Params&)` with no global state, so it is unit-testable with generated signals. Results carry `analysisVersion`; bump it when an algorithm changes.
 
+`analysis::AnalysisService` (P2-12): a queue of track ids and cores - 1 workers (at most 4) at the lowest thread priority. The app hands it a decoder function (engine::decodeTrack) so the analysis module doesn't depend on the engine. Per track: decode at the file's rate, the mono 22.05 kHz signal (sinc resampler), the analyzers (`void(const AnalysisInput&, AnalysisResult&)`), then results are written in batches (up to 25 tracks or ~1 s per transaction) with `analysis_version = kAnalysisVersion`; a failed track gets `-kAnalysisVersion` and isn't retried until the version changes. BPM and beatgrid are not overwritten when the user locked them. Imports enqueue new tracks; at start every present track with an older version is queued; the browser refreshes at most ~2.5 times a second while results stream in.
+
 ## 6. Library
 
 - SQLite in WAL mode at `%APPDATA%\Devil-DJ\library.db`. One writer thread; UI reads through a read-only connection.

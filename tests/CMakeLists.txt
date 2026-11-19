@@ -7,6 +7,7 @@ juce_add_console_app(DevilDJTests
     PRODUCT_NAME "DevilDJTests")
 
 target_sources(DevilDJTests PRIVATE
+    analysis/AnalysisServiceTests.cpp
     analysis/AnalysisSmokeTests.cpp
     analysis/TestSignalTests.cpp
     analysis/WaveformBuilderTests.cpp

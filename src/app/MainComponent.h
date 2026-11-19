@@ -5,6 +5,7 @@
 #include "engine/AudioEngine.h"
 #include "engine/BufferRegistry.h"
 #include "engine/TrackLoader.h"
+#include "analysis/AnalysisService.h"
 #include "library/Database.h"
 #include "ui/Actions.h"
 #include "ui/DebugOverlay.h"
@@ -54,6 +55,7 @@ public:
     // Missing files (P2-10): check every track's file (also done at start, quietly), and relocate - ask for a folder
     // and search it by file name + size. Both run on the library worker thread.
     void checkMissingFiles(bool quiet = false);
+    analysis::AnalysisService* analysis() noexcept { return analysisService.get(); }
     void relocateMissingFiles(const std::vector<std::int64_t>& trackIds = {});
 
     // Asks for a library file from other software (DJ library XML / iTunes Library.xml) and imports it (P2-09).
@@ -106,6 +108,11 @@ private:
     std::unique_ptr<ui::LibraryBrowser> libraryBrowser; // P2-04, bottom
     std::unique_ptr<juce::Thread> importJob;
     bool browserBig = false;
+    // Analysis (P2-12): imported and not-yet-analyzed tracks, in the background; progress in the browser.
+    std::unique_ptr<analysis::AnalysisService> analysisService;
+    std::unique_ptr<juce::TimedCallback> analysisProgress;
+    void showAnalysisProgress();
+    int analysisTotal = 0;
     std::unique_ptr<juce::FileChooser> importChooser;
     ui::DebugOverlay overlay;
     ui::KeymapOverlay keymapOverlay; // Ctrl+/ held (P1-17)

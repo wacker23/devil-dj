@@ -34,6 +34,11 @@ int audioThreadPriority() noexcept
 {
     return THREAD_PRIORITY_TIME_CRITICAL;
 }
+
+int lowestThreadPriority() noexcept
+{
+    return THREAD_PRIORITY_LOWEST;
+}
 #else
 int currentThreadPriority() noexcept
 {
@@ -45,6 +50,10 @@ int backgroundThreadPriority() noexcept
     return 0;
 }
 int audioThreadPriority() noexcept
+{
+    return 0;
+}
+int lowestThreadPriority() noexcept
 {
     return 0;
 }
