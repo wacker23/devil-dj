@@ -261,7 +261,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   Spectral-flux onset envelope → tempo estimation by autocorrelation/comb-filter tempogram (range 70–180 BPM with octave-error correction preferring 85–175) → beat positions by dynamic programming → constant-tempo grid fit (least squares on beat times) → downbeat estimate (bar phase with strongest low-frequency onset pattern). Variable-tempo detection flags tracks whose local tempo drifts > 1 %.
   Done when: on generated click tracks BPM error < 0.02 and first beat < 5 ms; on the owner's eval set (DEVILDJ_EVAL_DIR, ≥ 50 tracks with known BPM) ≥ 90 % within ±0.5 BPM (report written to DEVLOG).
 
-- [ ] **P2-14 Beatgrid model + editing**
+- [x] **P2-14 Beatgrid model + editing**
   Grid = list of anchors (beat index, sample position, BPM until next anchor). UI tools: set downbeat here, shift grid ±1 ms / ±1 beat, BPM ×2 / ÷2, tap tempo, metronome click on cue bus, lock analysis.
   Done when: grid edits persist; metronome stays on the grid for 10 minutes on a 128 BPM click track.
 

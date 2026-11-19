@@ -322,6 +322,17 @@ std::vector<KeyBinding> defaultKeymap()
         {W, I, mods::Ctrl, DA::KeyLock},
         {E, O, mods::Ctrl, DA::HeadphoneCue},
         {R, P, mods::Ctrl, DA::MakeMaster},
+        // Beatgrid (P2-14): Ctrl+Shift on the deck's keys.
+        {Z, M, mods::Ctrl | mods::Shift, DA::GridDownbeat},
+        {A, J, mods::Ctrl | mods::Shift, DA::GridEarlier},
+        {S, K, mods::Ctrl | mods::Shift, DA::GridLater},
+        {Q, U, mods::Ctrl | mods::Shift, DA::GridBeatBack},
+        {W, I, mods::Ctrl | mods::Shift, DA::GridBeatForward},
+        {E, O, mods::Ctrl | mods::Shift, DA::GridDouble},
+        {R, P, mods::Ctrl | mods::Shift, DA::GridHalve},
+        {X, Comma, mods::Ctrl | mods::Shift, DA::TapTempo},
+        {C, Period, mods::Ctrl | mods::Shift, DA::Metronome},
+        {V, Slash, mods::Ctrl | mods::Shift, DA::GridLock},
     };
     for (const auto& r : rows)
     {

@@ -211,9 +211,67 @@ void AudioEngine::apply(const UnloadTrack& command) noexcept
         requestTrack(command.deck, nullptr, 0);
 }
 
+void AudioEngine::apply(const SetBeatgrid& command) noexcept
+{
+    if (command.deck < kMaxDecks)
+        decks[command.deck].grid = command.grid;
+}
+
+void AudioEngine::apply(const SetMetronome& command) noexcept
+{
+    if (command.deck >= kMaxDecks)
+        return;
+    auto& slot = decks[command.deck];
+    slot.metronome = command.on;
+    slot.metronomeGain = juce::Decibels::decibelsToGain(command.levelDb);
+}
+
+void AudioEngine::renderMetronome(std::size_t i, double before, double after, int numSamples) noexcept
+{
+    auto& slot = decks[i];
+    // A new click on each beat crossed (forward play, no jump): at the sample where the playhead passed it.
+    if (slot.metronome && !slot.grid.empty() && after > before && after - before < 8.0 * numSamples)
+    {
+        const auto& g = slot.grid;
+        for (auto k = static_cast<long long>(std::floor(g.beatAt(before))) + 1;; ++k)
+        {
+            const double at = g.sampleAt(static_cast<double>(k));
+            if (at > after)
+                break;
+            if (at <= before)
+                continue;
+            const bool downbeat = g.barBeatOf(k) == 1;
+            slot.clickDelay = static_cast<int>(std::floor((at - before) / (after - before) * numSamples));
+            slot.clickPosition = 0;
+            slot.clickLength = static_cast<int>(0.015 * sampleRate);
+            slot.clickIncrement = 2.0 * std::numbers::pi * (downbeat ? 2000.0 : 1000.0) / sampleRate;
+            slot.clickLevel = slot.metronomeGain * (downbeat ? 1.0f : 0.7f);
+            slot.clickActive = true;
+        }
+    }
+    if (!slot.clickActive)
+        return;
+    float* cl = cueBus.getWritePointer(0);
+    float* cr = cueBus.getWritePointer(1);
+    const int start = std::max(0, slot.clickDelay);
+    const double decay = 1.0 / (0.003 * sampleRate);
+    for (int s = start; s < numSamples && slot.clickPosition < slot.clickLength; ++s, ++slot.clickPosition)
+    {
+        const double p = slot.clickPosition;
+        const auto v = static_cast<float>(slot.clickLevel * std::exp(-p * decay) * std::sin(p * slot.clickIncrement));
+        cl[s] += v;
+        cr[s] += v;
+    }
+    slot.clickDelay = 0; // the rest of it starts at the top of the next chunk
+    if (slot.clickPosition >= slot.clickLength)
+        slot.clickActive = false;
+}
+
 void AudioEngine::requestTrack(DeckId deckId, const TrackBuffer* buffer, BufferId id) noexcept
 {
     auto& slot = decks[deckId];
+    slot.grid = {};
+    slot.clickActive = false;
     if (slot.hasPending && slot.pendingId != id)
         releaseBuffer(slot.pendingId); // superseded before it was ever used
     slot.hasPending = true;
@@ -509,7 +567,9 @@ void AudioEngine::renderDecks(int numSamples) noexcept
             m.cueSend.skip(numSamples);
             continue;
         }
+        const double before = slot.deck.position();
         slot.deck.render(l, r, numSamples);
+        renderMetronome(i, before, slot.deck.position(), numSamples);
         strips[i].processPreFader(l, r, numSamples);
         m.meter.process(l, r, numSamples);
         if (m.cueSend.isRamping() || m.cueSend.value() > 0.0)
@@ -615,6 +675,15 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         s.keyLock = d.keyLock();
         s.scratching = d.isScratching();
         s.transposeSemis = static_cast<std::int8_t>(d.keyShift());
+        s.hasGrid = !slot.grid.empty();
+        s.gridLocked = slot.grid.locked;
+        s.metronome = slot.metronome;
+        if (s.hasGrid)
+        {
+            s.beat = slot.grid.beatAt(s.positionSamples);
+            s.barBeat = slot.grid.barBeatOf(static_cast<long long>(std::floor(s.beat + 1e-6)));
+            s.gridBpm = slot.grid.bpmAt(s.positionSamples);
+        }
     }
     for (std::size_t i = 0; i < strips.size(); ++i)
     {

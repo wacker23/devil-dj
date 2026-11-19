@@ -63,6 +63,20 @@ Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / r
 
 Space is deliberately unbound in performance view to avoid accidental stops; it plays/stops the Beat Maker when that panel has focus.
 
+## Beatgrid (P2-14)
+
+| Action | Deck A | Deck B |
+| --- | --- | --- |
+| Set downbeat here (the nearest beat moves to the playhead and becomes beat 1) | Ctrl+Shift+Z | Ctrl+Shift+M |
+| Grid 1 ms earlier / later (hold to repeat) | Ctrl+Shift+A / S | Ctrl+Shift+J / K |
+| Downbeat one beat earlier / later | Ctrl+Shift+Q / W | Ctrl+Shift+U / I |
+| BPM x2 / /2 | Ctrl+Shift+E / R | Ctrl+Shift+O / P |
+| Tap tempo (4 taps or more, in time with the track) | Ctrl+Shift+X | Ctrl+Shift+, |
+| Metronome on / off (clicks on the beats, in the headphones) | Ctrl+Shift+C | Ctrl+Shift+. |
+| Lock / unlock the grid (analysis leaves a locked grid alone) | Ctrl+Shift+V | Ctrl+Shift+/ |
+
+The same tools are on each deck's GRID button (and TAP); editing a grid locks it.
+
 ## Browser
 
 | Action | Key |

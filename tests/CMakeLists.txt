@@ -29,6 +29,7 @@ target_sources(DevilDJTests PRIVATE
     engine/DeckKeyLockTests.cpp
     engine/DeckScratchTests.cpp
     engine/ChannelStripTests.cpp
+    engine/MetronomeTests.cpp
     engine/MixerMasterTests.cpp
     engine/HeadphoneCueTests.cpp
     engine/DeckTempoTests.cpp
@@ -60,6 +61,7 @@ target_sources(DevilDJTests PRIVATE
     ui/SmartPlaylistTests.cpp
     ui/TagsRatingsTests.cpp
     ui/WaveformViewTests.cpp
+    util/BeatgridTests.cpp
     util/CrashHandlerTests.cpp
     util/FractionTests.cpp
     util/GarbageQueueTests.cpp

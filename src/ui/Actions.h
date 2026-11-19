@@ -57,7 +57,17 @@ namespace devildj::ui
     X(KeyLock, "Key lock", false)                                                                                      \
     X(HeadphoneCue, "Headphone cue", false)                                                                            \
     X(MakeMaster, "Make master deck", false)                                                                           \
-    X(Load, "Load track", false)
+    X(Load, "Load track", false)                                                                                       \
+    X(GridDownbeat, "Grid: set downbeat here", false)                                                                  \
+    X(GridEarlier, "Grid: 1 ms earlier", true)                                                                         \
+    X(GridLater, "Grid: 1 ms later", true)                                                                             \
+    X(GridBeatBack, "Grid: downbeat one beat earlier", false)                                                          \
+    X(GridBeatForward, "Grid: downbeat one beat later", false)                                                         \
+    X(GridDouble, "Grid: BPM x2", false)                                                                               \
+    X(GridHalve, "Grid: BPM /2", false)                                                                                \
+    X(TapTempo, "Tap tempo", false)                                                                                    \
+    X(Metronome, "Metronome on / off (headphones)", false)                                                             \
+    X(GridLock, "Grid: lock / unlock (analysis leaves it alone)", false)
 
 #define DEVILDJ_GLOBAL_ACTIONS(X)                                                                                      \
     X(CrossfaderLeft, "Crossfader left (hold to glide)", false)                                                        \

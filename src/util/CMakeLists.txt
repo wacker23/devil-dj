@@ -1,5 +1,6 @@
 # util: lock-free primitives and helpers shared by every module.
 add_library(devildj_util STATIC
+    Beatgrid.cpp
     CrashHandler.cpp
     Log.cpp
     ProcessStats.cpp
@@ -11,6 +12,7 @@ target_sources(devildj_util PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${PROJECT_SOURCE_DIR}/src"
     FILES
+        Beatgrid.h
         CrashHandler.h
         Fraction.h
         GarbageQueue.h

@@ -29,6 +29,14 @@ struct DeckState
     bool keyLock = false;
     bool scratching = false;        // jog held (or easing back after release)
     std::int8_t transposeSemis = 0; // Key Shift
+
+    // Beatgrid (P2-14): where the playhead is on it.
+    bool hasGrid = false;
+    bool gridLocked = false;
+    double beat = 0.0;    // beat index at the playhead (fractional)
+    int barBeat = 1;      // 1..4: which beat of the bar the current beat is
+    double gridBpm = 0.0; // the grid's tempo here (the track's own, without the tempo fader)
+    bool metronome = false;
 };
 
 // Mixer channel settings as the audio thread has them (targets; the sound follows within 20 ms).

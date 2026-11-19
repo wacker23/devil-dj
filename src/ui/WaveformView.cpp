@@ -100,16 +100,36 @@ void WaveformView::paint(juce::Graphics& g)
         const double pointsPerPixel = spp / w.samplesPerPoint;
         const int width = getWidth();
 
-        // Second ticks (no beat grid until Phase 2).
-        g.setColour(kGrid);
+        // Beat lines from the grid (P2-14; downbeats brighter, bar numbers on top), else second ticks.
         const double leftSample = pos - centreX * spp;
-        const double firstSecond = std::ceil(leftSample / rate);
-        for (double sec = firstSecond;; sec += 1.0)
+        const auto grid = gridSource ? gridSource() : util::Beatgrid();
+        if (!grid.empty())
         {
-            const auto x = static_cast<float>((sec * rate - leftSample) / spp);
-            if (x > area.getRight())
-                break;
-            g.fillRect(x, area.getY(), 1.0f, area.getHeight());
+            const double rightSample = leftSample + width * spp;
+            const auto firstBeat = static_cast<long long>(std::floor(grid.beatAt(leftSample)));
+            g.setFont(juce::FontOptions(10.0f));
+            for (long long b = firstBeat;; ++b)
+            {
+                const double at = grid.sampleAt(static_cast<double>(b));
+                if (at > rightSample)
+                    break;
+                const auto x = static_cast<float>((at - leftSample) / spp);
+                const bool downbeat = grid.barBeatOf(b) == 1;
+                g.setColour(downbeat ? juce::Colour(0xffe0483c).withAlpha(0.8f) : juce::Colours::white.withAlpha(0.18f));
+                g.fillRect(x, area.getY(), downbeat ? 1.5f : 1.0f, area.getHeight());
+            }
+        }
+        else
+        {
+            g.setColour(kGrid);
+            const double firstSecond = std::ceil(leftSample / rate);
+            for (double sec = firstSecond;; sec += 1.0)
+            {
+                const auto x = static_cast<float>((sec * rate - leftSample) / spp);
+                if (x > area.getRight())
+                    break;
+                g.fillRect(x, area.getY(), 1.0f, area.getHeight());
+            }
         }
 
         // Bars: each pixel column shows the loudest points under it (or, zoomed in, the point it falls in).

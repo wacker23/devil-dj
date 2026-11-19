@@ -84,6 +84,18 @@ DeckView::DeckView(engine::AudioEngine& audioEngine, engine::DeckId deckId, Trac
             engine.send(engine::CueRelease{deck});
     };
     play.onClick = [this] { engine.send(engine::TogglePlay{deck}); };
+    grid.onClick = [this]
+    {
+        if (onGridMenu)
+            onGridMenu();
+    };
+    tap.onClick = [this]
+    {
+        if (onTap)
+            onTap();
+    };
+    grid.setTooltip("Beatgrid tools: set downbeat, shift, BPM x2 / /2, metronome, lock (Ctrl+Shift keys)");
+    tap.setTooltip("Tap tempo: tap 4 times or more in time with the track");
     keyLock.onClick = [this] { engine.send(engine::SetKeyLock{deck, !state.keyLock}); };
     sync.setEnabled(false);
     sync.setTooltip("Sync needs beat grids (Phase 2, P2-19)");
@@ -98,7 +110,8 @@ DeckView::DeckView(engine::AudioEngine& audioEngine, engine::DeckId deckId, Trac
     tempo.onValueChange = [this] { engine.send(engine::SetTempo{deck, 0.0 - tempo.getValue()}); };
 
     for (auto* b : {static_cast<juce::Button*>(cue.get()), static_cast<juce::Button*>(&play),
-                    static_cast<juce::Button*>(&sync), static_cast<juce::Button*>(&keyLock)})
+                    static_cast<juce::Button*>(&sync), static_cast<juce::Button*>(&keyLock),
+                    static_cast<juce::Button*>(&grid), static_cast<juce::Button*>(&tap)})
     {
         b->setColour(juce::TextButton::buttonColourId, kPanel);
         b->setColour(juce::TextButton::buttonOnColourId, kAccent);
@@ -136,8 +149,10 @@ void DeckView::refresh()
     cue->setToggleState(state.cuePreview, juce::dontSendNotification);
     keyLock.setToggleState(state.keyLock, juce::dontSendNotification);
     for (auto* b : {static_cast<juce::Button*>(cue.get()), static_cast<juce::Button*>(&play),
-                    static_cast<juce::Button*>(&keyLock)})
+                    static_cast<juce::Button*>(&keyLock), static_cast<juce::Button*>(&grid),
+                    static_cast<juce::Button*>(&tap)})
         b->setEnabled(state.loaded);
+    grid.setToggleState(state.metronome || state.gridLocked, juce::dontSendNotification);
 
     const double range = state.tempoRangePercent > 0.0 ? state.tempoRangePercent : 10.0;
     if (tempo.getMaximum() != range)
@@ -155,6 +170,12 @@ void DeckView::resized()
     area.removeFromRight(kMargin);
     headerArea = area.removeFromTop(46);
     infoArea = area.removeFromTop(26);
+    {
+        auto tools = infoArea;
+        tap.setBounds(tools.removeFromRight(48).reduced(0, 2));
+        tools.removeFromRight(4);
+        grid.setBounds(tools.removeFromRight(56).reduced(0, 2));
+    }
     area.removeFromTop(4);
     auto buttons = area.removeFromBottom(52);
     area.removeFromBottom(kMargin);
@@ -189,8 +210,9 @@ void DeckView::paint(juce::Graphics& g)
     auto bpmArea = header.removeFromRight(120);
     g.setColour(kText);
     g.setFont(juce::FontOptions(26.0f, juce::Font::bold));
-    g.drawText(formatBpm(track ? track->tagBpm : 0.0, state.tempoPercent), bpmArea.removeFromTop(28),
-               juce::Justification::centredRight);
+    // The grid's BPM once the track is analyzed (P2-13 / P2-14), else the tag's.
+    g.drawText(formatBpm(state.hasGrid ? state.gridBpm : track ? track->tagBpm : 0.0, state.tempoPercent),
+               bpmArea.removeFromTop(28), juce::Justification::centredRight);
     g.setColour(state.tempoPercent == 0.0 ? kDim : kText);
     g.setFont(juce::FontOptions(13.0f));
     g.drawText(juce::String(state.tempoPercent >= 0.0 ? "+" : "") + juce::String(state.tempoPercent, 2) + " %  (" +
@@ -219,11 +241,21 @@ void DeckView::paint(juce::Graphics& g)
     g.setColour(nearEnd ? kAccent : kDim);
     g.drawText(track ? formatTime(length - position, true) : juce::String(), info.removeFromLeft(110),
                juce::Justification::centredLeft);
+    info.removeFromRight(112); // GRID / TAP
+    juce::StringArray badges;
+    if (state.hasGrid && state.playing)
+        badges.add("BEAT " + juce::String(state.barBeat));
+    if (state.metronome)
+        badges.add("MET");
+    if (state.gridLocked)
+        badges.add("GRID LOCK");
     if (state.keyLock)
+        badges.add("KEY LOCK");
+    if (!badges.isEmpty())
     {
         g.setColour(kAccent);
         g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
-        g.drawText("KEY LOCK", info, juce::Justification::centredRight);
+        g.drawText(badges.joinIntoString("  "), info, juce::Justification::centredRight, true);
     }
 }
 

@@ -4,6 +4,7 @@
 #include "library/Database.h"
 #include "library/ForeignLibrary.h"
 #include "library/Importer.h"
+#include "library/BeatgridRepository.h"
 #include "library/MissingFiles.h"
 #include "library/PlaylistFiles.h"
 #include "util/Log.h"
@@ -246,6 +247,36 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     libraryBrowser->onSearchDone = [this] { grabKeyboardFocus(); }; // the decks' keys work again
     libraryBrowser->onImportPlaylist = [this](std::optional<std::int64_t> parent) { importPlaylistFile(parent); };
     libraryBrowser->onCheckMissing = [this] { checkMissingFiles(false); };
+    deckA.onGridMenu = [this] { showGridMenu(0); };
+    deckB.onGridMenu = [this] { showGridMenu(1); };
+    deckA.onTap = [this] { tapTempo(0); };
+    deckB.onTap = [this] { tapTempo(1); };
+    waveA.setGridSource([this] { return deckGrid(0); });
+    waveB.setGridSource([this] { return deckGrid(1); });
+    if (libraryDb != nullptr)
+    {
+        if (auto r = libraryDb->openReader())
+            gridReader = std::move(r).value();
+        // Analysis results (or other edits) for a loaded track: read its grid again on the message thread.
+        gridListener = libraryDb->addChangeListener(
+            [flag = gridsChanged, safe = juce::Component::SafePointer<MainComponent>(this)](
+                const std::vector<library::Change>& changes)
+            {
+                bool tracks = false;
+                for (const auto& c : changes)
+                    tracks |= c.table == library::Table::Tracks;
+                if (!tracks || flag->exchange(true))
+                    return;
+                juce::MessageManager::callAsync(
+                    [flag, safe]
+                    {
+                        flag->store(false);
+                        if (safe != nullptr)
+                            for (engine::DeckId d = 0; d < 2; ++d)
+                                safe->reloadGrid(d);
+                    });
+            });
+    }
     if (libraryDb != nullptr)
     {
         analysisService = std::make_unique<analysis::AnalysisService>(*libraryDb, &decodeForAnalysis);
@@ -277,6 +308,7 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     };
     loader.callbacks.onLoaded = [this](engine::DeckId deck, const engine::TrackBuffer& t)
     {
+        loadGridFor(deck, t.file, t.sampleRate); // P2-14
         if (deck < deckStatus.size())
             deckStatus[deck] =
                 t.file.getFileName() + " (" + juce::String(t.durationSeconds(), 1) + " s, " + t.formatName + ")";
@@ -380,6 +412,23 @@ void MainComponent::registerActions()
                         engine.send(engine::SetParam{engine::channelParam(d, param), kill ? -1000.0f : 0.0f});
                     });
         onPress(cmd(DA::KeyLock), [this, d] { toggleKeyLock(d); });
+        // Beatgrid (P2-14).
+        onPress(cmd(DA::GridDownbeat), [this, d] { editGrid(d, GridEdit::Downbeat); });
+        for (const auto [action, edit] : {std::pair{DA::GridEarlier, GridEdit::EarlierMs},
+                                          std::pair{DA::GridLater, GridEdit::LaterMs}})
+            actions.setHandler(cmd(action),
+                               [this, d, edit = edit](Phase p)
+                               {
+                                   if (p != Phase::Release)
+                                       editGrid(d, edit); // held: repeats
+                               });
+        onPress(cmd(DA::GridBeatBack), [this, d] { editGrid(d, GridEdit::BeatBack); });
+        onPress(cmd(DA::GridBeatForward), [this, d] { editGrid(d, GridEdit::BeatForward); });
+        onPress(cmd(DA::GridDouble), [this, d] { editGrid(d, GridEdit::Double); });
+        onPress(cmd(DA::GridHalve), [this, d] { editGrid(d, GridEdit::Halve); });
+        onPress(cmd(DA::GridLock), [this, d] { editGrid(d, GridEdit::ToggleLock); });
+        onPress(cmd(DA::TapTempo), [this, d] { tapTempo(d); });
+        onPress(cmd(DA::Metronome), [this, d] { toggleMetronome(d); });
         onPress(cmd(DA::HeadphoneCue),
                 [this, d]
                 {
@@ -584,6 +633,9 @@ MainComponent::~MainComponent()
     importJob = nullptr;   // stops a running import (between batches) before the browser goes
     analysisProgress = nullptr;
     analysisService = nullptr; // stops the workers (a track in progress stays not analyzed)
+    if (libraryDb != nullptr)
+        libraryDb->removeChangeListener(gridListener);
+    gridReader = nullptr;
 }
 
 juce::File MainComponent::artworkFolder()
@@ -1022,6 +1074,175 @@ void MainComponent::resized()
     keymapOverlay.setBounds(getLocalBounds());
     overlay.setBounds(getWidth() - ui::DebugOverlay::kWidth - kOverlayMargin, kOverlayMargin, ui::DebugOverlay::kWidth,
                       ui::DebugOverlay::kHeight);
+}
+
+// ---- beatgrids (P2-14) ----
+
+util::Beatgrid MainComponent::deckGrid(engine::DeckId deck) const
+{
+    return deck < deckGrids.size() ? deckGrids[deck].grid : util::Beatgrid();
+}
+
+std::int64_t MainComponent::deckTrackId(engine::DeckId deck) const
+{
+    return deck < deckGrids.size() ? deckGrids[deck].trackId : 0;
+}
+
+void MainComponent::sendGrid(engine::DeckId deck)
+{
+    engine.send(engine::SetBeatgrid{deck, deckGrids[deck].grid});
+}
+
+void MainComponent::loadGridFor(engine::DeckId deck, const juce::File& file, double bufferRate)
+{
+    if (deck >= deckGrids.size())
+        return;
+    auto& d = deckGrids[deck];
+    d = {};
+    d.bufferRate = bufferRate;
+    if (gridReader != nullptr)
+        if (auto* s = gridReader->prepare("SELECT id, sample_rate FROM tracks WHERE path = ? COLLATE NOCASE"))
+        {
+            if (s->bind(1, library::libraryPath(toPath(file))).step())
+            {
+                d.trackId = s->getInt(0);
+                d.fileRate = static_cast<double>(s->getOptionalInt(1).value_or(0));
+            }
+            s->reset();
+        }
+    reloadGrid(deck);
+    if (d.metronome)
+        engine.send(engine::SetMetronome{deck, true});
+}
+
+void MainComponent::reloadGrid(engine::DeckId deck)
+{
+    if (deck >= deckGrids.size() || gridReader == nullptr)
+        return;
+    auto& d = deckGrids[deck];
+    if (d.trackId == 0 || d.bufferRate <= 0.0)
+        return;
+    util::Beatgrid grid;
+    if (const auto stored = library::BeatgridRepository(*gridReader).get(d.trackId))
+    {
+        if (stored->sampleRate)
+            d.fileRate = *stored->sampleRate;
+        const double fileRate = d.fileRate > 0.0 ? d.fileRate : d.bufferRate;
+        if (auto parsed = util::Beatgrid::fromJson(stored->anchorsJson, fileRate))
+        {
+            grid = parsed->rescaled(d.bufferRate);
+            grid.locked = stored->locked;
+        }
+    }
+    if (grid == d.grid)
+        return;
+    d.grid = grid;
+    sendGrid(deck);
+}
+
+void MainComponent::saveGrid(engine::DeckId deck)
+{
+    auto& d = deckGrids[deck];
+    if (libraryDb == nullptr || d.trackId == 0)
+        return;
+    const auto stored = d.grid.rescaled(d.fileRate > 0.0 ? d.fileRate : d.bufferRate);
+    const auto json = stored.toJson();
+    const bool locked = d.grid.locked;
+    const double bpm = stored.firstBpm();
+    const auto id = d.trackId;
+    libraryDb->write([id, json, locked, bpm](library::Connection& c)
+                     { library::BeatgridRepository(c).set(id, json, locked, bpm > 0.0 ? std::optional<double>(bpm) : std::nullopt); });
+}
+
+void MainComponent::editGrid(engine::DeckId deck, GridEdit edit)
+{
+    if (deck >= deckGrids.size())
+        return;
+    auto& d = deckGrids[deck];
+    auto& g = d.grid;
+    if (g.empty())
+    {
+        libraryBrowser->setStatus(juce::String("Deck ") + engine::deckLetter(deck) +
+                                  " has no beatgrid yet (it appears when the track is analyzed, or tap the tempo)");
+        return;
+    }
+    const double position = engine.readState().decks[deck].positionSamples;
+    const double oneMs = 0.001 * d.bufferRate;
+    switch (edit)
+    {
+        case GridEdit::Downbeat: g.setDownbeatAt(position); break;
+        case GridEdit::EarlierMs: g.shiftSamples(-oneMs); break;
+        case GridEdit::LaterMs: g.shiftSamples(oneMs); break;
+        case GridEdit::BeatBack: g.shiftBeats(-1); break;
+        case GridEdit::BeatForward: g.shiftBeats(1); break;
+        case GridEdit::Double: g.scaleTempo(2.0); break;
+        case GridEdit::Halve: g.scaleTempo(0.5); break;
+        case GridEdit::ToggleLock: g.locked = !g.locked; break;
+    }
+    if (edit != GridEdit::ToggleLock)
+        g.locked = true; // a grid fixed by hand: analysis leaves it alone
+    sendGrid(deck);
+    saveGrid(deck);
+}
+
+void MainComponent::tapTempo(engine::DeckId deck, double nowSeconds)
+{
+    if (deck >= deckGrids.size())
+        return;
+    auto& d = deckGrids[deck];
+    const auto& s = engine.readState().decks[deck];
+    if (!s.loaded || d.bufferRate <= 0.0)
+        return;
+    d.taps.tap(nowSeconds >= 0.0 ? nowSeconds : juce::Time::getMillisecondCounterHiRes() / 1000.0);
+    const auto played = d.taps.bpm();
+    if (!played)
+    {
+        libraryBrowser->setStatus("Tap " + juce::String(d.taps.count()) + " - keep tapping in time");
+        return;
+    }
+    // The taps are in the track as it plays: take the tempo fader out; a beat sits at the playhead now.
+    const double trackBpm = std::round(*played / (1.0 + s.tempoPercent / 100.0) * 100.0) / 100.0;
+    const bool wasLocked = d.grid.locked;
+    d.grid = util::Beatgrid::constant(s.positionSamples, trackBpm, d.bufferRate);
+    d.grid.locked = true;
+    juce::ignoreUnused(wasLocked);
+    sendGrid(deck);
+    saveGrid(deck);
+    libraryBrowser->setStatus(juce::String("Deck ") + engine::deckLetter(deck) + ": " + juce::String(trackBpm, 2) +
+                              " BPM from " + juce::String(d.taps.count()) + " taps");
+}
+
+void MainComponent::toggleMetronome(engine::DeckId deck)
+{
+    if (deck >= deckGrids.size())
+        return;
+    auto& d = deckGrids[deck];
+    d.metronome = !d.metronome;
+    engine.send(engine::SetMetronome{deck, d.metronome});
+}
+
+void MainComponent::showGridMenu(engine::DeckId deck)
+{
+    juce::PopupMenu m;
+    const bool hasGrid = !deckGrid(deck).empty();
+    const char* keys[][2] = {{"Z", "M"}, {"A", "J"}, {"S", "K"}, {"Q", "U"}, {"W", "I"},
+                             {"E", "O"}, {"R", "P"}, {"C", "."},  {"V", "/"}};
+    const auto key = [&](int row) { return juce::String("   (Ctrl+Shift+") + keys[row][deck == 0 ? 0 : 1] + ")"; };
+    const auto add = [&](const juce::String& text, int row, GridEdit edit)
+    { m.addItem(text + key(row), hasGrid, false, [this, deck, edit] { editGrid(deck, edit); }); };
+    add("Set downbeat here", 0, GridEdit::Downbeat);
+    add("Grid 1 ms earlier", 1, GridEdit::EarlierMs);
+    add("Grid 1 ms later", 2, GridEdit::LaterMs);
+    add("Downbeat one beat earlier", 3, GridEdit::BeatBack);
+    add("Downbeat one beat later", 4, GridEdit::BeatForward);
+    add("BPM x2", 5, GridEdit::Double);
+    add("BPM /2", 6, GridEdit::Halve);
+    m.addSeparator();
+    m.addItem("Metronome in the headphones" + key(7), hasGrid, deckGrids[deck].metronome,
+              [this, deck] { toggleMetronome(deck); });
+    m.addItem("Lock the grid (analysis leaves it alone)" + key(8), hasGrid, deckGrid(deck).locked,
+              [this, deck] { editGrid(deck, GridEdit::ToggleLock); });
+    m.showMenuAsync(juce::PopupMenu::Options().withMousePosition());
 }
 
 } // namespace devildj::app

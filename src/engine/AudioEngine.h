@@ -101,6 +101,10 @@ private:
     void apply(const ScratchEnd& command) noexcept;
     void apply(const Nudge& command) noexcept;
     void apply(const SetParam& command) noexcept;
+    void apply(const SetBeatgrid& command) noexcept;
+    void apply(const SetMetronome& command) noexcept;
+    // Metronome clicks for the beats the deck crossed in this chunk, into the cue bus (P2-14).
+    void renderMetronome(std::size_t deck, double before, double after, int numSamples) noexcept;
     void requestTrack(DeckId deck, const TrackBuffer* buffer, BufferId id) noexcept;
     void swapPendingTracks() noexcept;
     void renderDecks(int numSamples) noexcept;
@@ -110,7 +114,10 @@ private:
     void renderTestTone(int numSamples) noexcept;
     void publish(int numChannels, int numSamples, double elapsedSeconds) noexcept;
 
-    util::SpscQueue<EngineCommand, kCommandQueueSize> commands;
+    // On the heap: a command is ~0.5 KB since grids travel in them (P2-14), 1,024 of them don't belong on a stack.
+    using CommandQueue = util::SpscQueue<EngineCommand, kCommandQueueSize>;
+    std::unique_ptr<CommandQueue> commandQueue = std::make_unique<CommandQueue>();
+    CommandQueue& commands = *commandQueue;
     util::SpscQueue<BufferId, 256> releasedBuffers; // audio thread -> message thread
     util::TripleBuffer<EngineState> state;
     std::atomic<std::uint64_t> dropped{0};
@@ -131,6 +138,16 @@ private:
         bool hasPending = false;
         const TrackBuffer* pendingBuffer = nullptr;
         BufferId pendingId = 0;
+        util::Beatgrid grid; // P2-14, in this deck's buffer samples
+        bool metronome = false;
+        float metronomeGain = 0.5f;
+        // The click being played: a short decaying sine, continued across chunks.
+        int clickDelay = -1;   // samples into the chunk where it starts; -1 = none starting
+        int clickPosition = 0; // samples of it played so far
+        int clickLength = 0;
+        double clickIncrement = 0.0;
+        float clickLevel = 0.0f;
+        bool clickActive = false;
     };
     std::array<DeckSlot, kMaxDecks> decks{};
     juce::AudioBuffer<float> deckScratch;            // 2 x capacity, one deck at a time

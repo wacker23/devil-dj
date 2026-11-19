@@ -2,6 +2,7 @@
 
 #include "engine/EngineIds.h"
 #include "engine/OutputRouter.h"
+#include "util/Beatgrid.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -177,10 +178,26 @@ struct Nudge
     double deltaSamples = 0.0; // fine position shift (played out as a small rate offset while playing)
 };
 
+// The deck's beatgrid (P2-14), in the deck buffer's samples (the UI scales the library's grid to the buffer's
+// rate). A new track clears it; the UI sends the new track's grid once it is loaded. An empty grid = none.
+struct SetBeatgrid
+{
+    DeckId deck = 0;
+    util::Beatgrid grid;
+};
+
+// Metronome (P2-14): a click on the cue bus on every beat of the deck's grid while it plays (downbeats higher).
+struct SetMetronome
+{
+    DeckId deck = 0;
+    bool on = false;
+    float levelDb = -6.0f;
+};
+
 using EngineCommand =
     std::variant<SetTestTone, SetOutputLayout, LoadTrack, UnloadTrack, Play, Pause, TogglePlay, CuePress, CueRelease,
                  Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo, PitchBend, SetInterpolationQuality, SetKeyLock,
-                 SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge, SetParam>;
+                 SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge, SetParam, SetBeatgrid, SetMetronome>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

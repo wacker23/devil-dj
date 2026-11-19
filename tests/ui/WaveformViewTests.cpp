@@ -241,3 +241,33 @@ TEST_CASE("Waveform screenshot", "[.screenshot]")
     juce::PNGImageFormat png;
     REQUIRE(png.writeImageToStream(image, stream));
 }
+
+TEST_CASE("Waveform view: beat lines from the deck's grid, downbeats in red", "[ui][waveform][grid]")
+{
+    Rig rig;
+    rig.run(2); // paused at the start: sample 0 sits under the playhead (x = 620)
+    const double spp = rig.waveA.samplesPerPixel();
+    // Downbeat at 0.25 s, 120 BPM: beats every 0.5 s after it.
+    auto grid = devildj::util::Beatgrid::constant(0.25 * kRate, 120.0, kRate);
+    rig.waveA.setGridSource([&grid] { return grid; });
+    const auto image = rig.waveA.createComponentSnapshot(rig.waveA.getLocalBounds());
+    const auto columnAt = [&](double sample) { return 620 + static_cast<int>(std::floor(sample / spp)); };
+    const auto redNear = [&](int x)
+    {
+        for (int dx = -1; dx <= 2; ++dx)
+        {
+            const auto c = image.getPixelAt(x + dx, 2);
+            if (c.getRed() > 150 && c.getRed() > 2 * c.getGreen())
+                return true;
+        }
+        return false;
+    };
+    CHECK(redNear(columnAt(0.25 * kRate)));      // a downbeat
+    CHECK_FALSE(redNear(columnAt(0.75 * kRate))); // beat 2: a grey line
+    CHECK(redNear(columnAt(2.25 * kRate)));       // the next bar's downbeat (4 beats later)
+    // No grid: no red lines.
+    grid = {};
+    const auto plain = rig.waveA.createComponentSnapshot(rig.waveA.getLocalBounds());
+    const auto c = plain.getPixelAt(columnAt(0.25 * kRate), 2);
+    CHECK_FALSE((c.getRed() > 150 && c.getRed() > 2 * c.getGreen()));
+}

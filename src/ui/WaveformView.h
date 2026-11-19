@@ -4,6 +4,8 @@
 #include "engine/TrackBuffer.h"
 #include "ui/TrackDropTarget.h"
 
+#include "util/Beatgrid.h"
+
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <array>
@@ -27,6 +29,10 @@ public:
     using LatencySource = std::function<double()>; // seconds from "audio block done" to "heard"
 
     WaveformView(engine::AudioEngine& engine, engine::DeckId deck, TrackLookup lookup, LatencySource latency);
+
+    // The deck's beatgrid (P2-14), in its buffer's samples: beats drawn as lines, downbeats brighter.
+    using GridSource = std::function<util::Beatgrid()>;
+    void setGridSource(GridSource source) { gridSource = std::move(source); }
 
     static constexpr std::array<double, 7> kZoomLevels{2.0, 4.0, 6.0, 8.0, 12.0, 16.0, 32.0}; // seconds visible
     static constexpr int kDefaultZoom = 2;                                                    // 6 s
@@ -67,6 +73,7 @@ private:
     engine::AudioEngine& engine;
     engine::DeckId deck;
     TrackLookup lookup;
+    GridSource gridSource;
     LatencySource latency;
     engine::BufferId shownBuffer = 0;
     std::shared_ptr<const engine::TrackBuffer> track;

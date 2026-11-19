@@ -7,6 +7,7 @@
 #include "engine/TrackLoader.h"
 #include "analysis/AnalysisService.h"
 #include "library/Database.h"
+#include "util/Beatgrid.h"
 #include "ui/Actions.h"
 #include "ui/DebugOverlay.h"
 #include "ui/DeckView.h"
@@ -55,6 +56,28 @@ public:
     // Missing files (P2-10): check every track's file (also done at start, quietly), and relocate - ask for a folder
     // and search it by file name + size. Both run on the library worker thread.
     void checkMissingFiles(bool quiet = false);
+
+    // Beatgrids (P2-14): the library's grid goes to a deck when its track loads; edits change the deck's grid at
+    // once and are saved (an edited grid is locked, so analysis leaves it alone).
+    enum class GridEdit
+    {
+        Downbeat,
+        EarlierMs,
+        LaterMs,
+        BeatBack,
+        BeatForward,
+        Double,
+        Halve,
+        ToggleLock,
+    };
+    void editGrid(engine::DeckId deck, GridEdit edit);
+    void tapTempo(engine::DeckId deck, double nowSeconds = -1.0);
+    void toggleMetronome(engine::DeckId deck);
+    util::Beatgrid deckGrid(engine::DeckId deck) const; // in the deck buffer's samples
+    std::int64_t deckTrackId(engine::DeckId deck) const;
+    void showGridMenu(engine::DeckId deck);
+    // Reads the grid of the deck's track from the library again (after analysis or an edit elsewhere).
+    void reloadGrid(engine::DeckId deck);
     analysis::AnalysisService* analysis() noexcept { return analysisService.get(); }
     void relocateMissingFiles(const std::vector<std::int64_t>& trackIds = {});
 
@@ -108,6 +131,21 @@ private:
     std::unique_ptr<ui::LibraryBrowser> libraryBrowser; // P2-04, bottom
     std::unique_ptr<juce::Thread> importJob;
     bool browserBig = false;
+    struct DeckGrid
+    {
+        std::int64_t trackId = 0;
+        double fileRate = 0.0, bufferRate = 0.0;
+        util::Beatgrid grid; // buffer samples
+        util::TapTempo taps;
+        bool metronome = false;
+    };
+    std::array<DeckGrid, 2> deckGrids;
+    std::unique_ptr<library::Connection> gridReader; // message thread
+    int gridListener = 0;
+    std::shared_ptr<std::atomic<bool>> gridsChanged = std::make_shared<std::atomic<bool>>(false);
+    void loadGridFor(engine::DeckId deck, const juce::File& file, double bufferRate);
+    void saveGrid(engine::DeckId deck);
+    void sendGrid(engine::DeckId deck);
     // Analysis (P2-12): imported and not-yet-analyzed tracks, in the background; progress in the browser.
     std::unique_ptr<analysis::AnalysisService> analysisService;
     std::unique_ptr<juce::TimedCallback> analysisProgress;
