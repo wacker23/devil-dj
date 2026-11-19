@@ -379,6 +379,7 @@ std::vector<KeyBinding> defaultKeymap()
     key(Right, mods::None, GA::BrowserExpand);
     key(F, mods::Ctrl, GA::BrowserSearch);
     key(B, mods::Ctrl, GA::BrowserBigger);
+    key(Delete, mods::None, GA::BrowserRemove);
     const std::uint16_t digits[] = {Digit1, Digit2, Digit3, Digit4, Digit5};
     for (int i = 0; i < 5; ++i)
         key(digits[i], mods::Ctrl | mods::Shift, static_cast<GA>(static_cast<int>(GA::Rate1) + i));

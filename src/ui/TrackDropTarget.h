@@ -40,7 +40,9 @@ public:
     // Library rows.
     static juce::File trackFromDrag(const SourceDetails& details)
     {
-        const auto path = details.description.toString();
+        // A file path, or {path, trackIds} from the library table (P2-06).
+        const auto* o = details.description.getDynamicObject();
+        const auto path = o != nullptr ? o->getProperty("path").toString() : details.description.toString();
         if (path.isEmpty() || !juce::File::isAbsolutePath(path))
             return {};
         const juce::File f(path);

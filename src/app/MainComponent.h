@@ -49,7 +49,10 @@ public:
 
     // Library import (P2-04): files / folders on a worker thread; empty = ask for a folder. Progress and the
     // result show in the browser's status line.
-    void importToLibrary(const juce::Array<juce::File>& filesOrFolders);
+    void importToLibrary(const juce::Array<juce::File>& filesOrFolders,
+                         std::optional<std::int64_t> playlistParent = std::nullopt);
+    // Asks for an .m3u / .m3u8 file and imports it as a playlist (P2-06).
+    void importPlaylistFile(std::optional<std::int64_t> parentFolder = std::nullopt);
     bool isImporting() const;
     // Ctrl+B / the browser's BIGGER button: the browser takes the waveforms' room too (they hide), and back.
     void toggleBrowserSize();

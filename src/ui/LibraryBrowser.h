@@ -10,6 +10,10 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
+#include <vector>
+
+#include "library/PlaylistRepository.h"
 
 namespace devildj::library
 {
@@ -107,6 +111,26 @@ public:
     void expand();               // Right
     bool treeHasFocus() const noexcept { return treeFocused; }
 
+    // Playlists (P2-06). Right-click the tree for new playlist / folder, rename, delete, M3U import / export;
+    // right-click tracks for add to playlist / remove; drag tracks onto a playlist in the tree; drag rows inside a
+    // playlist to reorder; Delete removes the selected rows from the shown playlist. Writes go through the
+    // database writer; the tree and table follow its change notifications.
+    std::function<void(std::optional<std::int64_t> parentFolder)> onImportPlaylist; // ask for an .m3u / .m3u8
+    void createPlaylist(const juce::String& name, std::optional<std::int64_t> parentFolder, bool folder = false);
+    void renamePlaylist(std::int64_t playlistId, const juce::String& name);
+    void deletePlaylist(std::int64_t playlistId); // with everything inside a folder
+    void addTracksToPlaylist(std::int64_t playlistId, const std::vector<std::int64_t>& trackIds);
+    bool removeSelectedFromPlaylist();          // false when the view isn't a playlist or nothing is selected
+    void moveSelectedRows(int insertBeforeRow); // reorder inside the shown playlist (0..rows)
+    juce::String exportPlaylist(std::int64_t playlistId, const juce::File& file); // error, empty when written
+    std::vector<int> selectedRows() const;
+    std::vector<std::int64_t> selectedTrackIds() const;
+    std::int64_t shownPlaylist() const noexcept; // the playlist in the table, 0 for the collection
+    bool canReorder() const noexcept;            // a normal playlist, sorted by #, no filter
+    juce::String uniquePlaylistName(const juce::String& base, std::optional<std::int64_t> parentFolder);
+    juce::PopupMenu menuForTree(std::int64_t playlistId, View section); // what a right-click shows
+    juce::PopupMenu menuForTracks();
+
     // Re-reads tracks and playlists now (normally done after a change notification).
     void refreshFromLibrary(bool tracks, bool playlists);
     // Handles change notifications that are waiting for the message loop now (tests have no running loop).
@@ -145,6 +169,65 @@ private:
 
     friend class Item;
     void itemSelected(View v, std::int64_t playlistId);
+    void showTreeMenu(std::int64_t playlistId, View section);
+    void askName(const juce::String& title, const juce::String& initial, std::function<void(juce::String)> done);
+    void confirmDelete(std::int64_t playlistId);
+    void chooseExportFile(std::int64_t playlistId);
+    std::optional<library::Playlist> playlistInfo(std::int64_t playlistId);
+    std::int64_t selectAfterRebuild = 0;
+    std::vector<int> selectRowsAfterReload; // rows moved by a drag: selected again once the new order is read
+    std::unique_ptr<juce::FileChooser> exportChooser;
+
+    // The track table, also a drop target for reordering rows inside a playlist.
+    class TrackTable final : public juce::TableListBox, public juce::DragAndDropTarget
+    {
+    public:
+        explicit TrackTable(LibraryBrowser& b)
+            : juce::TableListBox({}, &b)
+            , owner(b)
+        {
+        }
+        bool isInterestedInDragSource(const SourceDetails& d) override
+        {
+            return owner.canReorder() && d.sourceComponent != nullptr &&
+                   (d.sourceComponent.get() == this || isParentOf(d.sourceComponent.get()));
+        }
+        void itemDragMove(const SourceDetails& d) override
+        {
+            const int row = getInsertionIndexForPosition(d.localPosition.x, d.localPosition.y);
+            if (row != insertRow)
+            {
+                insertRow = row;
+                repaint();
+            }
+        }
+        void itemDragExit(const SourceDetails&) override
+        {
+            insertRow = -1;
+            repaint();
+        }
+        void itemDropped(const SourceDetails& d) override
+        {
+            const int row = getInsertionIndexForPosition(d.localPosition.x, d.localPosition.y);
+            insertRow = -1;
+            repaint();
+            owner.moveSelectedRows(row);
+        }
+        void paintOverChildren(juce::Graphics& g) override
+        {
+            juce::TableListBox::paintOverChildren(g);
+            if (insertRow < 0)
+                return;
+            const auto r = getRowPosition(std::min(insertRow, getNumRows() - 1), true);
+            const int y = insertRow >= getNumRows() ? r.getBottom() : r.getY();
+            g.setColour(juce::Colour(0xffe0483c));
+            g.fillRect(0, y - 1, getWidth(), 3);
+        }
+
+    private:
+        LibraryBrowser& owner;
+        int insertRow = -1;
+    };
     void rebuildTree();
     void setView(View v, std::int64_t playlistId);
     void updateArtwork();
@@ -161,7 +244,7 @@ private:
 
     juce::TreeView treeView;
     std::unique_ptr<juce::TreeViewItem> treeRoot;
-    juce::TableListBox trackTable{{}, this};
+    TrackTable trackTable{*this};
     FileBrowserPanel fileBrowser;
     juce::TextButton importButton{"IMPORT"}, sizeButton{"BIGGER"}, loadA{"LOAD A"}, loadB{"LOAD B"};
     juce::Label statusLabel, countLabel;

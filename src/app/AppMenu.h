@@ -19,7 +19,8 @@ public:
     AppMenu(juce::File logDirectory, bool showDebugMenu);
 
     std::function<void()> onAudioSettings;
-    std::function<void()> onImportFolder; // library (P2-04)
+    std::function<void()> onImportFolder;   // library (P2-04)
+    std::function<void()> onImportPlaylist; // M3U / M3U8 (P2-06)
     std::function<void()> onToggleDebugOverlay;
     std::function<void()> onToggleTestTone;
     std::function<void(int deck)> onLoadTrack;
@@ -46,6 +47,7 @@ private:
     {
         AudioSettings = 1,
         ImportFolder,
+        ImportPlaylist,
         DebugOverlay,
         TestTone,
         LoadDeckA,

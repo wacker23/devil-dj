@@ -227,7 +227,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   Instant search (title/artist/album/comment) with SQLite FTS5; filters for BPM range, key, rating, colour, genre, tags.
   Done when: search results < 50 ms on 50k tracks.
 
-- [ ] **P2-06 Playlists**
+- [x] **P2-06 Playlists**
   Create/rename/delete, folders, drag tracks in, reorder, delete from playlist, M3U/M3U8 import and export.
   Done when: round-trip M3U8 test.
 

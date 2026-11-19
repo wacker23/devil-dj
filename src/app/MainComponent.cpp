@@ -3,6 +3,7 @@
 #include "engine/TrackDecoder.h"
 #include "library/Database.h"
 #include "library/Importer.h"
+#include "library/PlaylistFiles.h"
 #include "util/Log.h"
 #include "util/ProcessStats.h"
 
@@ -30,26 +31,56 @@ std::filesystem::path toPath(const juce::File& f)
 class ImportJob final : public juce::Thread
 {
 public:
-    ImportJob(library::Database& d, juce::Array<juce::File> in, juce::File art, ui::LibraryBrowser& b)
+    ImportJob(library::Database& d, juce::Array<juce::File> in, juce::File art, ui::LibraryBrowser& b,
+              std::optional<std::int64_t> parent)
         : juce::Thread("Library import")
         , db(d)
         , inputs(std::move(in))
         , artwork(std::move(art))
         , browser(&b)
+        , playlistParent(parent)
     {
     }
     ~ImportJob() override { stopThread(10000); }
 
     void run() override
     {
-        std::vector<std::filesystem::path> paths;
+        std::vector<std::filesystem::path> paths, playlists;
         for (const auto& f : inputs)
-            paths.push_back(toPath(f));
+            (library::isPlaylistFile(toPath(f)) ? playlists : paths).push_back(toPath(f));
         library::ImportOptions options;
         options.artworkCacheDir = toPath(artwork);
         options.isCancelled = [this] { return threadShouldExit(); };
         options.onProgress = [this](int done, int total)
         { post("Adding to the library... " + juce::String(done) + " / " + juce::String(total)); };
+        // Playlist files (P2-06): each becomes a playlist; tracks not in the library yet are added first.
+        juce::String playlistText;
+        for (const auto& p : playlists)
+        {
+            post("Importing playlist " + juce::String(p.filename().wstring().c_str()) + "...");
+            const auto made = library::importPlaylist(db, p, playlistParent, options);
+            if (!made)
+            {
+                playlistText << "Playlist failed: " << juce::String::fromUTF8(made.error().c_str()) << ". ";
+                continue;
+            }
+            const auto& m = made.value();
+            playlistText << "Playlist \"" << juce::String::fromUTF8(m.name.c_str()) << "\": " << m.tracks
+                         << " tracks";
+            if (m.addedToLibrary > 0)
+                playlistText << " (" << m.addedToLibrary << " new in the library)";
+            if (!m.missing.empty())
+                playlistText << ", " << static_cast<int>(m.missing.size()) << " missing";
+            playlistText << ". ";
+            for (const auto& missing : m.missing)
+                util::logWarning("Playlist import {}: missing {}", juce::String(p.wstring().c_str()).toStdString(), missing);
+        }
+        if (paths.empty())
+        {
+            post(playlistText.trim());
+            return;
+        }
+
         post("Looking for music...");
         const auto r = library::importTracks(db, paths, options);
 
@@ -68,7 +99,7 @@ public:
                       r.added, r.alreadyInLibrary, r.duplicates, r.failed, r.seconds);
         for (const auto& e : r.errors)
             util::logWarning("Library import: {}", e);
-        post(text);
+        post(playlistText + text);
     }
 
 private:
@@ -86,6 +117,7 @@ private:
     juce::Array<juce::File> inputs;
     juce::File artwork;
     juce::Component::SafePointer<ui::LibraryBrowser> browser;
+    std::optional<std::int64_t> playlistParent;
 };
 } // namespace
 
@@ -115,6 +147,7 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     libraryBrowser->onImport = [this](const juce::Array<juce::File>& files) { importToLibrary(files); };
     libraryBrowser->onToggleSize = [this] { toggleBrowserSize(); };
     libraryBrowser->onSearchDone = [this] { grabKeyboardFocus(); }; // the decks' keys work again
+    libraryBrowser->onImportPlaylist = [this](std::optional<std::int64_t> parent) { importPlaylistFile(parent); };
     for (auto [target, deck] :
          {std::pair<ui::TrackDropTarget*, engine::DeckId>{&deckA, 0}, {&deckB, 1}, {&waveA, 0}, {&waveB, 1}})
         target->onTrackDropped = [this, deck = deck](const juce::File& file) { loadFile(deck, file); };
@@ -278,6 +311,7 @@ void MainComponent::registerActions()
     onPress(ui::globalCommand(GA::BrowserExpand), [this] { libraryBrowser->expand(); });
     onPress(ui::globalCommand(GA::BrowserBigger), [this] { toggleBrowserSize(); });
     onPress(ui::globalCommand(GA::BrowserSearch), [this] { libraryBrowser->focusSearch(); });
+    onPress(ui::globalCommand(GA::BrowserRemove), [this] { libraryBrowser->removeSelectedFromPlaylist(); });
     actions.setHandler(ui::globalCommand(GA::KeymapOverlay),
                        [this](Phase p)
                        {
@@ -449,7 +483,22 @@ bool MainComponent::isImporting() const
     return importJob != nullptr && importJob->isThreadRunning();
 }
 
-void MainComponent::importToLibrary(const juce::Array<juce::File>& filesOrFolders)
+void MainComponent::importPlaylistFile(std::optional<std::int64_t> parentFolder)
+{
+    if (libraryDb == nullptr)
+        return;
+    importChooser = std::make_unique<juce::FileChooser>(
+        "Import a playlist", juce::File::getSpecialLocation(juce::File::userMusicDirectory), "*.m3u8;*.m3u");
+    importChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                               [this, parentFolder](const juce::FileChooser& fc)
+                               {
+                                   if (const auto file = fc.getResult(); file.existsAsFile())
+                                       importToLibrary({file}, parentFolder);
+                               });
+}
+
+void MainComponent::importToLibrary(const juce::Array<juce::File>& filesOrFolders,
+                                    std::optional<std::int64_t> playlistParent)
 {
     if (libraryDb == nullptr)
         return;
@@ -471,7 +520,8 @@ void MainComponent::importToLibrary(const juce::Array<juce::File>& filesOrFolder
                                    });
         return;
     }
-    importJob = std::make_unique<ImportJob>(*libraryDb, filesOrFolders, artworkFolder(), *libraryBrowser);
+    importJob =
+        std::make_unique<ImportJob>(*libraryDb, filesOrFolders, artworkFolder(), *libraryBrowser, playlistParent);
     importJob->startThread(juce::Thread::Priority::low);
 }
 

@@ -378,6 +378,12 @@ TEST_CASE("Database: readers on several threads during a stream of writes", "[li
                 }
             });
 
+    // Let every reader get going first, so the writes really happen while they read (the writes alone can finish
+    // before a reader thread has opened its connection).
+    for (int wait = 0; wait < 1000 && reads < 3 * 3 && errors == 0; ++wait)
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    const int readsBeforeWrites = reads;
+
     for (int batch = 0; batch < 50; ++batch)
         d.write(
             [batch](Connection& c)
@@ -398,7 +404,7 @@ TEST_CASE("Database: readers on several threads during a stream of writes", "[li
 
     CHECK(errors == 0);
     CHECK(wentBackwards == 0);
-    CHECK(reads > 0);
+    CHECK(readsBeforeWrites > 0); // the readers were reading when the writes began
     auto reader = d.openReader();
     REQUIRE(reader.isOk());
     CHECK(count(*reader.value(), "tracks") == 1000);

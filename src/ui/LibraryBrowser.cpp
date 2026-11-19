@@ -4,6 +4,7 @@
 #include "library/Connection.h"
 #include "library/Database.h"
 #include "library/PlaylistRepository.h"
+#include "library/PlaylistFiles.h"
 #include "library/TagRepository.h"
 
 #include <algorithm>
@@ -96,7 +97,30 @@ public:
         g.drawText(name, 4, 0, width - 6, height, juce::Justification::centredLeft, true);
     }
 
-    void itemClicked(const juce::MouseEvent&) override { browser.treeFocused = true; }
+    void itemClicked(const juce::MouseEvent& e) override
+    {
+        browser.treeFocused = true;
+        if (e.mods.isPopupMenu())
+            browser.showTreeMenu(playlistId, itemView);
+    }
+
+    // Tracks dragged from the table onto a playlist (P2-06).
+    bool holdsTracks() const { return itemView == View::Playlist && !isFolder && playlistId > 0; }
+    bool isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails& d) override
+    {
+        const auto* o = d.description.getDynamicObject();
+        return holdsTracks() && o != nullptr && o->hasProperty("trackIds");
+    }
+    void itemDropped(const juce::DragAndDropTarget::SourceDetails& d, int) override
+    {
+        std::vector<std::int64_t> ids;
+        if (const auto* o = d.description.getDynamicObject())
+            if (const auto* list = o->getProperty("trackIds").getArray())
+                for (const auto& v : *list)
+                    ids.push_back(static_cast<std::int64_t>(v));
+        if (!ids.empty())
+            browser.addTracksToPlaylist(playlistId, ids);
+    }
     void itemSelectionChanged(bool isNowSelected) override
     {
         if (isNowSelected)
@@ -151,7 +175,7 @@ LibraryBrowser::LibraryBrowser(library::Database* db, juce::File artworkFolder, 
     header.setColour(juce::TableHeaderComponent::textColourId, kText);
     header.setColour(juce::TableHeaderComponent::outlineColourId, kBackground);
     trackTable.setRowHeight(kRowHeight);
-    trackTable.setMultipleSelectionEnabled(false);
+    trackTable.setMultipleSelectionEnabled(true); // Ctrl / Shift + click; drag several onto a playlist
     trackTable.setWantsKeyboardFocus(false); // keys arrive as actions (KeyboardController)
     trackTable.setColour(juce::ListBox::backgroundColourId, kPanel);
     trackTable.setColour(juce::ListBox::outlineColourId, kBackground);
@@ -386,6 +410,22 @@ void LibraryBrowser::rebuildTree()
     if (openness != nullptr)
         treeView.restoreOpennessState(*openness, false);
 
+    // A playlist just created from a menu: show it.
+    if (selectAfterRebuild != 0)
+    {
+        const auto id = std::exchange(selectAfterRebuild, 0);
+        currentView = View::Playlist;
+        currentPlaylist = id;
+        for (int i = 0; i < treeView.getNumRowsInTree(); ++i)
+            if (auto* item = dynamic_cast<Item*>(treeView.getItemOnRow(i)); item != nullptr && item->playlistId == id)
+            {
+                item->setSelected(true, true, juce::dontSendNotification);
+                treeView.scrollToKeepItemVisible(item);
+                setView(View::Playlist, id);
+                return;
+            }
+    }
+
     // Re-select what was shown.
     for (int i = 0; i < treeView.getNumRowsInTree(); ++i)
         if (auto* item = dynamic_cast<Item*>(treeView.getItemOnRow(i));
@@ -545,10 +585,16 @@ void LibraryBrowser::selectedRowsChanged(int)
     updateArtwork();
 }
 
-void LibraryBrowser::cellClicked(int, int, const juce::MouseEvent&)
+void LibraryBrowser::cellClicked(int row, int, const juce::MouseEvent& e)
 {
     treeFocused = false;
     treeView.repaint();
+    if (e.mods.isPopupMenu())
+    {
+        if (!trackTable.isRowSelected(row))
+            trackTable.selectRow(row);
+        menuForTracks().showMenuAsync(juce::PopupMenu::Options().withMousePosition());
+    }
 }
 
 void LibraryBrowser::cellDoubleClicked(int row, int, const juce::MouseEvent&)
@@ -559,12 +605,19 @@ void LibraryBrowser::cellDoubleClicked(int row, int, const juce::MouseEvent&)
 
 juce::var LibraryBrowser::getDragSourceDescription(const juce::SparseSet<int>& rows)
 {
-    // Dragged onto a deck: the deck's TrackDropTarget reads the file path.
+    // {path: the first track's file (a deck loads it), trackIds: every dragged track (a playlist adds them)}.
     if (rows.isEmpty() || tableModel == nullptr)
         return {};
-    if (const auto* r = tableModel->row(rows[0]))
-        return r->path;
-    return {};
+    const auto* first = tableModel->row(rows[0]);
+    if (first == nullptr)
+        return {};
+    auto* o = new juce::DynamicObject();
+    o->setProperty("path", first->path);
+    juce::Array<juce::var> ids;
+    for (int i = 0; i < rows.size(); ++i)
+        ids.add(static_cast<juce::int64>(tableModel->trackIdAt(rows[i])));
+    o->setProperty("trackIds", ids);
+    return juce::var(o);
 }
 
 juce::String LibraryBrowser::getCellTooltip(int row, int)
@@ -793,8 +846,16 @@ void LibraryBrowser::refreshFromLibrary(bool tracks, bool playlists)
         const auto keep = selectedTrackId();
         tableModel->reload();
         trackTable.updateContent();
-        if (keep != 0)
+        if (!selectRowsAfterReload.empty())
+        {
+            trackTable.deselectAllRows();
+            for (const int r : std::exchange(selectRowsAfterReload, {}))
+                trackTable.selectRow(r, false, false);
+        }
+        else if (keep != 0)
+        {
             selectTrack(keep);
+        }
         trackTable.repaint();
         updateCount();
     }
@@ -1032,7 +1093,8 @@ bool LibraryBrowser::isInterestedInFileDrag(const juce::StringArray& files)
     if (tableModel == nullptr || !onImport)
         return false;
     for (const auto& path : files)
-        if (const juce::File f(path); f.isDirectory() || engine::isSupportedTrackFile(f))
+        if (const juce::File f(path); f.isDirectory() || engine::isSupportedTrackFile(f) ||
+                                      f.hasFileExtension(".m3u;.m3u8"))
             return true;
     return false;
 }
@@ -1055,8 +1117,9 @@ void LibraryBrowser::filesDropped(const juce::StringArray& files, int, int)
     repaint();
     juce::Array<juce::File> toImport;
     for (const auto& path : files)
-        if (const juce::File f(path); f.isDirectory() || engine::isSupportedTrackFile(f))
-            toImport.add(f);
+        if (const juce::File f(path); f.isDirectory() || engine::isSupportedTrackFile(f) ||
+                                      f.hasFileExtension(".m3u;.m3u8"))
+            toImport.add(f); // playlist files become playlists
     if (!toImport.isEmpty() && onImport)
         onImport(toImport);
 }
@@ -1170,6 +1233,455 @@ void LibraryBrowser::paintOverChildren(juce::Graphics& g)
                                                                        : "Empty playlist.";
         g.drawFittedText(text, where.reduced(20), juce::Justification::centredTop, 2);
     }
+}
+
+// --- playlists (P2-06) -----------------------------------------------------------------------------------------------
+
+std::optional<library::Playlist> LibraryBrowser::playlistInfo(std::int64_t id)
+{
+    if (reader == nullptr || id <= 0)
+        return std::nullopt;
+    return library::PlaylistRepository(*reader).get(id);
+}
+
+std::int64_t LibraryBrowser::shownPlaylist() const noexcept
+{
+    return currentView == View::Playlist ? currentPlaylist : 0;
+}
+
+bool LibraryBrowser::canReorder() const noexcept
+{
+    return shownPlaylist() > 0 && tableModel != nullptr && tableModel->sortColumn() == TrackColumn::Number &&
+           tableModel->sortAscending() && tableModel->filter().isEmpty();
+}
+
+std::vector<int> LibraryBrowser::selectedRows() const
+{
+    std::vector<int> rows;
+    const auto set = trackTable.getSelectedRows();
+    for (int i = 0; i < set.size(); ++i)
+        rows.push_back(set[i]);
+    return rows;
+}
+
+std::vector<std::int64_t> LibraryBrowser::selectedTrackIds() const
+{
+    std::vector<std::int64_t> ids;
+    if (tableModel == nullptr || currentView == View::Folders)
+        return ids;
+    for (const int r : selectedRows())
+        ids.push_back(tableModel->trackIdAt(r));
+    return ids;
+}
+
+juce::String LibraryBrowser::uniquePlaylistName(const juce::String& base, std::optional<std::int64_t> parent)
+{
+    juce::StringArray taken;
+    if (reader != nullptr)
+        for (const auto& p : library::PlaylistRepository(*reader).children(parent))
+            taken.add(juce::String::fromUTF8(p.name.c_str()));
+    if (!taken.contains(base, true))
+        return base;
+    for (int n = 2;; ++n)
+        if (const auto name = base + " " + juce::String(n); !taken.contains(name, true))
+            return name;
+}
+
+void LibraryBrowser::createPlaylist(const juce::String& name, std::optional<std::int64_t> parent, bool folder)
+{
+    if (database == nullptr)
+        return;
+    const auto text = name.trim().toStdString();
+    juce::Component::SafePointer<LibraryBrowser> self(this);
+    database->write(
+        [text, parent, folder, self](library::Connection& c)
+        {
+            library::Playlist p;
+            p.parentId = parent;
+            p.name = text;
+            p.kind = folder ? library::PlaylistKind::Folder : library::PlaylistKind::Playlist;
+            const auto created = library::PlaylistRepository(c).create(p);
+            const auto error = created ? juce::String() : juce::String::fromUTF8(created.error().c_str());
+            const auto id = created ? created.value() : std::int64_t{0};
+            // Before the change notification's refresh: select the new playlist once the tree has it.
+            juce::MessageManager::callAsync(
+                [self, id, error, folder]
+                {
+                    if (self == nullptr)
+                        return;
+                    if (error.isNotEmpty())
+                        self->setStatus("Can't create it: " + error);
+                    else if (!folder)
+                        self->selectAfterRebuild = id;
+                });
+        });
+}
+
+void LibraryBrowser::renamePlaylist(std::int64_t id, const juce::String& name)
+{
+    if (database == nullptr)
+        return;
+    const auto text = name.trim().toStdString();
+    juce::Component::SafePointer<LibraryBrowser> self(this);
+    database->write(
+        [id, text, self](library::Connection& c)
+        {
+            library::PlaylistRepository repo(c);
+            auto p = repo.get(id);
+            if (!p)
+                return;
+            p->name = text;
+            if (!repo.update(*p))
+            {
+                const auto error = juce::String::fromUTF8(repo.error().c_str());
+                juce::MessageManager::callAsync(
+                    [self, error]
+                    {
+                        if (self != nullptr)
+                            self->setStatus("Can't rename it: " + error);
+                    });
+            }
+        });
+}
+
+void LibraryBrowser::deletePlaylist(std::int64_t id)
+{
+    if (database == nullptr)
+        return;
+    if (shownPlaylist() == id)
+        showCollection();
+    database->write([id](library::Connection& c) { library::PlaylistRepository(c).remove(id); });
+}
+
+void LibraryBrowser::addTracksToPlaylist(std::int64_t playlistId, const std::vector<std::int64_t>& trackIds)
+{
+    if (database == nullptr || trackIds.empty())
+        return;
+    const auto info = playlistInfo(playlistId);
+    juce::Component::SafePointer<LibraryBrowser> self(this);
+    const auto name = info ? juce::String::fromUTF8(info->name.c_str()) : juce::String();
+    database->write(
+        [playlistId, trackIds, self, name](library::Connection& c)
+        {
+            library::PlaylistRepository repo(c);
+            const bool ok = repo.addTracks(playlistId, trackIds);
+            const auto text = ok ? "Added " + juce::String(static_cast<int>(trackIds.size())) +
+                                       (trackIds.size() == 1 ? " track to " : " tracks to ") + name
+                                 : "Can't add: " + juce::String::fromUTF8(repo.error().c_str());
+            juce::MessageManager::callAsync(
+                [self, text]
+                {
+                    if (self != nullptr)
+                        self->setStatus(text);
+                });
+        });
+}
+
+bool LibraryBrowser::removeSelectedFromPlaylist()
+{
+    const auto playlist = shownPlaylist();
+    const auto rows = selectedRows();
+    if (database == nullptr || playlist <= 0 || rows.empty() || tableModel == nullptr)
+        return false;
+    // Rows of the table are positions only when the list is in playlist order; otherwise map by track.
+    std::vector<int> positions;
+    if (canReorder())
+        positions = rows;
+    else
+    {
+        std::vector<std::int64_t> ids;
+        if (reader != nullptr)
+            ids = library::PlaylistRepository(*reader).trackIds(playlist);
+        std::vector<bool> used(ids.size(), false);
+        for (const auto id : selectedTrackIds())
+            for (std::size_t i = 0; i < ids.size(); ++i)
+                if (!used[i] && ids[i] == id)
+                {
+                    used[i] = true;
+                    positions.push_back(static_cast<int>(i));
+                    break;
+                }
+    }
+    trackTable.deselectAllRows();
+    database->write([playlist, positions](library::Connection& c)
+                    { library::PlaylistRepository(c).removeTracksAt(playlist, positions); });
+    return true;
+}
+
+void LibraryBrowser::moveSelectedRows(int insertBefore)
+{
+    const auto playlist = shownPlaylist();
+    if (database == nullptr || !canReorder() || reader == nullptr)
+        return;
+    auto rows = selectedRows();
+    if (rows.empty())
+        return;
+    auto ids = library::PlaylistRepository(*reader).trackIds(playlist);
+    const int n = static_cast<int>(ids.size());
+    insertBefore = std::clamp(insertBefore, 0, n);
+    std::vector<std::int64_t> moved, rest;
+    std::vector<bool> isMoved(ids.size(), false);
+    for (const int r : rows)
+        if (r >= 0 && r < n)
+            isMoved[static_cast<std::size_t>(r)] = true;
+    int insertAt = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        if (i == insertBefore)
+            insertAt = static_cast<int>(rest.size());
+        (isMoved[static_cast<std::size_t>(i)] ? moved : rest).push_back(ids[static_cast<std::size_t>(i)]);
+    }
+    if (insertBefore >= n)
+        insertAt = static_cast<int>(rest.size());
+    rest.insert(rest.begin() + insertAt, moved.begin(), moved.end());
+    if (rest == ids)
+        return;
+    // Keep the moved rows selected at their new place (once the table has the new order).
+    selectRowsAfterReload.clear();
+    for (int i = 0; i < static_cast<int>(moved.size()); ++i)
+        selectRowsAfterReload.push_back(insertAt + i);
+    database->write([playlist, rest](library::Connection& c) { library::PlaylistRepository(c).setTracks(playlist, rest); });
+}
+
+juce::String LibraryBrowser::exportPlaylist(std::int64_t id, const juce::File& file)
+{
+    if (reader == nullptr)
+        return "The library isn't open";
+    const auto result =
+        library::exportPlaylist(*reader, id, std::filesystem::path(file.getFullPathName().toWideCharPointer()));
+    if (!result)
+        return juce::String::fromUTF8(result.error().c_str());
+    setStatus("Exported " + juce::String(result.value()) + " tracks to " + file.getFileName());
+    return {};
+}
+
+void LibraryBrowser::askName(const juce::String& title, const juce::String& initial,
+                             std::function<void(juce::String)> done)
+{
+    auto* w = new juce::AlertWindow(title, {}, juce::MessageBoxIconType::NoIcon, this);
+    w->addTextEditor("name", initial);
+    w->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    w->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    if (auto* editor = w->getTextEditor("name"))
+        editor->selectAll();
+    w->enterModalState(true,
+                       juce::ModalCallbackFunction::create(
+                           [w, done = std::move(done)](int result)
+                           {
+                               const auto name = w->getTextEditorContents("name").trim();
+                               if (result == 1 && name.isNotEmpty())
+                                   done(name);
+                           }),
+                       true);
+}
+
+void LibraryBrowser::confirmDelete(std::int64_t id)
+{
+    const auto info = playlistInfo(id);
+    if (!info)
+        return;
+    const bool folder = info->kind == library::PlaylistKind::Folder;
+    const auto name = juce::String::fromUTF8(info->name.c_str());
+    juce::Component::SafePointer<LibraryBrowser> self(this);
+    juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::QuestionIcon, folder ? "Delete folder" : "Delete playlist",
+                                       "Delete \"" + name + "\"" + (folder ? " and everything in it?" : "?") +
+                                           "\nThe tracks stay in the collection.",
+                                       "Delete", "Cancel", this,
+                                       juce::ModalCallbackFunction::create(
+                                           [self, id](int result)
+                                           {
+                                               if (result == 1 && self != nullptr) // 1 = Delete, 0 = Cancel
+                                                   self->deletePlaylist(id);
+                                           }));
+}
+
+void LibraryBrowser::chooseExportFile(std::int64_t id)
+{
+    const auto info = playlistInfo(id);
+    if (!info)
+        return;
+    const auto name = juce::File::createLegalFileName(juce::String::fromUTF8(info->name.c_str()));
+    exportChooser = std::make_unique<juce::FileChooser>(
+        "Export playlist", juce::File::getSpecialLocation(juce::File::userMusicDirectory).getChildFile(name + ".m3u8"),
+        "*.m3u8");
+    juce::Component::SafePointer<LibraryBrowser> self(this);
+    exportChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
+                               [self, id](const juce::FileChooser& fc)
+                               {
+                                   auto file = fc.getResult();
+                                   if (self == nullptr || file == juce::File())
+                                       return;
+                                   if (!file.hasFileExtension(".m3u8;.m3u"))
+                                       file = file.withFileExtension(".m3u8");
+                                   if (const auto error = self->exportPlaylist(id, file); error.isNotEmpty())
+                                       self->setStatus("Export failed: " + error);
+                               });
+}
+
+juce::PopupMenu LibraryBrowser::menuForTree(std::int64_t id, View section)
+{
+    juce::PopupMenu m;
+    if (tableModel == nullptr || section != View::Playlist)
+        return m; // smart playlists: P2-07; history: P2-23
+    juce::Component::SafePointer<LibraryBrowser> self(this);
+    const auto info = playlistInfo(id);
+    const bool isFolder = id == 0 || (info && info->kind == library::PlaylistKind::Folder);
+    const std::optional<std::int64_t> parent = id == 0 ? std::nullopt : std::optional<std::int64_t>(id);
+    if (isFolder)
+    {
+        m.addItem("New playlist",
+                  [self, parent]
+                  {
+                      if (self != nullptr)
+                          self->askName("New playlist", self->uniquePlaylistName("New playlist", parent),
+                                        [self, parent](juce::String name)
+                                        {
+                                            if (self != nullptr)
+                                                self->createPlaylist(name, parent);
+                                        });
+                  });
+        m.addItem("New folder",
+                  [self, parent]
+                  {
+                      if (self != nullptr)
+                          self->askName("New folder", self->uniquePlaylistName("New folder", parent),
+                                        [self, parent](juce::String name)
+                                        {
+                                            if (self != nullptr)
+                                                self->createPlaylist(name, parent, true);
+                                        });
+                  });
+        m.addItem("Import M3U / M3U8 playlist...",
+                  [self, parent]
+                  {
+                      if (self != nullptr && self->onImportPlaylist)
+                          self->onImportPlaylist(parent);
+                  });
+    }
+    if (id > 0 && info)
+    {
+        if (isFolder)
+            m.addSeparator();
+        const auto current = juce::String::fromUTF8(info->name.c_str());
+        m.addItem("Rename...",
+                  [self, id, current]
+                  {
+                      if (self != nullptr)
+                          self->askName("Rename", current,
+                                        [self, id](juce::String name)
+                                        {
+                                            if (self != nullptr)
+                                                self->renamePlaylist(id, name);
+                                        });
+                  });
+        if (!isFolder)
+            m.addItem("Export as M3U8...",
+                      [self, id]
+                      {
+                          if (self != nullptr)
+                              self->chooseExportFile(id);
+                      });
+        m.addItem("Delete...",
+                  [self, id]
+                  {
+                      if (self != nullptr)
+                          self->confirmDelete(id);
+                  });
+    }
+    return m;
+}
+
+void LibraryBrowser::showTreeMenu(std::int64_t id, View section)
+{
+    auto m = menuForTree(id, section);
+    if (m.getNumItems() > 0)
+        m.showMenuAsync(juce::PopupMenu::Options().withMousePosition());
+}
+
+juce::PopupMenu LibraryBrowser::menuForTracks()
+{
+    juce::PopupMenu m;
+    const auto ids = selectedTrackIds();
+    if (ids.empty())
+        return m;
+    juce::Component::SafePointer<LibraryBrowser> self(this);
+    m.addItem("Load to deck A", [self]
+              {
+                  if (self != nullptr)
+                      self->loadSelected(0);
+              });
+    m.addItem("Load to deck B", [self]
+              {
+                  if (self != nullptr)
+                      self->loadSelected(1);
+              });
+    m.addSeparator();
+
+    // Add to playlist: every playlist, folders as submenus.
+    juce::PopupMenu add;
+    if (reader != nullptr)
+    {
+        library::PlaylistRepository repo(*reader);
+        std::function<void(juce::PopupMenu&, std::optional<std::int64_t>)> fill =
+            [&](juce::PopupMenu& menu, std::optional<std::int64_t> parent)
+        {
+            for (const auto& p : repo.children(parent))
+            {
+                const auto name = juce::String::fromUTF8(p.name.c_str());
+                if (p.kind == library::PlaylistKind::Folder)
+                {
+                    juce::PopupMenu sub;
+                    fill(sub, p.id);
+                    menu.addSubMenu(name, sub, sub.getNumItems() > 0);
+                }
+                else if (p.kind == library::PlaylistKind::Playlist)
+                {
+                    const auto playlistId = p.id;
+                    menu.addItem(name, p.id != shownPlaylist(),
+                                 false, [self, playlistId, ids]
+                                 {
+                                     if (self != nullptr)
+                                         self->addTracksToPlaylist(playlistId, ids);
+                                 });
+                }
+            }
+        };
+        fill(add, std::nullopt);
+    }
+    add.addSeparator();
+    add.addItem("New playlist with these tracks...",
+                [self, ids]
+                {
+                    if (self == nullptr)
+                        return;
+                    self->askName("New playlist", self->uniquePlaylistName("New playlist", std::nullopt),
+                                  [self, ids](juce::String name)
+                                  {
+                                      if (self == nullptr || self->database == nullptr)
+                                          return;
+                                      const auto text = name.toStdString();
+                                      self->database->write(
+                                          [text, ids](library::Connection& c)
+                                          {
+                                              library::PlaylistRepository repo(c);
+                                              library::Playlist p;
+                                              p.name = text;
+                                              if (const auto created = repo.create(p))
+                                                  repo.setTracks(created.value(), ids);
+                                          });
+                                  });
+                });
+    m.addSubMenu("Add to playlist", add);
+    if (shownPlaylist() > 0)
+        m.addItem("Remove from playlist (Delete)", [self]
+                  {
+                      if (self != nullptr)
+                          self->removeSelectedFromPlaylist();
+                  });
+    m.addSeparator();
+    const auto file = selectedTrackFile();
+    m.addItem("Show in Explorer", file.existsAsFile(), false, [file] { file.revealToUser(); });
+    return m;
 }
 
 } // namespace devildj::ui

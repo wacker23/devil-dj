@@ -69,6 +69,7 @@ public:
             kDebugBuild || commandLine.contains("--debug-menu") || settings->get(keys::showDebugMenu);
         menu = std::make_unique<AppMenu>(logDirectory(), showDebugMenu);
         menu->onImportFolder = [this] { mainComponent->importToLibrary({}); };
+        menu->onImportPlaylist = [this] { mainComponent->importPlaylistFile(); };
         menu->onAudioSettings = [this]
         {
             AudioSettingsComponent::Callbacks callbacks;

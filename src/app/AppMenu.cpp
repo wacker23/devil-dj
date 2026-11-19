@@ -28,6 +28,7 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
     if (menuName == "Decks")
     {
         menu.addItem(ImportFolder, "Add music folder to the library...");
+        menu.addItem(ImportPlaylist, "Import playlist (M3U / M3U8)...");
         menu.addSeparator();
         menu.addItem(LoadDeckA, "Load track to deck A...");
         menu.addItem(LoadDeckB, "Load track to deck B...");
@@ -122,6 +123,11 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
         case ImportFolder:
             if (onImportFolder)
                 onImportFolder();
+            break;
+
+        case ImportPlaylist:
+            if (onImportPlaylist)
+                onImportPlaylist();
             break;
 
         case DebugOverlay:

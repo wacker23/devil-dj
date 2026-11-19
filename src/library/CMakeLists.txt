@@ -6,6 +6,7 @@ add_library(devildj_library STATIC
     CueRepository.cpp
     Importer.cpp
     Migrations.cpp
+    PlaylistFiles.cpp
     PlaylistRepository.cpp
     TagReader.cpp
     TagRepository.cpp
@@ -22,6 +23,7 @@ target_sources(devildj_library PUBLIC
         CueRepository.h
         Importer.h
         Migrations.h
+        PlaylistFiles.h
         PlaylistRepository.h
         RepositoryUtil.h
         TagReader.h
