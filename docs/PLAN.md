@@ -219,7 +219,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   `TrackRepository`, `PlaylistRepository`, `CueRepository`, `TagRepository` with typed C++ structs; all DB access off the audio thread; change notifications to UI.
   Done when: CRUD unit tests per repository.
 
-- [ ] **P2-04 Browser UI**
+- [x] **P2-04 Browser UI**
   Left: tree (Collection, Playlists, Smart playlists, History, Folders). Right: virtualized `juce::TableListBox` with configurable/sortable columns (title, artist, BPM, key, time, rating, colour, genre, date added, comment). Artwork thumbnail. Handles 50,000 tracks smoothly.
   Done when: scrolling 50k rows at 60 fps; column layout persists.
 

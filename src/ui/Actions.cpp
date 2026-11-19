@@ -202,6 +202,8 @@ std::string commandShortName(CommandId id)
             return "Keymap";
         case GA::BrowserSearch:
             return "Search";
+        case GA::BrowserBigger:
+            return "Big";
         case GA::PreviewTrack:
             return "Preview";
         case GA::SwitchPanel:

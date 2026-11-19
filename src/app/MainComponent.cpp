@@ -1,6 +1,8 @@
 #include "MainComponent.h"
 
 #include "engine/TrackDecoder.h"
+#include "library/Database.h"
+#include "library/Importer.h"
 #include "util/Log.h"
 #include "util/ProcessStats.h"
 
@@ -8,6 +10,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
+#include <vector>
 
 namespace devildj::app
 {
@@ -15,10 +19,79 @@ namespace devildj::app
 namespace
 {
 constexpr int kOverlayMargin = 12;
+
+std::filesystem::path toPath(const juce::File& f)
+{
+    return std::filesystem::path(f.getFullPathName().toWideCharPointer());
 }
 
+// Runs library::importTracks on its own low-priority thread; progress and the result go to the browser's status
+// line on the message thread.
+class ImportJob final : public juce::Thread
+{
+public:
+    ImportJob(library::Database& d, juce::Array<juce::File> in, juce::File art, ui::LibraryBrowser& b)
+        : juce::Thread("Library import")
+        , db(d)
+        , inputs(std::move(in))
+        , artwork(std::move(art))
+        , browser(&b)
+    {
+    }
+    ~ImportJob() override { stopThread(10000); }
+
+    void run() override
+    {
+        std::vector<std::filesystem::path> paths;
+        for (const auto& f : inputs)
+            paths.push_back(toPath(f));
+        library::ImportOptions options;
+        options.artworkCacheDir = toPath(artwork);
+        options.isCancelled = [this] { return threadShouldExit(); };
+        options.onProgress = [this](int done, int total)
+        { post("Adding to the library... " + juce::String(done) + " / " + juce::String(total)); };
+        post("Looking for music...");
+        const auto r = library::importTracks(db, paths, options);
+
+        juce::String text = r.cancelled ? "Import stopped: " : "Added ";
+        text << r.added << (r.added == 1 ? " track" : " tracks");
+        if (r.alreadyInLibrary > 0)
+            text << ", " << r.alreadyInLibrary << " already in the library";
+        if (r.duplicates > 0)
+            text << ", " << r.duplicates << " duplicate" << (r.duplicates == 1 ? "" : "s");
+        if (r.failed > 0)
+            text << ", " << r.failed << " unreadable";
+        text << " (" << juce::String(r.seconds, 1) << " s)";
+        if (r.found == 0)
+            text = "No music files found there";
+        util::logInfo("Library import: {} found, {} added, {} known, {} duplicates, {} failed, {:.1f} s", r.found,
+                      r.added, r.alreadyInLibrary, r.duplicates, r.failed, r.seconds);
+        for (const auto& e : r.errors)
+            util::logWarning("Library import: {}", e);
+        post(text);
+    }
+
+private:
+    void post(const juce::String& text)
+    {
+        juce::MessageManager::callAsync(
+            [b = browser, text]
+            {
+                if (b != nullptr)
+                    b->setStatus(text);
+            });
+    }
+
+    library::Database& db;
+    juce::Array<juce::File> inputs;
+    juce::File artwork;
+    juce::Component::SafePointer<ui::LibraryBrowser> browser;
+};
+} // namespace
+
 MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDeviceService& audioService,
-                             engine::TrackLoader& trackLoader, engine::BufferRegistry& bufferRegistry)
+                             engine::TrackLoader& trackLoader, engine::BufferRegistry& bufferRegistry,
+                             library::Database* db, const juce::String& libraryProblem)
     : engine(audioEngine)
     , audio(audioService)
     , loader(trackLoader)
@@ -27,6 +100,8 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
                            { return audioService.getStatus(); }, [&audioEngine](const engine::EngineCommand& c)
                            { audioEngine.send(c); }, [] { return util::processMemory().privateMb; },
                            [] { return juce::Time::getMillisecondCounterHiRes() / 1000.0; }})
+    , libraryDb(db)
+    , libraryBrowser(std::make_unique<ui::LibraryBrowser>(db, artworkFolder(), libraryProblem))
     , overlay([&audioEngine] { return audioEngine.readState(); }, [&audioService] { return audioService.getStatus(); })
 {
     addAndMakeVisible(deckA);
@@ -34,9 +109,11 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     addAndMakeVisible(mixer);
     addAndMakeVisible(waveA);
     addAndMakeVisible(waveB);
-    addAndMakeVisible(browserPanel);
-    browserPanel.onLoad = [this](int deck, const juce::File& file)
+    addAndMakeVisible(*libraryBrowser);
+    libraryBrowser->onLoad = [this](int deck, const juce::File& file)
     { loadFile(static_cast<engine::DeckId>(deck), file); };
+    libraryBrowser->onImport = [this](const juce::Array<juce::File>& files) { importToLibrary(files); };
+    libraryBrowser->onToggleSize = [this] { toggleBrowserSize(); };
     for (auto [target, deck] :
          {std::pair<ui::TrackDropTarget*, engine::DeckId>{&deckA, 0}, {&deckB, 1}, {&waveA, 0}, {&waveB, 1}})
         target->onTrackDropped = [this, deck = deck](const juce::File& file) { loadFile(deck, file); };
@@ -164,7 +241,7 @@ void MainComponent::registerActions()
         onPress(cmd(DA::Load),
                 [this, d]
                 {
-                    if (!browserPanel.loadSelected(d)) // nothing selected in the browser: ask for a file
+                    if (!libraryBrowser->loadSelected(d)) // nothing selected in the browser: ask for a file
                         chooseTrackForDeck(d);
                 });
     }
@@ -188,15 +265,17 @@ void MainComponent::registerActions()
                            {
                                if (p == Phase::Release)
                                    return;
-                               const int page = browserPanel.pageSize();
-                               browserPanel.moveSelection(rows == 0 ? 0 : rows > 1 ? page : rows < -1 ? -page : rows);
+                               const int page = libraryBrowser->pageSize();
+                               libraryBrowser->moveSelection(rows > 1 ? page : rows < -1 ? -page : rows);
                            });
     };
     move(GA::BrowserUp, -1);
     move(GA::BrowserDown, 1);
     move(GA::BrowserPageUp, -2);
     move(GA::BrowserPageDown, 2);
-    onPress(ui::globalCommand(GA::BrowserCollapse), [this] { browserPanel.goToParentFolder(); });
+    onPress(ui::globalCommand(GA::BrowserCollapse), [this] { libraryBrowser->collapse(); });
+    onPress(ui::globalCommand(GA::BrowserExpand), [this] { libraryBrowser->expand(); });
+    onPress(ui::globalCommand(GA::BrowserBigger), [this] { toggleBrowserSize(); });
     actions.setHandler(ui::globalCommand(GA::KeymapOverlay),
                        [this](Phase p)
                        {
@@ -348,6 +427,50 @@ void MainComponent::toggleKeyLock(engine::DeckId deck)
 MainComponent::~MainComponent()
 {
     loader.callbacks = {}; // the loader outlives this component; don't let late results call into it
+    importJob = nullptr;   // stops a running import (between batches) before the browser goes
+}
+
+juce::File MainComponent::artworkFolder()
+{
+    return juce::File::getSpecialLocation(juce::File::windowsLocalAppData).getChildFile("Devil-DJ/cache/artwork");
+}
+
+void MainComponent::toggleBrowserSize()
+{
+    browserBig = !browserBig;
+    libraryBrowser->setBig(browserBig);
+    resized();
+}
+
+bool MainComponent::isImporting() const
+{
+    return importJob != nullptr && importJob->isThreadRunning();
+}
+
+void MainComponent::importToLibrary(const juce::Array<juce::File>& filesOrFolders)
+{
+    if (libraryDb == nullptr)
+        return;
+    if (isImporting())
+    {
+        libraryBrowser->setStatus("Still adding the last folder - try again when it is done");
+        return;
+    }
+    if (filesOrFolders.isEmpty())
+    {
+        importChooser = std::make_unique<juce::FileChooser>(
+            "Add a music folder to the library", juce::File::getSpecialLocation(juce::File::userMusicDirectory));
+        importChooser->launchAsync(juce::FileBrowserComponent::openMode |
+                                       juce::FileBrowserComponent::canSelectDirectories,
+                                   [this](const juce::FileChooser& fc)
+                                   {
+                                       if (const auto folder = fc.getResult(); folder.isDirectory())
+                                           importToLibrary({folder});
+                                   });
+        return;
+    }
+    importJob = std::make_unique<ImportJob>(*libraryDb, filesOrFolders, artworkFolder(), *libraryBrowser);
+    importJob->startThread(juce::Thread::Priority::low);
 }
 
 void MainComponent::chooseTrackForDeck(engine::DeckId deck)
@@ -601,8 +724,18 @@ void MainComponent::resized()
     top.removeFromRight(6);
     mixer.setBounds(top);
 
-    const int browserHeight = std::max(130, area.getHeight() - 2 * 120 - 12); // waveforms up to ~120 px each
-    browserPanel.setBounds(area.removeFromBottom(browserHeight));
+    waveA.setVisible(!browserBig);
+    waveB.setVisible(!browserBig);
+    if (browserBig) // Ctrl+B: the browser gets the waveforms' room too
+    {
+        libraryBrowser->setBounds(area);
+        keymapOverlay.setBounds(getLocalBounds());
+        overlay.setBounds(getWidth() - ui::DebugOverlay::kWidth - kOverlayMargin, kOverlayMargin,
+                          ui::DebugOverlay::kWidth, ui::DebugOverlay::kHeight);
+        return;
+    }
+    const int browserHeight = std::max(160, area.getHeight() - 2 * 100 - 12); // waveforms up to ~100 px each
+    libraryBrowser->setBounds(area.removeFromBottom(browserHeight));
     area.removeFromBottom(6);
     const int waveHeight = (area.getHeight() - 6) / 2;
     waveA.setBounds(area.removeFromTop(waveHeight));

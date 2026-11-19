@@ -5,10 +5,11 @@
 #include "engine/AudioEngine.h"
 #include "engine/BufferRegistry.h"
 #include "engine/TrackLoader.h"
+#include "library/Database.h"
 #include "ui/Actions.h"
 #include "ui/DebugOverlay.h"
 #include "ui/DeckView.h"
-#include "ui/FileBrowserPanel.h"
+#include "ui/LibraryBrowser.h"
 #include "ui/KeyboardController.h"
 #include "ui/KeymapOverlay.h"
 #include "ui/MixerView.h"
@@ -22,13 +23,16 @@
 namespace devildj::app
 {
 
-// Root component of the main window: deck views on top, zoomed waveforms below; mixer and browser later.
-// Hosts the debug overlay (F12) for now.
-class MainComponent final : public juce::Component
+// Root component of the main window: deck A | mixer | deck B on top, the zoomed waveforms, the library browser
+// at the bottom. Hosts the debug overlay (F12). It is the drag-and-drop container for library rows dragged onto
+// the decks.
+class MainComponent final : public juce::Component, public juce::DragAndDropContainer
 {
 public:
+    // libraryDb may be null when the library couldn't be opened (libraryProblem says why).
     MainComponent(engine::AudioEngine& engine, engine::AudioDeviceService& audio, engine::TrackLoader& loader,
-                  engine::BufferRegistry& registry);
+                  engine::BufferRegistry& registry, library::Database* libraryDb = nullptr,
+                  const juce::String& libraryProblem = {});
     ~MainComponent() override;
 
     void paint(juce::Graphics& g) override;
@@ -40,7 +44,17 @@ public:
     // Loading: from the browser panel, a dropped file, or (no file selected) a file chooser.
     void chooseTrackForDeck(engine::DeckId deck);
     void loadFile(engine::DeckId deck, const juce::File& file);
-    ui::FileBrowserPanel& browser() noexcept { return browserPanel; }
+    ui::LibraryBrowser& libraryView() noexcept { return *libraryBrowser; }
+    ui::FileBrowserPanel& browser() noexcept { return libraryBrowser->folders(); }
+
+    // Library import (P2-04): files / folders on a worker thread; empty = ask for a folder. Progress and the
+    // result show in the browser's status line.
+    void importToLibrary(const juce::Array<juce::File>& filesOrFolders);
+    bool isImporting() const;
+    // Ctrl+B / the browser's BIGGER button: the browser takes the waveforms' room too (they hide), and back.
+    void toggleBrowserSize();
+    bool isBrowserBig() const noexcept { return browserBig; }
+    static juce::File artworkFolder(); // %LOCALAPPDATA%\Devil-DJ\cache\artwork
     void unloadDeck(engine::DeckId deck);
 
 private:
@@ -78,7 +92,11 @@ private:
                            [this] { return outputLatencySeconds(); }};
     ui::WaveformView waveB{engine, 1, [this](engine::BufferId id) { return registry.get(id); },
                            [this] { return outputLatencySeconds(); }};
-    ui::FileBrowserPanel browserPanel; // P1-18, bottom
+    library::Database* libraryDb;
+    std::unique_ptr<ui::LibraryBrowser> libraryBrowser; // P2-04, bottom
+    std::unique_ptr<juce::Thread> importJob;
+    bool browserBig = false;
+    std::unique_ptr<juce::FileChooser> importChooser;
     ui::DebugOverlay overlay;
     ui::KeymapOverlay keymapOverlay; // Ctrl+/ held (P1-17)
     SoakTest soak;

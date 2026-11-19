@@ -324,6 +324,7 @@ Waveform cache format `.wfm`: header (magic `DDJW`, version u16, sample rate u32
 ## 9. UI architecture
 
 - `MainComponent` hosts layout areas: top (deck A, mixer, deck B), centre (waveforms), bottom (browser / Beat Maker / Code Beat tabs), side panels (sampler, FX, next-track).
+- Library browser (`ui::LibraryBrowser`): tree (Collection, Playlists, Smart playlists, History, Folders) + a `juce::TableListBox` fed by `ui::TrackTableModel`, which reads only the ordered id list on a sort / source change and the rows a page of 200 at a time when first painted (32 pages kept). It owns the UI's read-only connection and refreshes from the database change notifications (posted to the message thread). Imports run on a worker thread (`MainComponent::importToLibrary`).
 - All user actions go through `ui::ActionDispatcher::perform(CommandId, ActionPhase)`; components, `KeyboardController`, MIDI Learn and the phone remote all call it.
 - Keys: `ui::PhysicalKeyHook` (a `WH_KEYBOARD` hook on the UI thread only) reads the hardware scan code of each key message before the IME or JUCE see it, and `ui::KeyboardController` maps scan code + modifiers to a `CommandId` per focus context (Main, Beat Maker, Code Beat; a focused text field takes all keys). JUCE also detaches the IME from windows whose focused component isn't a text input.
 - Views never hold engine pointers; they read `EngineState` (latest) and send `EngineCommand`s.

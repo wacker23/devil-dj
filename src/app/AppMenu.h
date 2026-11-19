@@ -19,6 +19,7 @@ public:
     AppMenu(juce::File logDirectory, bool showDebugMenu);
 
     std::function<void()> onAudioSettings;
+    std::function<void()> onImportFolder; // library (P2-04)
     std::function<void()> onToggleDebugOverlay;
     std::function<void()> onToggleTestTone;
     std::function<void(int deck)> onLoadTrack;
@@ -44,6 +45,7 @@ private:
     enum ItemId
     {
         AudioSettings = 1,
+        ImportFolder,
         DebugOverlay,
         TestTone,
         LoadDeckA,

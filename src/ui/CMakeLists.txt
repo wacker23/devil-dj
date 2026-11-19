@@ -14,11 +14,15 @@ target_sources(devildj_ui INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/KeyboardController.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/KeymapOverlay.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/KeymapOverlay.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/LibraryBrowser.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/LibraryBrowser.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/MixerControls.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/MixerControls.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/MixerView.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/MixerView.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/TrackDropTarget.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/TrackTableModel.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/TrackTableModel.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/DebugOverlay.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/WaveformColours.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/WaveformView.cpp"
@@ -28,4 +32,5 @@ target_include_directories(devildj_ui INTERFACE "${PROJECT_SOURCE_DIR}/src")
 
 target_link_libraries(devildj_ui INTERFACE
     juce::juce_gui_basics
-    devildj::engine)
+    devildj::engine
+    devildj::library)

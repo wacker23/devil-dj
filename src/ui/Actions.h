@@ -144,7 +144,8 @@ namespace devildj::ui
     X(CodeConsole, "Code Beat: console", false)                                                                        \
     X(CodeNextBuffer, "Code Beat: next buffer", false)                                                                 \
     X(CodePreviousBuffer, "Code Beat: previous buffer", false)                                                         \
-    X(CodeAutocomplete, "Code Beat: autocomplete", false)
+    X(CodeAutocomplete, "Code Beat: autocomplete", false)                                                              \
+    X(BrowserBigger, "Browser: bigger / smaller", false)
 
 enum class DeckAction : std::uint16_t
 {

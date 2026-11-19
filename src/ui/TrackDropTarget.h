@@ -9,9 +9,11 @@
 namespace devildj::ui
 {
 
-// Drag-and-drop of audio files from Windows Explorer onto a deck (P1-18). Components that show a deck
-// (DeckView, WaveformView) derive from this and draw `isDropHovering()` as a highlight.
-class TrackDropTarget : public juce::FileDragAndDropTarget
+// Drag-and-drop onto a deck: audio files from Windows Explorer (P1-18) and rows dragged from the library table
+// (P2-04: the drag description is the track's file path; the main window is the DragAndDropContainer).
+// Components that show a deck (DeckView, WaveformView) derive from this and draw `isDropHovering()` as a
+// highlight.
+class TrackDropTarget : public juce::FileDragAndDropTarget, public juce::DragAndDropTarget
 {
 public:
     std::function<void(const juce::File& file)> onTrackDropped;
@@ -32,6 +34,25 @@ public:
     {
         setDropHover(false);
         if (const auto file = firstTrack(paths); file != juce::File() && onTrackDropped)
+            onTrackDropped(file);
+    }
+
+    // Library rows.
+    static juce::File trackFromDrag(const SourceDetails& details)
+    {
+        const auto path = details.description.toString();
+        if (path.isEmpty() || !juce::File::isAbsolutePath(path))
+            return {};
+        const juce::File f(path);
+        return engine::isSupportedTrackFile(f) ? f : juce::File();
+    }
+    bool isInterestedInDragSource(const SourceDetails& details) override { return trackFromDrag(details) != juce::File(); }
+    void itemDragEnter(const SourceDetails&) override { setDropHover(true); }
+    void itemDragExit(const SourceDetails&) override { setDropHover(false); }
+    void itemDropped(const SourceDetails& details) override
+    {
+        setDropHover(false);
+        if (const auto file = trackFromDrag(details); file != juce::File() && onTrackDropped)
             onTrackDropped(file);
     }
 

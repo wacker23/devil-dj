@@ -22,4 +22,8 @@ inline const SettingKey<bool> showDebugMenu{"showDebugMenu", false};
 // Folder shown in the temporary file browser (P1-18). Empty = the Music folder.
 inline const SettingKey<juce::String> browserFolder{"browserFolder", {}};
 
+// Library track table columns (P2-04): order, widths, hidden columns and sort, as written by
+// juce::TableHeaderComponent::toString(). Empty = the default layout.
+inline const SettingKey<juce::String> libraryColumns{"libraryColumns", {}};
+
 } // namespace devildj::app::keys

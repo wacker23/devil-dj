@@ -9,6 +9,7 @@
 #include "engine/AudioEngine.h"
 #include "engine/BufferRegistry.h"
 #include "engine/TrackLoader.h"
+#include "library/Database.h"
 #include "util/CrashHandler.h"
 #include "util/Log.h"
 
@@ -49,8 +50,10 @@ public:
         util::logInfo("Settings: {}", settings->getFile().getFullPathName().toStdString());
 
         startAudio();
+        const juce::String libraryProblem = openLibrary();
 
-        auto content = std::make_unique<MainComponent>(*engine, *audio, *loader, *registry);
+        auto content = std::make_unique<MainComponent>(*engine, *audio, *loader, *registry, database.get(),
+                                                       libraryProblem);
         mainComponent = content.get();
         mainWindow = std::make_unique<MainWindow>(getApplicationName(), *settings, std::move(content));
         mainComponent->grabKeyboardFocus();
@@ -58,10 +61,14 @@ public:
             mainComponent->browser().setFolder(folder);
         mainComponent->browser().onFolderChanged = [this](const juce::File& folder)
         { settings->set(keys::browserFolder, folder.getFullPathName()); };
+        mainComponent->libraryView().setColumnLayout(settings->get(keys::libraryColumns));
+        mainComponent->libraryView().onColumnLayoutChanged = [this](const juce::String& layout)
+        { settings->set(keys::libraryColumns, layout); };
 
         const bool showDebugMenu =
             kDebugBuild || commandLine.contains("--debug-menu") || settings->get(keys::showDebugMenu);
         menu = std::make_unique<AppMenu>(logDirectory(), showDebugMenu);
+        menu->onImportFolder = [this] { mainComponent->importToLibrary({}); };
         menu->onAudioSettings = [this]
         {
             AudioSettingsComponent::Callbacks callbacks;
@@ -85,6 +92,7 @@ public:
                 mainComponent->startSoak(minutes, false);
         };
         startSoakFromCommandLine(commandLine);
+        importFromCommandLine(commandLine);
         menu->onOpenKeymapFolder = [this] { mainComponent->openKeymapFolder(); };
         menu->onToggleKeyLock = [this](int deck) { mainComponent->toggleKeyLock(static_cast<engine::DeckId>(deck)); };
         menu->onIsolator = [this](bool on) { mainComponent->setIsolator(on); };
@@ -99,8 +107,9 @@ public:
     {
         if (mainWindow != nullptr)
             mainWindow->setMenuBar(nullptr);
-        mainWindow = nullptr; // also destroys mainComponent
+        mainWindow = nullptr; // also destroys mainComponent (and stops a running import)
         mainComponent = nullptr;
+        database = nullptr; // runs the queued writes, then closes the library
         menu = nullptr;
         loader = nullptr; // cancels and waits for running loads
         if (audio != nullptr)
@@ -158,6 +167,21 @@ public:
         mainComponent->startSoakWhenLoaded(minutes, silent, quit);
     }
 
+    // --import="C:\Music\Folder" (P2-04): adds a folder (or file) to the library at start, like IMPORT.
+    void importFromCommandLine(const juce::String& commandLine)
+    {
+        juce::Array<juce::File> inputs;
+        for (auto arg : juce::StringArray::fromTokens(commandLine, true))
+        {
+            arg = arg.unquoted();
+            if (arg.startsWith("--import="))
+                if (const juce::File f(arg.fromFirstOccurrenceOf("=", false, false).unquoted()); f.exists())
+                    inputs.add(f);
+        }
+        if (!inputs.isEmpty())
+            mainComponent->importToLibrary(inputs);
+    }
+
     void anotherInstanceStarted(const juce::String& /*commandLine*/) override
     {
         if (mainWindow != nullptr)
@@ -186,6 +210,23 @@ private:
                       kDebugBuild ? "Debug" : "Release", juce::SystemStats::getOperatingSystemName().toStdString());
         if (!logging || !crashHandler)
             util::logWarning("Diagnostics incomplete: log={} crashHandler={}", logging, crashHandler);
+    }
+
+    // The library (ARCHITECTURE §8): %APPDATA%\Devil-DJ\library.db. Returns a problem to show, or empty.
+    juce::String openLibrary()
+    {
+        const auto file = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                              .getChildFile("Devil-DJ")
+                              .getChildFile("library.db");
+        auto opened = library::Database::open(std::filesystem::path(file.getFullPathName().toWideCharPointer()));
+        if (!opened)
+        {
+            util::logError("Library: can't open {}: {}", file.getFullPathName().toStdString(), opened.error());
+            return juce::String::fromUTF8(opened.error().c_str());
+        }
+        database = std::move(opened).value();
+        util::logInfo("Library: {} (schema {})", file.getFullPathName().toStdString(), database->schemaVersion());
+        return {};
     }
 
     // Opens the saved audio device (or the default one) and saves the user's choice whenever it changes.
@@ -230,6 +271,7 @@ private:
     std::unique_ptr<engine::AudioDeviceService> audio;
     std::unique_ptr<engine::BufferRegistry> registry;
     std::unique_ptr<engine::TrackLoader> loader;
+    std::unique_ptr<library::Database> database;
     std::unique_ptr<MainWindow> mainWindow;
     std::unique_ptr<AppMenu> menu;
     MainComponent* mainComponent = nullptr; // owned by mainWindow
