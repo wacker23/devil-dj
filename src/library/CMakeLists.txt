@@ -8,6 +8,7 @@ add_library(devildj_library STATIC
     Migrations.cpp
     PlaylistFiles.cpp
     PlaylistRepository.cpp
+    SmartRules.cpp
     TagReader.cpp
     TagRepository.cpp
     TrackRepository.cpp)
@@ -25,6 +26,7 @@ target_sources(devildj_library PUBLIC
         Migrations.h
         PlaylistFiles.h
         PlaylistRepository.h
+        SmartRules.h
         RepositoryUtil.h
         TagReader.h
         TagRepository.h

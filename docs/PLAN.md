@@ -231,7 +231,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   Create/rename/delete, folders, drag tracks in, reorder, delete from playlist, M3U/M3U8 import and export.
   Done when: round-trip M3U8 test.
 
-- [ ] **P2-07 Smart playlists**
+- [x] **P2-07 Smart playlists**
   Rule builder (field, operator, value; AND/OR), live-updating.
   Done when: rule → SQL generation unit tests.
 

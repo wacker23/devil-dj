@@ -39,6 +39,7 @@ target_sources(DevilDJTests PRIVATE
     library/ImporterTests.cpp
     library/LibrarySmokeTests.cpp
     library/PlaylistFilesTests.cpp
+    library/SmartRulesTests.cpp
     library/RepositoryTests.cpp
     library/TagReaderTests.cpp
     matcher/MatcherSmokeTests.cpp
@@ -51,6 +52,7 @@ target_sources(DevilDJTests PRIVATE
     ui/MixerViewTests.cpp
     ui/PlaylistBrowserTests.cpp
     ui/SearchFilterTests.cpp
+    ui/SmartPlaylistTests.cpp
     ui/WaveformViewTests.cpp
     util/CrashHandlerTests.cpp
     util/FractionTests.cpp

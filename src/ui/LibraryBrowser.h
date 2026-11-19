@@ -129,6 +129,11 @@ public:
     bool canReorder() const noexcept;            // a normal playlist, sorted by #, no filter
     juce::String uniquePlaylistName(const juce::String& base, std::optional<std::int64_t> parentFolder);
     juce::PopupMenu menuForTree(std::int64_t playlistId, View section); // what a right-click shows
+
+    // Smart playlists (P2-07): rules in rule_json; the table always shows what they match right now.
+    void createSmartPlaylist(const juce::String& name, const library::SmartRules& rules);
+    void updateSmartPlaylist(std::int64_t playlistId, const juce::String& name, const library::SmartRules& rules);
+    void editSmartPlaylist(std::int64_t playlistId); // 0 = a new one (opens the rule editor)
     juce::PopupMenu menuForTracks();
 
     // Re-reads tracks and playlists now (normally done after a change notification).

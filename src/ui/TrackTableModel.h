@@ -8,6 +8,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "library/SmartRules.h"
+
 namespace devildj::library
 {
 class Connection;
@@ -42,6 +44,7 @@ struct TrackSource
     {
         Collection,
         Playlist,
+        Smart, // P2-07: the tracks its rules match
     };
     Kind kind = Kind::Collection;
     std::int64_t playlistId = 0;
@@ -103,6 +106,9 @@ public:
     // The FTS5 query for a search text: each word as a quoted prefix ("mid"* "dri"*), all required. Empty when
     // the text has no letters or digits.
     static std::string ftsQuery(const juce::String& text);
+
+    // How many tracks a rule set matches (the smart playlist editor's live count). -1 when the rules are invalid.
+    int countMatching(const library::SmartRules& rules);
     TrackColumn sortColumn() const noexcept { return sortBy; }
     bool sortAscending() const noexcept { return ascending; }
     void reload(); // re-reads the ids and drops the cached pages
@@ -121,8 +127,7 @@ public:
 private:
     const std::vector<TrackRow>* page(int pageIndex);
     std::string orderBy() const;
-    std::string fromWhere(std::vector<std::string>& textParams, std::vector<double>& numberParams,
-                          std::vector<char>& kinds) const;
+    std::string fromWhere(std::vector<library::SqlParam>& params, const TrackFilter& filter);
 
     library::Connection& db;
     TrackSource currentSource;

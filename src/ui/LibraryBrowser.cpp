@@ -5,6 +5,8 @@
 #include "library/Database.h"
 #include "library/PlaylistRepository.h"
 #include "library/PlaylistFiles.h"
+#include "library/SmartRules.h"
+#include "ui/SmartPlaylistEditor.h"
 #include "library/TagRepository.h"
 
 #include <algorithm>
@@ -328,7 +330,9 @@ LibraryBrowser::LibraryBrowser(library::Database* db, juce::File artworkFolder, 
                 bool tracks = false, playlists = false;
                 for (const auto& c : changes)
                 {
-                    tracks |= c.table == library::Table::Tracks || c.table == library::Table::PlaylistTracks;
+                    // Tags too: smart playlists and the tag filter depend on them.
+                    tracks |= c.table == library::Table::Tracks || c.table == library::Table::PlaylistTracks ||
+                              c.table == library::Table::TrackTags || c.table == library::Table::Tags;
                     playlists |= c.table == library::Table::Playlists;
                 }
                 if (!tracks && !playlists)
@@ -421,7 +425,7 @@ void LibraryBrowser::rebuildTree()
             {
                 item->setSelected(true, true, juce::dontSendNotification);
                 treeView.scrollToKeepItemVisible(item);
-                setView(View::Playlist, id);
+                setView(item->itemView, id); // a playlist or a smart playlist
                 return;
             }
     }
@@ -458,10 +462,12 @@ void LibraryBrowser::setView(View v, std::int64_t playlistId)
     setFiltersShown(showFilters); // the filter row only over the track table
     if (!files && tableModel != nullptr)
     {
-        // Smart playlists (P2-07) and history (P2-23) have no stored tracks yet: an empty list.
+        // Smart playlists show what their rules match; history (P2-23) has no stored tracks yet.
         TrackSource s;
-        if (v == View::Playlist || v == View::SmartPlaylist || v == View::History)
+        if (v == View::Playlist || v == View::History)
             s = {TrackSource::Kind::Playlist, playlistId};
+        else if (v == View::SmartPlaylist)
+            s = {playlistId > 0 ? TrackSource::Kind::Smart : TrackSource::Kind::Playlist, playlistId};
         tableModel->setSource(s);
         trackTable.updateContent();
         trackTable.deselectAllRows();
@@ -1228,7 +1234,7 @@ void LibraryBrowser::paintOverChildren(juce::Graphics& g)
         const auto where = trackTable.getBounds().withTrimmedTop(kRowHeight + 4);
         const juce::String text = currentView == View::Collection
                                       ? "No tracks yet. Press IMPORT or drop a music folder here."
-                                  : currentView == View::SmartPlaylist ? "Smart playlist rules come in a later version."
+                                  : currentView == View::SmartPlaylist ? "No tracks match this smart playlist's rules (yet)."
                                   : currentView == View::History       ? "Played tracks will appear here."
                                                                        : "Empty playlist.";
         g.drawFittedText(text, where.reduced(20), juce::Justification::centredTop, 2);
@@ -1521,9 +1527,35 @@ void LibraryBrowser::chooseExportFile(std::int64_t id)
 juce::PopupMenu LibraryBrowser::menuForTree(std::int64_t id, View section)
 {
     juce::PopupMenu m;
-    if (tableModel == nullptr || section != View::Playlist)
-        return m; // smart playlists: P2-07; history: P2-23
     juce::Component::SafePointer<LibraryBrowser> self(this);
+    if (tableModel != nullptr && section == View::SmartPlaylist)
+    {
+        if (id == 0)
+        {
+            m.addItem("New smart playlist...",
+                      [self]
+                      {
+                          if (self != nullptr)
+                              self->editSmartPlaylist(0);
+                      });
+            return m;
+        }
+        m.addItem("Edit rules...",
+                  [self, id]
+                  {
+                      if (self != nullptr)
+                          self->editSmartPlaylist(id);
+                  });
+        m.addItem("Delete...",
+                  [self, id]
+                  {
+                      if (self != nullptr)
+                          self->confirmDelete(id);
+                  });
+        return m;
+    }
+    if (tableModel == nullptr || section != View::Playlist)
+        return m; // history: P2-23
     const auto info = playlistInfo(id);
     const bool isFolder = id == 0 || (info && info->kind == library::PlaylistKind::Folder);
     const std::optional<std::int64_t> parent = id == 0 ? std::nullopt : std::optional<std::int64_t>(id);
@@ -1682,6 +1714,88 @@ juce::PopupMenu LibraryBrowser::menuForTracks()
     const auto file = selectedTrackFile();
     m.addItem("Show in Explorer", file.existsAsFile(), false, [file] { file.revealToUser(); });
     return m;
+}
+
+// --- smart playlists (P2-07) -------------------------------------------------------------------------------------
+
+void LibraryBrowser::createSmartPlaylist(const juce::String& name, const library::SmartRules& rules)
+{
+    if (database == nullptr)
+        return;
+    const auto text = name.trim().toStdString();
+    const auto json = library::toJson(rules);
+    juce::Component::SafePointer<LibraryBrowser> self(this);
+    database->write(
+        [text, json, self](library::Connection& c)
+        {
+            library::Playlist p;
+            p.name = text;
+            p.kind = library::PlaylistKind::Smart;
+            p.ruleJson = json;
+            const auto created = library::PlaylistRepository(c).create(p);
+            const auto id = created ? created.value() : std::int64_t{0};
+            juce::MessageManager::callAsync(
+                [self, id]
+                {
+                    if (self != nullptr && id != 0)
+                        self->selectAfterRebuild = id;
+                });
+        });
+}
+
+void LibraryBrowser::updateSmartPlaylist(std::int64_t id, const juce::String& name, const library::SmartRules& rules)
+{
+    if (database == nullptr)
+        return;
+    const auto text = name.trim().toStdString();
+    const auto json = library::toJson(rules);
+    database->write(
+        [id, text, json](library::Connection& c)
+        {
+            library::PlaylistRepository repo(c);
+            auto p = repo.get(id);
+            if (!p || p->kind != library::PlaylistKind::Smart)
+                return;
+            p->name = text;
+            p->ruleJson = json;
+            repo.update(*p); // a Playlists change: the tree and the shown tracks refresh
+        });
+}
+
+void LibraryBrowser::editSmartPlaylist(std::int64_t id)
+{
+    if (tableModel == nullptr)
+        return;
+    library::SmartRules rules;
+    juce::String name = uniquePlaylistName("New smart playlist", std::nullopt);
+    if (id > 0)
+    {
+        const auto info = playlistInfo(id);
+        if (!info)
+            return;
+        name = juce::String::fromUTF8(info->name.c_str());
+        if (!info->ruleJson.empty())
+            if (auto parsed = library::parseRules(info->ruleJson))
+                rules = std::move(parsed).value();
+    }
+    else
+    {
+        // A useful start: a BPM range.
+        rules.rules.push_back({library::RuleField::Bpm, library::RuleOp::Between, {}, 120.0, 128.0});
+    }
+    juce::Component::SafePointer<LibraryBrowser> self(this);
+    showSmartPlaylistEditor(
+        this, id > 0 ? "Edit smart playlist" : "New smart playlist", name, rules,
+        [self](const library::SmartRules& r) { return self != nullptr && self->tableModel != nullptr ? self->tableModel->countMatching(r) : -1; },
+        [self, id](const juce::String& n, const library::SmartRules& r)
+        {
+            if (self == nullptr)
+                return;
+            if (id > 0)
+                self->updateSmartPlaylist(id, n, r);
+            else
+                self->createSmartPlaylist(n, r);
+        });
 }
 
 } // namespace devildj::ui

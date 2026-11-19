@@ -1,11 +1,14 @@
 #include "TrackTableModel.h"
 
 #include "library/Connection.h"
+#include "library/SmartRules.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <string>
+#include <type_traits>
+#include <variant>
 
 namespace devildj::ui
 {
@@ -123,10 +126,8 @@ std::string TrackTableModel::ftsQuery(const juce::String& text)
     return query;
 }
 
-// FROM + WHERE for the current source and filter. Parameters, in order: kinds[i] is 't' (next text param),
-// 'n' (next number param) or 'p' (the playlist id).
-std::string TrackTableModel::fromWhere(std::vector<std::string>& texts, std::vector<double>& numbers,
-                                       std::vector<char>& kinds) const
+// FROM + WHERE for the current source and filter; `params` gets the values for its "?" in order.
+std::string TrackTableModel::fromWhere(std::vector<library::SqlParam>& params, const TrackFilter& f)
 {
     std::string sql;
     std::vector<std::string> where;
@@ -134,33 +135,56 @@ std::string TrackTableModel::fromWhere(std::vector<std::string>& texts, std::vec
     {
         sql = " FROM playlist_tracks pt JOIN tracks t ON t.id = pt.track_id";
         where.push_back("pt.playlist_id = ?");
-        kinds.push_back('p');
+        params.push_back(currentSource.playlistId);
     }
     else
     {
         sql = " FROM tracks t";
     }
-    const auto& f = currentFilter;
     if (const auto q = ftsQuery(f.text); !q.empty())
     {
         // A join, not "id IN (SELECT ...)": SQLite then walks the full-text matches directly instead of first
         // copying them into a temporary index (that copy doubled the time when a search matched most tracks).
         sql += " JOIN tracks_fts ON tracks_fts.rowid = t.id";
         where.push_back("tracks_fts MATCH ?");
-        texts.push_back(q);
-        kinds.push_back('t');
+        params.push_back(q);
+    }
+    if (currentSource.kind == TrackSource::Kind::Smart)
+    {
+        // P2-07: the playlist's rules, read now, so the list is always current.
+        std::string json;
+        if (auto* r = db.prepare("SELECT coalesce(rule_json, '') FROM playlists WHERE id = ?"))
+        {
+            if (r->bind(1, currentSource.playlistId).step())
+                json = r->getText(0);
+            r->reset();
+        }
+        const auto rules = json.empty() ? util::Result<library::SmartRules>::ok({}) : library::parseRules(json);
+        const auto now = std::chrono::duration_cast<std::chrono::seconds>(
+                             std::chrono::system_clock::now().time_since_epoch())
+                             .count();
+        const auto condition = rules ? library::toSql(rules.value(), now)
+                                     : util::Result<library::SqlCondition>::fail(rules.error());
+        if (condition)
+        {
+            where.push_back(condition.value().sql);
+            params.insert(params.end(), condition.value().params.begin(), condition.value().params.end());
+        }
+        else
+        {
+            where.push_back("0"); // broken rules show nothing (and say why)
+            lastError = juce::String::fromUTF8(condition.error().c_str());
+        }
     }
     if (f.bpmMin)
     {
         where.push_back("t.bpm >= ?");
-        numbers.push_back(*f.bpmMin);
-        kinds.push_back('n');
+        params.push_back(*f.bpmMin);
     }
     if (f.bpmMax)
     {
         where.push_back("t.bpm <= ?");
-        numbers.push_back(*f.bpmMax);
-        kinds.push_back('n');
+        params.push_back(*f.bpmMax);
     }
     const auto list = [](const auto& values)
     {
@@ -178,8 +202,7 @@ std::string TrackTableModel::fromWhere(std::vector<std::string>& texts, std::vec
     if (f.genre.isNotEmpty())
     {
         where.push_back("t.genre = ? COLLATE NOCASE");
-        texts.push_back(f.genre.toStdString());
-        kinds.push_back('t');
+        params.push_back(f.genre.toStdString());
     }
     if (!f.tagIds.empty())
         where.push_back("t.id IN (SELECT track_id FROM track_tags WHERE tag_id IN (" + list(f.tagIds) +
@@ -190,6 +213,26 @@ std::string TrackTableModel::fromWhere(std::vector<std::string>& texts, std::vec
     return sql;
 }
 
+namespace
+{
+void bindAll(library::Statement& s, const std::vector<library::SqlParam>& params)
+{
+    for (std::size_t i = 0; i < params.size(); ++i)
+    {
+        const int index = static_cast<int>(i) + 1;
+        std::visit(
+            [&](const auto& v)
+            {
+                if constexpr (std::is_same_v<std::decay_t<decltype(v)>, std::string>)
+                    s.bind(index, std::string_view(v));
+                else
+                    s.bind(index, v);
+            },
+            params[i]);
+    }
+}
+} // namespace
+
 void TrackTableModel::reload()
 {
     const auto started = std::chrono::steady_clock::now();
@@ -197,27 +240,15 @@ void TrackTableModel::reload()
     pages.clear();
     recent.clear();
     lastError.clear();
-    std::vector<std::string> texts;
-    std::vector<double> numbers;
-    std::vector<char> kinds;
-    const auto sql = "SELECT t.id" + fromWhere(texts, numbers, kinds) + orderBy();
+    std::vector<library::SqlParam> params;
+    const auto sql = "SELECT t.id" + fromWhere(params, currentFilter) + orderBy();
     auto* s = db.prepare(sql);
     if (s == nullptr)
     {
         lastError = juce::String::fromUTF8(db.lastError().c_str());
         return;
     }
-    std::size_t ti = 0, ni = 0;
-    for (std::size_t i = 0; i < kinds.size(); ++i)
-    {
-        const int index = static_cast<int>(i) + 1;
-        if (kinds[i] == 'p')
-            s->bind(index, currentSource.playlistId);
-        else if (kinds[i] == 't')
-            s->bind(index, std::string_view(texts[ti++]));
-        else
-            s->bind(index, numbers[ni++]);
-    }
+    bindAll(*s, params);
     while (s->step())
         ids.push_back(s->getInt(0));
     if (!s->ok())
@@ -229,20 +260,32 @@ int TrackTableModel::unfilteredSize()
 {
     if (currentFilter.isEmpty())
         return size();
-    std::optional<std::int64_t> n;
-    if (currentSource.kind == TrackSource::Kind::Playlist)
-    {
-        auto* s = db.prepare("SELECT count(*) FROM playlist_tracks WHERE playlist_id = ?");
-        if (s != nullptr && s->bind(1, currentSource.playlistId).step())
-            n = s->getInt(0);
-        if (s != nullptr)
-            s->reset();
-    }
-    else
-    {
-        n = db.queryInt("SELECT count(*) FROM tracks");
-    }
-    return static_cast<int>(n.value_or(size()));
+    std::vector<library::SqlParam> params;
+    const auto keepError = lastError;
+    auto* s = db.prepare("SELECT count(*)" + fromWhere(params, {}));
+    lastError = keepError;
+    if (s == nullptr)
+        return size();
+    bindAll(*s, params);
+    const int n = s->step() ? static_cast<int>(s->getInt(0)) : size();
+    s->reset();
+    return n;
+}
+
+int TrackTableModel::countMatching(const library::SmartRules& rules)
+{
+    const auto condition = library::toSql(
+        rules, std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+                   .count());
+    if (!condition)
+        return -1;
+    auto* s = db.prepare("SELECT count(*) FROM tracks t WHERE " + condition.value().sql);
+    if (s == nullptr)
+        return -1;
+    bindAll(*s, condition.value().params);
+    const int n = s->step() ? static_cast<int>(s->getInt(0)) : -1;
+    s->reset();
+    return n;
 }
 
 std::int64_t TrackTableModel::trackIdAt(int r) const noexcept
