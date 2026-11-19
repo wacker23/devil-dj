@@ -1,5 +1,6 @@
 #include "AppMenu.h"
 #include "AudioSettingsWindow.h"
+#include "LibraryBackup.h"
 #include "MainComponent.h"
 #include "MainWindow.h"
 #include "Settings.h"
@@ -23,6 +24,22 @@ namespace devildj::app
 
 namespace
 {
+// A one-off job on its own low-priority thread (library backups).
+class Worker final : public juce::Thread
+{
+public:
+    Worker(const juce::String& name, std::function<void()> j)
+        : juce::Thread(name)
+        , job(std::move(j))
+    {
+    }
+    ~Worker() override { stopThread(60000); } // a backup of a big library can take a few seconds
+    void run() override { job(); }
+
+private:
+    std::function<void()> job;
+};
+
 #if JUCE_DEBUG
 constexpr bool kDebugBuild = true;
 #else
@@ -45,6 +62,12 @@ public:
 
         lookAndFeel.setColourScheme(juce::LookAndFeel_V4::getDarkColourScheme());
         juce::LookAndFeel::setDefaultLookAndFeel(&lookAndFeel);
+
+        // A restore staged last time (Options > Restore library from a backup...) goes in before anything reads
+        // the library or the settings (P2-11).
+        const auto restored = backup::applyPendingRestore(libraryFile(), Settings::defaultFile());
+        if (restored.isNotEmpty())
+            util::logInfo("{}", restored.toStdString());
 
         settings = std::make_unique<Settings>();
         util::logInfo("Settings: {}", settings->getFile().getFullPathName().toStdString());
@@ -69,6 +92,9 @@ public:
             kDebugBuild || commandLine.contains("--debug-menu") || settings->get(keys::showDebugMenu);
         menu = std::make_unique<AppMenu>(logDirectory(), showDebugMenu);
         menu->onImportFolder = [this] { mainComponent->importToLibrary({}); };
+        menu->onBackupNow = [this] { backupNow(); };
+        menu->onRestoreBackup = [this] { chooseRestore(); };
+        menu->onOpenBackups = [] { backup::defaultFolder().createDirectory(); backup::defaultFolder().startAsProcess(); };
         menu->onImportPlaylist = [this] { mainComponent->importPlaylistFile(); };
         menu->onImportLibrary = [this] { mainComponent->importOtherLibrary(); };
         menu->onCheckMissing = [this] { mainComponent->checkMissingFiles(false); };
@@ -105,12 +131,137 @@ public:
         menu->onCueMix = [this](double mix) { mainComponent->setCueMix(mix); };
         menu->onHeadphoneLevel = [this](double db) { mainComponent->setHeadphoneLevel(db); };
         mainWindow->setMenuBar(menu.get());
+
+        if (restored.isNotEmpty())
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "Library restored", restored);
+        startAutomaticBackup();
+    }
+
+    // P2-11: once a day, in the background, a backup into the backups folder (the newest 7 automatic ones kept).
+    void startAutomaticBackup()
+    {
+        if (database == nullptr)
+            return;
+        settings->save();
+        auto* db = database.get();
+        const auto settingsFile = settings->getFile();
+        backupThread = std::make_unique<Worker>(
+            "Library backup",
+            [db, settingsFile]
+            {
+                juce::String error;
+                const auto zip = backup::runAutomatic(*db, settingsFile, backup::defaultFolder(),
+                                                      juce::Time::getCurrentTime(), &error);
+                if (zip != juce::File())
+                    util::logInfo("Library backup: {}", zip.getFullPathName().toStdString());
+                else if (error.isNotEmpty())
+                    util::logWarning("Library backup failed: {}", error.toStdString());
+            });
+        backupThread->startThread(juce::Thread::Priority::low);
+    }
+
+    bool backupBusy() const { return backupThread != nullptr && backupThread->isThreadRunning(); }
+
+    void tellUser(const juce::String& text)
+    {
+        juce::MessageManager::callAsync(
+            [this, text]
+            {
+                if (mainComponent != nullptr)
+                    mainComponent->libraryView().setStatus(text);
+            });
+    }
+
+    void backupNow()
+    {
+        if (database == nullptr || backupBusy())
+            return;
+        const auto folder = backup::defaultFolder();
+        folder.createDirectory();
+        fileChooser = std::make_unique<juce::FileChooser>(
+            "Back up the library to",
+            folder.getChildFile("backup-" + juce::Time::getCurrentTime().formatted("%Y%m%d-%H%M%S") + ".zip"), "*.zip");
+        fileChooser->launchAsync(
+            juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
+            [this](const juce::FileChooser& fc)
+            {
+                auto zip = fc.getResult();
+                if (zip == juce::File() || database == nullptr || backupBusy())
+                    return;
+                if (!zip.hasFileExtension(".zip"))
+                    zip = zip.withFileExtension(".zip");
+                settings->save();
+                auto* db = database.get();
+                const auto settingsFile = settings->getFile();
+                tellUser("Backing up the library...");
+                backupThread = std::make_unique<Worker>(
+                    "Library backup",
+                    [this, db, settingsFile, zip]
+                    {
+                        const auto r = backup::create(*db, settingsFile, zip);
+                        util::logInfo("Library backup to {}: {}", zip.getFullPathName().toStdString(),
+                                      r.wasOk() ? "done" : r.getErrorMessage().toStdString());
+                        tellUser(r.wasOk() ? "Backed up to " + zip.getFullPathName()
+                                           : "Backup failed: " + r.getErrorMessage());
+                    });
+                backupThread->startThread(juce::Thread::Priority::low);
+            });
+    }
+
+    void chooseRestore()
+    {
+        if (backupBusy())
+            return;
+        fileChooser = std::make_unique<juce::FileChooser>("Restore the library from a backup", backup::defaultFolder(),
+                                                          "*.zip");
+        fileChooser->launchAsync(
+            juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+            [this](const juce::FileChooser& fc)
+            {
+                const auto zip = fc.getResult();
+                if (!zip.existsAsFile() || backupBusy())
+                    return;
+                tellUser("Checking " + zip.getFileName() + "...");
+                const auto settingsFile = settings->getFile();
+                backupThread = std::make_unique<Worker>(
+                    "Library restore",
+                    [this, zip, settingsFile]
+                    {
+                        const auto r = backup::stageRestore(zip, libraryFile(), settingsFile);
+                        util::logInfo("Library restore from {}: {}", zip.getFullPathName().toStdString(),
+                                      r.wasOk() ? "staged" : r.getErrorMessage().toStdString());
+                        juce::MessageManager::callAsync(
+                            [r, zip]
+                            {
+                                if (r.failed())
+                                {
+                                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                                                                           "Can't restore", r.getErrorMessage());
+                                    return;
+                                }
+                                juce::AlertWindow::showOkCancelBox(
+                                    juce::MessageBoxIconType::QuestionIcon, "Restore the library",
+                                    zip.getFileName() + " is ready. Devil-DJ restores it the next time it starts "
+                                                        "(your current library is kept as a copy).\n\nQuit now?",
+                                    "Quit now", "Later", nullptr,
+                                    juce::ModalCallbackFunction::create(
+                                        [](int result)
+                                        {
+                                            if (result == 1)
+                                                juce::JUCEApplication::getInstance()->systemRequestedQuit();
+                                        }));
+                            });
+                    });
+                backupThread->startThread(juce::Thread::Priority::low);
+            });
     }
 
     void shutdown() override
     {
         if (mainWindow != nullptr)
             mainWindow->setMenuBar(nullptr);
+        backupThread = nullptr; // waits for a running backup before the library closes
+        fileChooser = nullptr;
         mainWindow = nullptr; // also destroys mainComponent (and stops a running import)
         mainComponent = nullptr;
         database = nullptr; // runs the queued writes, then closes the library
@@ -217,11 +368,16 @@ private:
     }
 
     // The library (ARCHITECTURE §8): %APPDATA%\Devil-DJ\library.db. Returns a problem to show, or empty.
+    static juce::File libraryFile()
+    {
+        return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+            .getChildFile("Devil-DJ")
+            .getChildFile("library.db");
+    }
+
     juce::String openLibrary()
     {
-        const auto file = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                              .getChildFile("Devil-DJ")
-                              .getChildFile("library.db");
+        const auto file = libraryFile();
         auto opened = library::Database::open(std::filesystem::path(file.getFullPathName().toWideCharPointer()));
         if (!opened)
         {
@@ -276,6 +432,8 @@ private:
     std::unique_ptr<engine::BufferRegistry> registry;
     std::unique_ptr<engine::TrackLoader> loader;
     std::unique_ptr<library::Database> database;
+    std::unique_ptr<juce::Thread> backupThread;
+    std::unique_ptr<juce::FileChooser> fileChooser;
     std::unique_ptr<MainWindow> mainWindow;
     std::unique_ptr<AppMenu> menu;
     MainComponent* mainComponent = nullptr; // owned by mainWindow

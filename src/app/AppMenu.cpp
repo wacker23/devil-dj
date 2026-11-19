@@ -89,6 +89,11 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
     else if (menuName == "Options")
     {
         menu.addItem(AudioSettings, "Audio settings...");
+        menu.addSeparator();
+        menu.addItem(BackupNow, "Back up library now...");
+        menu.addItem(RestoreBackup, "Restore library from a backup...");
+        menu.addItem(OpenBackups, "Open backups folder");
+        menu.addSeparator();
         menu.addItem(HighQualityResampling, "High-quality resampling (sinc)", true, highQuality);
         menu.addSeparator();
         menu.addItem(OpenKeymapFolder, "Open keymap folder (keymap.json)");
@@ -136,6 +141,21 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
         case ImportLibrary:
             if (onImportLibrary)
                 onImportLibrary();
+            break;
+
+        case BackupNow:
+            if (onBackupNow)
+                onBackupNow();
+            break;
+
+        case RestoreBackup:
+            if (onRestoreBackup)
+                onRestoreBackup();
+            break;
+
+        case OpenBackups:
+            if (onOpenBackups)
+                onOpenBackups();
             break;
 
         case CheckMissing:

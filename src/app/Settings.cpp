@@ -25,6 +25,11 @@ Settings::Settings()
 {
 }
 
+juce::File Settings::defaultFile()
+{
+    return makeOptions().getDefaultFile();
+}
+
 Settings::Settings(const juce::File& file)
     : properties(std::make_unique<juce::PropertiesFile>(file, makeOptions()))
 {

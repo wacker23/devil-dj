@@ -247,7 +247,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   Detect missing files, "relocate" dialog (search a folder by filename + size), "show all missing".
   Done when: moving a folder and relocating restores all links.
 
-- [ ] **P2-11 Library backup**
+- [x] **P2-11 Library backup**
   Backup/restore DB + settings to a zip; automatic daily backup (keep 7).
   Done when: restore test.
 

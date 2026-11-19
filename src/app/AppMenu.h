@@ -24,6 +24,9 @@ public:
     std::function<void()> onImportLibrary;  // other software's library XML (P2-09)
     std::function<void()> onCheckMissing;   // P2-10
     std::function<void()> onRelocate;       // P2-10
+    std::function<void()> onBackupNow;      // P2-11
+    std::function<void()> onRestoreBackup;  // P2-11
+    std::function<void()> onOpenBackups;    // P2-11
     std::function<void()> onToggleDebugOverlay;
     std::function<void()> onToggleTestTone;
     std::function<void(int deck)> onLoadTrack;
@@ -54,6 +57,9 @@ private:
         ImportLibrary,
         CheckMissing,
         Relocate,
+        BackupNow,
+        RestoreBackup,
+        OpenBackups,
         DebugOverlay,
         TestTone,
         LoadDeckA,

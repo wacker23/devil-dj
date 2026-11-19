@@ -44,6 +44,9 @@ public:
     // A specific file (tests, portable mode).
     explicit Settings(const juce::File& file);
 
+    // Where Settings() keeps its file (for the backup restore, which swaps it before the settings are read).
+    static juce::File defaultFile();
+
     ~Settings();
 
     Settings(const Settings&) = delete;
