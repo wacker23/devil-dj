@@ -22,6 +22,7 @@ target_sources(devildj_ui INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/MixerView.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/SmartPlaylistEditor.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/SmartPlaylistEditor.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/TrackColours.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/TrackDropTarget.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/TrackTableModel.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/TrackTableModel.h"

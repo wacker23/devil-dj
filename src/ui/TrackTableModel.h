@@ -34,6 +34,7 @@ enum class TrackColumn
     DateAdded = 10,
     Comment = 11,
     Album = 12,
+    Tags = 13, // P2-08
 };
 
 // What the table shows: the whole collection or one playlist's tracks (smart playlists come in P2-07,
@@ -80,6 +81,7 @@ struct TrackRow
     int rating = 0;
     std::optional<std::uint32_t> colour;
     std::int64_t dateAdded = 0;
+    juce::String tags; // "Peak, Warm-up" (names, sorted)
 };
 
 // Data behind the library table (ARCHITECTURE §6: "UI models cache pages of 200 rows"). On a source or sort

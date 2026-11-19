@@ -235,7 +235,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   Rule builder (field, operator, value; AND/OR), live-updating.
   Done when: rule → SQL generation unit tests.
 
-- [ ] **P2-08 Tags, ratings, colours**
+- [x] **P2-08 Tags, ratings, colours**
   My-Tag-style custom tag categories, 0–5 star rating, track colour; editable inline and via keyboard (Ctrl+Shift+1…5 rating, see KEYMAP).
   Done when: persisted and filterable.
 

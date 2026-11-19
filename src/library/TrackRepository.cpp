@@ -210,4 +210,39 @@ bool TrackRepository::remove(std::int64_t id)
     return true;
 }
 
+bool TrackRepository::setRating(std::int64_t id, int stars)
+{
+    if (stars < 0 || stars > 5)
+        return fail("rating must be 0..5 stars");
+    auto* s = db.prepare("UPDATE tracks SET rating = ? WHERE id = ?");
+    if (s == nullptr)
+        return fail(db.lastError());
+    if (!s->bind(1, stars).bind(2, id).run())
+        return fail(s->error());
+    if (db.changes() == 0)
+        return fail("no track " + std::to_string(id));
+    db.noteChange(Table::Tracks, id);
+    lastError.clear();
+    return true;
+}
+
+bool TrackRepository::setColour(std::int64_t id, std::optional<std::uint32_t> rgb)
+{
+    if (rgb && *rgb > 0xFFFFFFu)
+        return fail("colour must be 0xRRGGBB");
+    auto* s = db.prepare("UPDATE tracks SET color = ? WHERE id = ?");
+    if (s == nullptr)
+        return fail(db.lastError());
+    std::optional<std::int64_t> value;
+    if (rgb)
+        value = static_cast<std::int64_t>(*rgb);
+    if (!s->bind(1, value).bind(2, id).run())
+        return fail(s->error());
+    if (db.changes() == 0)
+        return fail("no track " + std::to_string(id));
+    db.noteChange(Table::Tracks, id);
+    lastError.clear();
+    return true;
+}
+
 } // namespace devildj::library

@@ -75,7 +75,7 @@ Space is deliberately unbound in performance view to avoid accidental stops; it 
 | Select several tracks | Ctrl+click / Shift+click |
 | Load selected track to Deck A / B | Tab / Enter |
 | Load to Deck C / D (4-deck mode) | Shift+Tab / Shift+Enter |
-| Rate selected track 1–5 / clear | Ctrl+Shift+1…5 / Ctrl+Shift+0 |
+| Rate selected track(s) 1–5 / clear | Ctrl+Shift+1…5 / Ctrl+Shift+0 (or click a star; the same star again clears) |
 | Preview selected track in headphones (hold) | Ctrl+Space |
 | Switch bottom panel: Browser → Beat Maker → Code Beat | Ctrl+Tab |
 

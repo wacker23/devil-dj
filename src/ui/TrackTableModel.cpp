@@ -36,6 +36,9 @@ std::string sortExpression(TrackColumn c)
         case TrackColumn::Genre: return "t.genre COLLATE NOCASE";
         case TrackColumn::DateAdded: return "t.date_added";
         case TrackColumn::Comment: return "t.comment COLLATE NOCASE";
+        case TrackColumn::Tags:
+            return "(SELECT group_concat(name, ', ') FROM (SELECT g.name FROM track_tags tt JOIN tags g ON g.id = "
+                   "tt.tag_id WHERE tt.track_id = t.id ORDER BY g.name COLLATE NOCASE))";
         case TrackColumn::Number: break;
     }
     return {};
@@ -44,7 +47,9 @@ std::string sortExpression(TrackColumn c)
 std::string pageSql()
 {
     std::string sql = "SELECT id, title, artist, album, genre, comment, musical_key, bpm, duration_ms, rating, color, "
-                      "date_added, path FROM tracks WHERE id IN (";
+                      "date_added, path, (SELECT group_concat(name, ', ') FROM (SELECT g.name FROM track_tags tt "
+                      "JOIN tags g ON g.id = tt.tag_id WHERE tt.track_id = tracks.id ORDER BY g.name COLLATE NOCASE)) "
+                      "FROM tracks WHERE id IN (";
     for (int i = 0; i < TrackTableModel::kPageSize; ++i)
         sql += i == 0 ? "?" : ",?";
     return sql + ")";
@@ -350,6 +355,7 @@ const std::vector<TrackRow>* TrackTableModel::page(int pageIndex)
             r.colour = static_cast<std::uint32_t>(*c);
         r.dateAdded = s->getInt(11);
         r.path = text(*s, 12);
+        r.tags = text(*s, 13);
         if (r.title.isEmpty()) // untagged: show the file name
             r.title = r.path.fromLastOccurrenceOf("\\", false, false).upToLastOccurrenceOf(".", false, false);
         byId.emplace(r.id, std::move(r));

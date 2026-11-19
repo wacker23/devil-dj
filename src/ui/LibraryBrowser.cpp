@@ -8,8 +8,11 @@
 #include "library/SmartRules.h"
 #include "ui/SmartPlaylistEditor.h"
 #include "library/TagRepository.h"
+#include "library/TrackRepository.h"
+#include "ui/TrackColours.h"
 
 #include <algorithm>
+#include <map>
 
 namespace devildj::ui
 {
@@ -27,6 +30,8 @@ constexpr int kRowHeight = 22;
 constexpr int kTreeWidth = 210;
 constexpr int kToolbarHeight = 26;
 constexpr int kFilterRowHeight = 26;
+constexpr int kStarLeft = 6;   // the Rating cell's stars: where the first starts
+constexpr int kStarWidth = 13; // and how wide each one is
 
 struct ColumnInfo
 {
@@ -49,6 +54,7 @@ const ColumnInfo kColumns[] = {
     {TrackColumn::Genre, "Genre", 120, true},
     {TrackColumn::DateAdded, "Added", 84, true},
     {TrackColumn::Comment, "Comment", 200, true},
+    {TrackColumn::Tags, "Tags", 160, true},
 };
 
 juce::String stars(int rating)
@@ -563,7 +569,20 @@ void LibraryBrowser::paintCell(juce::Graphics& g, int row, int column, int width
             text = TrackTableModel::timeText(r->seconds);
             justification = juce::Justification::centredRight;
             break;
-        case TrackColumn::Rating: text = stars(r->rating); break;
+        case TrackColumn::Rating:
+        {
+            // Five stars in fixed slots, so a click can tell which one it hit (starAt).
+            g.setFont(juce::FontOptions(13.5f));
+            for (int i = 1; i <= 5; ++i)
+            {
+                g.setColour(i <= r->rating ? juce::Colour(0xffe8c832) : kDim.withAlpha(0.45f));
+                g.drawText(juce::String::fromUTF8(i <= r->rating ? "\xE2\x98\x85" : "\xE2\x98\x86"),
+                           kStarLeft + (i - 1) * kStarWidth, 0, kStarWidth, height, juce::Justification::centred,
+                           false);
+            }
+            return;
+        }
+        case TrackColumn::Tags: text = r->tags; break;
         case TrackColumn::Genre: text = r->genre; break;
         case TrackColumn::DateAdded: text = dateText(r->dateAdded); break;
         case TrackColumn::Comment: text = r->comment; break;
@@ -591,10 +610,36 @@ void LibraryBrowser::selectedRowsChanged(int)
     updateArtwork();
 }
 
-void LibraryBrowser::cellClicked(int row, int, const juce::MouseEvent& e)
+void LibraryBrowser::cellClicked(int row, int column, const juce::MouseEvent& e)
 {
     treeFocused = false;
     treeView.repaint();
+    // Inline edits (P2-08): the stars rate, the colour cell opens the palette.
+    if (!e.mods.isPopupMenu() && !e.mods.isCommandDown() && !e.mods.isShiftDown() && tableModel != nullptr)
+    {
+        const auto col = static_cast<TrackColumn>(column);
+        if (col == TrackColumn::Rating || col == TrackColumn::Colour)
+        {
+            const auto& header = trackTable.getHeader();
+            const int columnX = header.getColumnPosition(header.getIndexOfColumnId(column, true)).getX();
+            const int x = e.getEventRelativeTo(&trackTable).x + trackTable.getViewport()->getViewPositionX() - columnX;
+            if (!trackTable.isRowSelected(row))
+                trackTable.selectRow(row);
+            if (col == TrackColumn::Rating)
+            {
+                if (const int star = starAt(x); star > 0)
+                {
+                    const auto* r = tableModel->row(row);
+                    rateSelected(r != nullptr && r->rating == star ? 0 : star); // the same star again clears
+                }
+            }
+            else
+            {
+                colourMenu().showMenuAsync(juce::PopupMenu::Options().withMousePosition());
+            }
+            return;
+        }
+    }
     if (e.mods.isPopupMenu())
     {
         if (!trackTable.isRowSelected(row))
@@ -849,7 +894,7 @@ void LibraryBrowser::refreshFromLibrary(bool tracks, bool playlists)
         refreshFilterChoices();
     if ((tracks || playlists) && tableModel != nullptr)
     {
-        const auto keep = selectedTrackId();
+        const auto keep = selectedTrackIds(); // every selected track, not just one (P2-08: edits on several)
         tableModel->reload();
         trackTable.updateContent();
         if (!selectRowsAfterReload.empty())
@@ -858,9 +903,16 @@ void LibraryBrowser::refreshFromLibrary(bool tracks, bool playlists)
             for (const int r : std::exchange(selectRowsAfterReload, {}))
                 trackTable.selectRow(r, false, false);
         }
-        else if (keep != 0)
+        else if (!keep.empty())
         {
-            selectTrack(keep);
+            trackTable.deselectAllRows();
+            bool first = true;
+            for (const auto id : keep)
+                if (const int row = tableModel->rowOfTrack(id); row >= 0)
+                {
+                    trackTable.selectRow(row, !first, false); // scroll to the first one only
+                    first = false;
+                }
         }
         trackTable.repaint();
         updateCount();
@@ -898,6 +950,8 @@ void LibraryBrowser::updateCount()
 
 juce::String LibraryBrowser::colourName(std::uint32_t rgb)
 {
+    if (const juce::String named = paletteName(rgb); named.isNotEmpty())
+        return named.toLowerCase();
     const auto c = juce::Colour(0xff000000u | rgb);
     if (c.getSaturation() < 0.15f)
         return c.getBrightness() > 0.6f ? "white" : c.getBrightness() < 0.25f ? "black" : "grey";
@@ -947,7 +1001,10 @@ void LibraryBrowser::refreshFilterChoices()
             const auto rgb = static_cast<std::uint32_t>(s->getInt(0));
             colourChoices.push_back(rgb);
             const int id = static_cast<int>(colourChoices.size()) + 1;
-            colourBox.addItem(colourName(rgb) + juce::String::formatted(" (#%06X)", static_cast<unsigned>(rgb)), id);
+            colourBox.addItem(juce::String(paletteName(rgb)).isNotEmpty()
+                                  ? juce::String(paletteName(rgb))
+                                  : colourName(rgb) + juce::String::formatted(" (#%06X)", static_cast<unsigned>(rgb)),
+                              id);
             if (rgb == keepColour)
                 colourBox.setSelectedId(id, juce::dontSendNotification);
         }
@@ -1704,6 +1761,9 @@ juce::PopupMenu LibraryBrowser::menuForTracks()
                                   });
                 });
     m.addSubMenu("Add to playlist", add);
+    m.addSubMenu("Rating", ratingMenu());
+    m.addSubMenu("Colour", colourMenu());
+    m.addSubMenu("Tags", tagMenu());
     if (shownPlaylist() > 0)
         m.addItem("Remove from playlist (Delete)", [self]
                   {
@@ -1796,6 +1856,343 @@ void LibraryBrowser::editSmartPlaylist(std::int64_t id)
             else
                 self->createSmartPlaylist(n, r);
         });
+}
+
+// --- ratings, colours, tags (P2-08) ------------------------------------------------------------------------------
+
+int LibraryBrowser::starAt(int x)
+{
+    if (x < kStarLeft)
+        return 0;
+    return std::clamp((x - kStarLeft) / kStarWidth + 1, 1, 5);
+}
+
+void LibraryBrowser::rateSelected(int stars)
+{
+    const auto ids = selectedTrackIds();
+    if (database == nullptr || ids.empty())
+        return;
+    stars = std::clamp(stars, 0, 5);
+    database->write(
+        [ids, stars](library::Connection& c)
+        {
+            c.transaction(
+                [&]
+                {
+                    library::TrackRepository repo(c);
+                    for (const auto id : ids)
+                        if (!repo.setRating(id, stars))
+                            return false;
+                    return true;
+                });
+        });
+    setStatus(stars == 0 ? juce::String("Rating cleared")
+                         : "Rated " + juce::String(stars) + (stars == 1 ? " star" : " stars"));
+}
+
+void LibraryBrowser::colourSelected(std::optional<std::uint32_t> rgb)
+{
+    const auto ids = selectedTrackIds();
+    if (database == nullptr || ids.empty())
+        return;
+    database->write(
+        [ids, rgb](library::Connection& c)
+        {
+            c.transaction(
+                [&]
+                {
+                    library::TrackRepository repo(c);
+                    for (const auto id : ids)
+                        if (!repo.setColour(id, rgb))
+                            return false;
+                    return true;
+                });
+        });
+}
+
+void LibraryBrowser::setTagOnSelected(std::int64_t tagId, bool on)
+{
+    const auto ids = selectedTrackIds();
+    if (database == nullptr || ids.empty())
+        return;
+    database->write(
+        [ids, tagId, on](library::Connection& c)
+        {
+            c.transaction(
+                [&]
+                {
+                    library::TagRepository repo(c);
+                    for (const auto id : ids)
+                        if (!(on ? repo.assign(id, tagId) : repo.unassign(id, tagId)))
+                            return false;
+                    return true;
+                });
+        });
+}
+
+namespace
+{
+void reportFailure(juce::Component::SafePointer<LibraryBrowser> self, const std::string& what, const std::string& why)
+{
+    const auto text = juce::String::fromUTF8((what + ": " + why).c_str());
+    juce::MessageManager::callAsync(
+        [self, text]
+        {
+            if (self != nullptr)
+                self->setStatus(text);
+        });
+}
+} // namespace
+
+void LibraryBrowser::createTag(const juce::String& name, std::optional<std::int64_t> categoryId, bool assign)
+{
+    if (database == nullptr)
+        return;
+    const auto text = name.trim().toStdString();
+    const auto ids = assign ? selectedTrackIds() : std::vector<std::int64_t>{};
+    juce::Component::SafePointer<LibraryBrowser> self(this);
+    database->write(
+        [text, categoryId, ids, self](library::Connection& c)
+        {
+            library::TagRepository repo(c);
+            const auto created = repo.createTag(text, categoryId);
+            if (!created)
+            {
+                reportFailure(self, "Can't make the tag", created.error());
+                return;
+            }
+            for (const auto id : ids)
+                repo.assign(id, created.value());
+        });
+}
+
+void LibraryBrowser::createTagCategory(const juce::String& name)
+{
+    if (database == nullptr)
+        return;
+    const auto text = name.trim().toStdString();
+    juce::Component::SafePointer<LibraryBrowser> self(this);
+    database->write(
+        [text, self](library::Connection& c)
+        {
+            const auto created = library::TagRepository(c).createCategory(text);
+            if (!created)
+                reportFailure(self, "Can't make the category", created.error());
+        });
+}
+
+void LibraryBrowser::renameTag(std::int64_t tagId, const juce::String& name)
+{
+    if (database == nullptr)
+        return;
+    const auto text = name.trim().toStdString();
+    juce::Component::SafePointer<LibraryBrowser> self(this);
+    database->write(
+        [tagId, text, self](library::Connection& c)
+        {
+            library::TagRepository repo(c);
+            auto t = repo.tag(tagId);
+            if (!t)
+                return;
+            t->name = text;
+            if (!repo.updateTag(*t))
+                reportFailure(self, "Can't rename the tag", repo.error());
+        });
+}
+
+void LibraryBrowser::deleteTag(std::int64_t tagId)
+{
+    if (database != nullptr)
+        database->write([tagId](library::Connection& c) { library::TagRepository(c).removeTag(tagId); });
+}
+
+void LibraryBrowser::renameTagCategory(std::int64_t categoryId, const juce::String& name)
+{
+    if (database == nullptr)
+        return;
+    const auto text = name.trim().toStdString();
+    juce::Component::SafePointer<LibraryBrowser> self(this);
+    database->write(
+        [categoryId, text, self](library::Connection& c)
+        {
+            library::TagRepository repo(c);
+            auto cat = repo.category(categoryId);
+            if (!cat)
+                return;
+            cat->name = text;
+            if (!repo.updateCategory(*cat))
+                reportFailure(self, "Can't rename the category", repo.error());
+        });
+}
+
+void LibraryBrowser::deleteTagCategory(std::int64_t categoryId)
+{
+    if (database != nullptr)
+        database->write([categoryId](library::Connection& c) { library::TagRepository(c).removeCategory(categoryId); });
+}
+
+juce::PopupMenu LibraryBrowser::ratingMenu()
+{
+    juce::PopupMenu m;
+    const auto* first = tableModel != nullptr ? tableModel->row(trackTable.getSelectedRow()) : nullptr;
+    juce::Component::SafePointer<LibraryBrowser> self(this);
+    for (int r = 5; r >= 0; --r)
+        m.addItem((r == 0 ? juce::String("No rating") : stars(r)) + "   (Ctrl+Shift+" + juce::String(r) + ")", true,
+                  first != nullptr && first->rating == r,
+                  [self, r]
+                  {
+                      if (self != nullptr)
+                          self->rateSelected(r);
+                  });
+    return m;
+}
+
+juce::PopupMenu LibraryBrowser::colourMenu()
+{
+    juce::PopupMenu m;
+    const auto* first = tableModel != nullptr ? tableModel->row(trackTable.getSelectedRow()) : nullptr;
+    juce::Component::SafePointer<LibraryBrowser> self(this);
+    for (const auto& c : kTrackColours)
+    {
+        juce::PopupMenu::Item item(juce::String::fromUTF8("\xE2\x97\x8F  ") + c.name); // ● name
+        item.colour = toColour(c.rgb);
+        item.isTicked = first != nullptr && first->colour == c.rgb;
+        const auto rgb = c.rgb;
+        item.action = [self, rgb]
+        {
+            if (self != nullptr)
+                self->colourSelected(rgb);
+        };
+        m.addItem(std::move(item));
+    }
+    m.addSeparator();
+    m.addItem("No colour", true, first != nullptr && !first->colour,
+              [self]
+              {
+                  if (self != nullptr)
+                      self->colourSelected(std::nullopt);
+              });
+    return m;
+}
+
+juce::PopupMenu LibraryBrowser::tagMenu()
+{
+    juce::PopupMenu m;
+    if (reader == nullptr)
+        return m;
+    juce::Component::SafePointer<LibraryBrowser> self(this);
+    library::TagRepository repo(*reader);
+
+    // How many of the selected tracks carry each tag: ticked when all do.
+    const auto ids = selectedTrackIds();
+    std::map<std::int64_t, int> carriers;
+    for (const auto id : ids)
+        for (const auto& t : repo.tagsForTrack(id))
+            ++carriers[t.id];
+    const auto addTags = [&](juce::PopupMenu& menu, std::optional<std::int64_t> category)
+    {
+        for (const auto& t : repo.tagsInCategory(category))
+        {
+            const bool all = !ids.empty() && carriers[t.id] == static_cast<int>(ids.size());
+            const auto tagId = t.id;
+            menu.addItem(juce::String::fromUTF8(t.name.c_str()), !ids.empty(), all,
+                         [self, tagId, all]
+                         {
+                             if (self != nullptr)
+                                 self->setTagOnSelected(tagId, !all); // toggle
+                         });
+        }
+    };
+    const auto askNewTag = [self](std::optional<std::int64_t> category)
+    {
+        return [self, category]
+        {
+            if (self != nullptr)
+                self->askName("New tag", {},
+                              [self, category](juce::String name)
+                              {
+                                  if (self != nullptr)
+                                      self->createTag(name, category, true);
+                              });
+        };
+    };
+
+    for (const auto& cat : repo.categories())
+    {
+        juce::PopupMenu sub;
+        addTags(sub, cat.id);
+        sub.addSeparator();
+        sub.addItem("New tag in " + juce::String::fromUTF8(cat.name.c_str()) + "...", askNewTag(cat.id));
+        m.addSubMenu(juce::String::fromUTF8(cat.name.c_str()), sub);
+    }
+    addTags(m, std::nullopt);
+    m.addSeparator();
+    m.addItem("New tag...", askNewTag(std::nullopt));
+    m.addItem("New category...",
+              [self]
+              {
+                  if (self != nullptr)
+                      self->askName("New tag category", {},
+                                    [self](juce::String name)
+                                    {
+                                        if (self != nullptr)
+                                            self->createTagCategory(name);
+                                    });
+              });
+
+    // Rename / delete, one place for all of them.
+    juce::PopupMenu manage;
+    for (const auto& cat : repo.categories())
+    {
+        juce::PopupMenu one;
+        const auto catId = cat.id;
+        const auto catName = juce::String::fromUTF8(cat.name.c_str());
+        one.addItem("Rename category...",
+                    [self, catId, catName]
+                    {
+                        if (self != nullptr)
+                            self->askName("Rename category", catName,
+                                          [self, catId](juce::String name)
+                                          {
+                                              if (self != nullptr)
+                                                  self->renameTagCategory(catId, name);
+                                          });
+                    });
+        one.addItem("Delete category and its tags",
+                    [self, catId]
+                    {
+                        if (self != nullptr)
+                            self->deleteTagCategory(catId);
+                    });
+        manage.addSubMenu(catName, one);
+    }
+    for (const auto& t : repo.tags())
+    {
+        juce::PopupMenu one;
+        const auto tagId = t.id;
+        const auto tagName = juce::String::fromUTF8(t.name.c_str());
+        one.addItem("Rename tag...",
+                    [self, tagId, tagName]
+                    {
+                        if (self != nullptr)
+                            self->askName("Rename tag", tagName,
+                                          [self, tagId](juce::String name)
+                                          {
+                                              if (self != nullptr)
+                                                  self->renameTag(tagId, name);
+                                          });
+                    });
+        one.addItem("Delete tag",
+                    [self, tagId]
+                    {
+                        if (self != nullptr)
+                            self->deleteTag(tagId);
+                    });
+        manage.addSubMenu("Tag: " + tagName, one);
+    }
+    if (manage.getNumItems() > 0)
+        m.addSubMenu("Rename / delete", manage);
+    return m;
 }
 
 } // namespace devildj::ui

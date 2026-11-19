@@ -130,6 +130,23 @@ public:
     juce::String uniquePlaylistName(const juce::String& base, std::optional<std::int64_t> parentFolder);
     juce::PopupMenu menuForTree(std::int64_t playlistId, View section); // what a right-click shows
 
+    // Ratings, colours and tags (P2-08), on the selected tracks. Ctrl+Shift+1..5 / 0 rate; a click on the
+    // stars in the Rating column rates (the same star again clears); a click on the colour cell opens the
+    // palette; right-click -> Rating / Colour / Tags. Tags: categories with tags, any number per track.
+    void rateSelected(int stars);
+    void colourSelected(std::optional<std::uint32_t> rgb);
+    void setTagOnSelected(std::int64_t tagId, bool on);
+    void createTag(const juce::String& name, std::optional<std::int64_t> categoryId, bool assignToSelected);
+    void createTagCategory(const juce::String& name);
+    void renameTag(std::int64_t tagId, const juce::String& name);
+    void deleteTag(std::int64_t tagId);
+    void renameTagCategory(std::int64_t categoryId, const juce::String& name);
+    void deleteTagCategory(std::int64_t categoryId);
+    juce::PopupMenu ratingMenu();
+    juce::PopupMenu colourMenu();
+    juce::PopupMenu tagMenu();
+    static int starAt(int xInCell); // which star (1..5) a click in the Rating cell hits, 0 = left of them
+
     // Smart playlists (P2-07): rules in rule_json; the table always shows what they match right now.
     void createSmartPlaylist(const juce::String& name, const library::SmartRules& rules);
     void updateSmartPlaylist(std::int64_t playlistId, const juce::String& name, const library::SmartRules& rules);

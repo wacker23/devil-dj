@@ -312,6 +312,10 @@ void MainComponent::registerActions()
     onPress(ui::globalCommand(GA::BrowserBigger), [this] { toggleBrowserSize(); });
     onPress(ui::globalCommand(GA::BrowserSearch), [this] { libraryBrowser->focusSearch(); });
     onPress(ui::globalCommand(GA::BrowserRemove), [this] { libraryBrowser->removeSelectedFromPlaylist(); });
+    for (int stars = 1; stars <= 5; ++stars) // Ctrl+Shift+1..5 (P2-08)
+        onPress(ui::globalCommand(static_cast<GA>(static_cast<int>(GA::Rate1) + stars - 1)),
+                [this, stars] { libraryBrowser->rateSelected(stars); });
+    onPress(ui::globalCommand(GA::RateClear), [this] { libraryBrowser->rateSelected(0); });
     actions.setHandler(ui::globalCommand(GA::KeymapOverlay),
                        [this](Phase p)
                        {

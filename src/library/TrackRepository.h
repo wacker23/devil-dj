@@ -54,6 +54,10 @@ public:
     bool update(const Track& track); // every column but id
     bool remove(std::int64_t id);    // also its cues, beatgrid, tags and playlist entries
 
+    // One-field edits from the browser (P2-08), so a click doesn't rewrite the whole row.
+    bool setRating(std::int64_t id, int stars);                         // 0..5
+    bool setColour(std::int64_t id, std::optional<std::uint32_t> rgb); // nullopt = no colour
+
     const std::string& error() const noexcept { return lastError; }
 
 private:
