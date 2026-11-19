@@ -1,5 +1,6 @@
 #include "AnalysisService.h"
 
+#include "analysis/BeatTracker.h"
 #include "dsp/SincResampler.h"
 #include "library/Connection.h"
 #include "library/Database.h"
@@ -35,6 +36,20 @@ std::vector<float> monoForAnalysis(const DecodedAudio& a)
 }
 } // namespace
 
+std::vector<float> AnalysisService::monoSignal(const DecodedAudio& audio)
+{
+    return monoForAnalysis(audio);
+}
+
+void AnalysisService::beatAnalyzer(const AnalysisInput& input, AnalysisResult& result)
+{
+    const auto grid = trackBeats(input.mono.data(), static_cast<int>(input.mono.size()), AnalysisInput::kMonoRate);
+    if (!grid.valid)
+        return; // no steady beat: BPM and grid stay as they were
+    result.bpm = grid.bpm;
+    result.beatgridJson = beatgridJson(grid, input.full.sampleRate);
+}
+
 void AnalysisService::basicsAnalyzer(const AnalysisInput& input, AnalysisResult& result)
 {
     // The exact length and rate from the decoded audio (tags and file headers can be off, VBR MP3s especially).
@@ -53,7 +68,10 @@ AnalysisService::AnalysisService(library::Database& database, Decoder decoder, O
     , options(std::move(o))
 {
     if (options.analyzers.empty())
+    {
         options.analyzers.push_back(&AnalysisService::basicsAnalyzer);
+        options.analyzers.push_back(&AnalysisService::beatAnalyzer);
+    }
     int n = options.workers;
     if (n <= 0)
         n = std::clamp(static_cast<int>(std::thread::hardware_concurrency()) - 1, 1, 4);
@@ -221,7 +239,7 @@ void AnalysisService::analyze(std::int64_t id)
         return fail();
     progress(0.5);
 
-    AnalysisInput input{decoded.value(), monoForAnalysis(decoded.value())};
+    AnalysisInput input{decoded.value(), monoSignal(decoded.value())};
     AnalysisResult result;
     for (std::size_t i = 0; i < options.analyzers.size(); ++i)
     {

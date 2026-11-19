@@ -257,7 +257,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   `analysis/AnalysisService`: job queue, worker pool (cores − 1, lowest priority), progress per track, `analysis_version` per result so upgrades re-analyze. Decodes to mono 22.05 kHz for analysis plus waveform data at full rate.
   Done when: 500 tracks analyze in the background while two decks play with no xruns.
 
-- [ ] **P2-13 Beat tracker v1 (classic DSP, our own)**
+- [x] **P2-13 Beat tracker v1 (classic DSP, our own)**
   Spectral-flux onset envelope → tempo estimation by autocorrelation/comb-filter tempogram (range 70–180 BPM with octave-error correction preferring 85–175) → beat positions by dynamic programming → constant-tempo grid fit (least squares on beat times) → downbeat estimate (bar phase with strongest low-frequency onset pattern). Variable-tempo detection flags tracks whose local tempo drifts > 1 %.
   Done when: on generated click tracks BPM error < 0.02 and first beat < 5 ms; on the owner's eval set (DEVILDJ_EVAL_DIR, ≥ 50 tracks with known BPM) ≥ 90 % within ±0.5 BPM (report written to DEVLOG).
 

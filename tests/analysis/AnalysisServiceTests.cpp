@@ -245,14 +245,14 @@ TEST_CASE("Analysis service: stopping while busy keeps what finished", "[analysi
         service.queueOutdated();
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     } // destroyed mid-way
-    const auto done = lib.reader->queryInt("SELECT count(*) FROM tracks WHERE analysis_version = 1").value_or(-1);
+    const auto done = lib.reader->queryInt("SELECT count(*) FROM tracks WHERE analysis_version = " + std::to_string(analysis::kAnalysisVersion)).value_or(-1);
     const auto left = lib.reader->queryInt("SELECT count(*) FROM tracks WHERE analysis_version = 0").value_or(-1);
     CHECK(done + left == 40);
     // The next start picks up the rest.
     AnalysisService service(*lib.db, decoder.make(), options);
     CHECK(service.queueOutdated() == left);
     REQUIRE(service.waitUntilIdle(60.0));
-    CHECK(lib.reader->queryInt("SELECT count(*) FROM tracks WHERE analysis_version = 1") == 40);
+    CHECK(lib.reader->queryInt("SELECT count(*) FROM tracks WHERE analysis_version = " + std::to_string(analysis::kAnalysisVersion)) == 40);
 }
 
 namespace
