@@ -4,6 +4,7 @@
 #include "library/Connection.h"
 #include "library/Database.h"
 #include "library/PlaylistRepository.h"
+#include "library/TagRepository.h"
 
 #include <algorithm>
 
@@ -22,6 +23,7 @@ const juce::Colour kAccent(0xffe0483c);
 constexpr int kRowHeight = 22;
 constexpr int kTreeWidth = 210;
 constexpr int kToolbarHeight = 26;
+constexpr int kFilterRowHeight = 26;
 
 struct ColumnInfo
 {
@@ -204,9 +206,81 @@ LibraryBrowser::LibraryBrowser(library::Database* db, juce::File artworkFolder, 
             onLoad(deck, f);
     };
 
-    for (auto* c : std::initializer_list<juce::Component*>{&treeView, &trackTable, &importButton, &sizeButton, &loadA, &loadB,
-                                                           &statusLabel, &countLabel})
+    // Search and filters.
+    for (auto* e : {&search, &bpmFrom, &bpmTo})
+    {
+        e->setColour(juce::TextEditor::backgroundColourId, kPanel);
+        e->setColour(juce::TextEditor::textColourId, kText);
+        e->setColour(juce::TextEditor::outlineColourId, kRowAlt);
+        e->setColour(juce::TextEditor::focusedOutlineColourId, kAccent);
+        e->setFont(juce::FontOptions(13.5f));
+        e->setSelectAllWhenFocused(true);
+        e->onTextChange = [this] { applyFilter(); };
+        e->onReturnKey = [this]
+        {
+            if (onSearchDone)
+                onSearchDone();
+        };
+        e->onEscapeKey = [this]
+        {
+            if (onSearchDone)
+                onSearchDone();
+        };
+    }
+    search.setTextToShowWhenEmpty("Search title, artist, album, comment (Ctrl+F)", kDim);
+    search.setTooltip("Type to filter; Enter or Esc gives the keys back to the decks");
+    for (auto* e : {&bpmFrom, &bpmTo})
+    {
+        e->setInputRestrictions(6, "0123456789.,");
+        e->setJustification(juce::Justification::centred);
+    }
+    bpmFrom.setTextToShowWhenEmpty("min", kDim);
+    bpmTo.setTextToShowWhenEmpty("max", kDim);
+    bpmLabel.setText("BPM", juce::dontSendNotification);
+    bpmDash.setText("-", juce::dontSendNotification);
+    for (auto* l : {&bpmLabel, &bpmDash})
+    {
+        l->setColour(juce::Label::textColourId, kDim);
+        l->setFont(juce::FontOptions(12.0f));
+        l->setJustificationType(juce::Justification::centred);
+    }
+
+    keyBox.addItem("Any key", 1);
+    for (int pitch = 0; pitch < 12; ++pitch)
+        for (int minor = 0; minor < 2; ++minor)
+            keyBox.addItem(TrackTableModel::keyName(pitch + 12 * minor), 2 + pitch + 12 * minor);
+    ratingBox.addItem("Any rating", 1);
+    for (int r = 1; r <= 5; ++r)
+        ratingBox.addItem(stars(r) + (r < 5 ? " or more" : ""), 1 + r);
+    for (auto* box : {&keyBox, &ratingBox, &colourBox, &genreBox, &tagBox})
+    {
+        box->setColour(juce::ComboBox::backgroundColourId, kPanel);
+        box->setColour(juce::ComboBox::textColourId, kText);
+        box->setColour(juce::ComboBox::outlineColourId, kRowAlt);
+        box->setWantsKeyboardFocus(false);
+        box->setSelectedId(1, juce::dontSendNotification);
+        box->onChange = [this] { applyFilter(); };
+    }
+    for (auto* b : {&filterButton, &clearButton})
+    {
+        b->setColour(juce::TextButton::buttonColourId, kPanel);
+        b->setColour(juce::TextButton::buttonOnColourId, kAccent.withAlpha(0.6f));
+        b->setColour(juce::TextButton::textColourOffId, kText);
+        b->setWantsKeyboardFocus(false);
+    }
+    filterButton.setClickingTogglesState(false);
+    filterButton.setTooltip("Filter by BPM, key, rating, colour, genre and tag");
+    filterButton.onClick = [this] { setFiltersShown(!showFilters); };
+    clearButton.setTooltip("Clear the search and every filter");
+    clearButton.onClick = [this] { clearFilters(); };
+    refreshFilterChoices();
+
+    for (auto* c : std::initializer_list<juce::Component*>{&treeView, &trackTable, &importButton, &sizeButton, &loadA,
+                                                           &loadB, &statusLabel, &countLabel, &search, &filterButton})
         addAndMakeVisible(c);
+    for (auto* c : std::initializer_list<juce::Component*>{&bpmLabel, &bpmFrom, &bpmDash, &bpmTo, &keyBox, &ratingBox,
+                                                           &colourBox, &genreBox, &tagBox, &clearButton})
+        addChildComponent(c);
     addChildComponent(fileBrowser);
 
     rebuildTree();
@@ -339,6 +413,9 @@ void LibraryBrowser::setView(View v, std::int64_t playlistId)
     trackTable.setVisible(!files);
     loadA.setVisible(!files);
     loadB.setVisible(!files);
+    search.setVisible(!files);
+    filterButton.setVisible(!files);
+    setFiltersShown(showFilters); // the filter row only over the track table
     if (!files && tableModel != nullptr)
     {
         // Smart playlists (P2-07) and history (P2-23) have no stored tracks yet: an empty list.
@@ -709,6 +786,8 @@ void LibraryBrowser::refreshFromLibrary(bool tracks, bool playlists)
 {
     if (playlists)
         rebuildTree();
+    if (tracks)
+        refreshFilterChoices();
     if ((tracks || playlists) && tableModel != nullptr)
     {
         const auto keep = selectedTrackId();
@@ -739,7 +818,187 @@ void LibraryBrowser::updateCount()
         return;
     }
     const int n = tableModel->size();
-    countLabel.setText(juce::String(n) + (n == 1 ? " track" : " tracks"), juce::dontSendNotification);
+    juce::String text;
+    if (!tableModel->filter().isEmpty())
+        text << n << " of " << tableModel->unfilteredSize() << " tracks";
+    else
+        text << n << (n == 1 ? " track" : " tracks");
+    countLabel.setText(text, juce::dontSendNotification);
+    filterButton.setToggleState(showFilters || !filterFromControls().isEmpty(), juce::dontSendNotification);
+}
+
+// --- search and filters -------------------------------------------------------------------------------------------------
+
+juce::String LibraryBrowser::colourName(std::uint32_t rgb)
+{
+    const auto c = juce::Colour(0xff000000u | rgb);
+    if (c.getSaturation() < 0.15f)
+        return c.getBrightness() > 0.6f ? "white" : c.getBrightness() < 0.25f ? "black" : "grey";
+    static const std::pair<float, const char*> hues[] = {{0.04f, "red"},    {0.11f, "orange"}, {0.19f, "yellow"},
+                                                         {0.45f, "green"},  {0.55f, "aqua"},   {0.70f, "blue"},
+                                                         {0.82f, "purple"}, {0.95f, "pink"},   {1.01f, "red"}};
+    const float h = c.getHue();
+    for (const auto& [limit, name] : hues)
+        if (h < limit)
+            return name;
+    return "red";
+}
+
+void LibraryBrowser::refreshFilterChoices()
+{
+    if (reader == nullptr)
+        return;
+    const juce::ScopedValueSetter<bool> quiet(settingControls, true);
+    const auto keepGenre = genreBox.getSelectedId() > 1 ? genreBox.getText() : juce::String();
+    const auto keepColour = colourBox.getSelectedId() > 1 ? colourChoices[static_cast<std::size_t>(colourBox.getSelectedId() - 2)]
+                                                          : 0xFFFFFFFFu;
+    const auto keepTag = tagBox.getSelectedId() > 1 ? tagChoices[static_cast<std::size_t>(tagBox.getSelectedId() - 2)] : 0;
+
+    genreBox.clear(juce::dontSendNotification);
+    genreBox.addItem("Any genre", 1);
+    if (auto* s = reader->prepare("SELECT DISTINCT genre FROM tracks WHERE genre IS NOT NULL ORDER BY genre COLLATE NOCASE"))
+    {
+        int id = 2;
+        while (s->step())
+        {
+            const auto g = juce::String::fromUTF8(s->getText(0).c_str());
+            genreBox.addItem(g, id);
+            if (g == keepGenre)
+                genreBox.setSelectedId(id, juce::dontSendNotification);
+            ++id;
+        }
+    }
+    if (genreBox.getSelectedId() == 0)
+        genreBox.setSelectedId(1, juce::dontSendNotification);
+
+    colourBox.clear(juce::dontSendNotification);
+    colourChoices.clear();
+    colourBox.addItem("Any colour", 1);
+    if (auto* s = reader->prepare("SELECT DISTINCT color FROM tracks WHERE color IS NOT NULL ORDER BY color"))
+        while (s->step())
+        {
+            const auto rgb = static_cast<std::uint32_t>(s->getInt(0));
+            colourChoices.push_back(rgb);
+            const int id = static_cast<int>(colourChoices.size()) + 1;
+            colourBox.addItem(colourName(rgb) + juce::String::formatted(" (#%06X)", static_cast<unsigned>(rgb)), id);
+            if (rgb == keepColour)
+                colourBox.setSelectedId(id, juce::dontSendNotification);
+        }
+    if (colourBox.getSelectedId() == 0)
+        colourBox.setSelectedId(1, juce::dontSendNotification);
+
+    tagBox.clear(juce::dontSendNotification);
+    tagChoices.clear();
+    tagBox.addItem("Any tag", 1);
+    library::TagRepository tags(*reader);
+    std::unordered_map<std::int64_t, juce::String> categoryNames;
+    for (const auto& c : tags.categories())
+        categoryNames[c.id] = juce::String::fromUTF8(c.name.c_str());
+    for (const auto& t : tags.tags())
+    {
+        tagChoices.push_back(t.id);
+        const int id = static_cast<int>(tagChoices.size()) + 1;
+        const auto name = juce::String::fromUTF8(t.name.c_str());
+        tagBox.addItem(t.categoryId ? categoryNames[*t.categoryId] + ": " + name : name, id);
+        if (t.id == keepTag)
+            tagBox.setSelectedId(id, juce::dontSendNotification);
+    }
+    if (tagBox.getSelectedId() == 0)
+        tagBox.setSelectedId(1, juce::dontSendNotification);
+}
+
+TrackFilter LibraryBrowser::filterFromControls() const
+{
+    TrackFilter f;
+    f.text = search.getText().trim();
+    const auto bpm = [](const juce::TextEditor& e) -> std::optional<double>
+    {
+        const auto t = e.getText().replaceCharacter(',', '.').trim();
+        if (t.isEmpty())
+            return std::nullopt;
+        const double v = t.getDoubleValue();
+        return v > 0.0 ? std::optional<double>{v} : std::nullopt;
+    };
+    f.bpmMin = bpm(bpmFrom);
+    f.bpmMax = bpm(bpmTo);
+    if (f.bpmMin && f.bpmMax && *f.bpmMin > *f.bpmMax)
+        std::swap(f.bpmMin, f.bpmMax);
+    if (keyBox.getSelectedId() > 1)
+        f.keys.push_back(keyBox.getSelectedId() - 2);
+    if (ratingBox.getSelectedId() > 1)
+        f.minRating = ratingBox.getSelectedId() - 1;
+    if (const int c = colourBox.getSelectedId(); c > 1 && c - 2 < static_cast<int>(colourChoices.size()))
+        f.colours.push_back(colourChoices[static_cast<std::size_t>(c - 2)]);
+    if (genreBox.getSelectedId() > 1)
+        f.genre = genreBox.getText();
+    if (const int t = tagBox.getSelectedId(); t > 1 && t - 2 < static_cast<int>(tagChoices.size()))
+        f.tagIds.push_back(tagChoices[static_cast<std::size_t>(t - 2)]);
+    return f;
+}
+
+void LibraryBrowser::applyFilter()
+{
+    if (settingControls || tableModel == nullptr)
+        return;
+    const auto keep = selectedTrackId();
+    tableModel->setFilter(filterFromControls());
+    trackTable.updateContent();
+    trackTable.deselectAllRows();
+    if (keep != 0)
+        selectTrack(keep);
+    if (trackTable.getSelectedRow() < 0)
+        trackTable.getViewport()->setViewPosition(0, 0);
+    trackTable.repaint();
+    updateCount();
+    repaint();
+}
+
+void LibraryBrowser::setFilter(const TrackFilter& f)
+{
+    {
+        const juce::ScopedValueSetter<bool> quiet(settingControls, true);
+        search.setText(f.text, juce::dontSendNotification);
+        bpmFrom.setText(f.bpmMin ? juce::String(*f.bpmMin) : juce::String(), juce::dontSendNotification);
+        bpmTo.setText(f.bpmMax ? juce::String(*f.bpmMax) : juce::String(), juce::dontSendNotification);
+        keyBox.setSelectedId(f.keys.empty() ? 1 : 2 + f.keys.front(), juce::dontSendNotification);
+        ratingBox.setSelectedId(1 + std::clamp(f.minRating, 0, 5), juce::dontSendNotification);
+        colourBox.setSelectedId(1, juce::dontSendNotification);
+        for (std::size_t i = 0; i < colourChoices.size(); ++i)
+            if (!f.colours.empty() && colourChoices[i] == f.colours.front())
+                colourBox.setSelectedId(static_cast<int>(i) + 2, juce::dontSendNotification);
+        genreBox.setSelectedId(1, juce::dontSendNotification);
+        for (int i = 0; i < genreBox.getNumItems(); ++i)
+            if (f.genre.isNotEmpty() && genreBox.getItemText(i).equalsIgnoreCase(f.genre))
+                genreBox.setSelectedItemIndex(i, juce::dontSendNotification);
+        tagBox.setSelectedId(1, juce::dontSendNotification);
+        for (std::size_t i = 0; i < tagChoices.size(); ++i)
+            if (!f.tagIds.empty() && tagChoices[i] == f.tagIds.front())
+                tagBox.setSelectedId(static_cast<int>(i) + 2, juce::dontSendNotification);
+    }
+    applyFilter();
+}
+
+void LibraryBrowser::clearFilters()
+{
+    setFilter({});
+}
+
+void LibraryBrowser::setFiltersShown(bool shown)
+{
+    showFilters = shown;
+    for (auto* c : std::initializer_list<juce::Component*>{&bpmLabel, &bpmFrom, &bpmDash, &bpmTo, &keyBox, &ratingBox,
+                                                           &colourBox, &genreBox, &tagBox, &clearButton})
+        c->setVisible(shown && currentView != View::Folders);
+    updateCount();
+    resized();
+}
+
+void LibraryBrowser::focusSearch()
+{
+    if (currentView == View::Folders || tableModel == nullptr)
+        showCollection();
+    search.grabKeyboardFocus();
+    search.selectAll();
 }
 
 // --- artwork --------------------------------------------------------------------------------------------------------------
@@ -816,9 +1075,33 @@ void LibraryBrowser::resized()
     top.removeFromRight(10);
     sizeButton.setBounds(top.removeFromRight(84));
     top.removeFromRight(10);
-    countLabel.setBounds(top.removeFromRight(110));
+    countLabel.setBounds(top.removeFromRight(130));
+    search.setBounds(top.removeFromLeft(std::clamp(top.getWidth() / 3, 160, 340)));
+    top.removeFromLeft(6);
+    filterButton.setBounds(top.removeFromLeft(70));
+    top.removeFromLeft(10);
     statusLabel.setBounds(top);
     area.removeFromTop(6);
+
+    // The filter row, above the table (not over the tree).
+    const bool filterRow = showFilters && currentView != View::Folders;
+    if (filterRow)
+    {
+        auto row = area.withTrimmedLeft(kTreeWidth + 6).removeFromTop(kFilterRowHeight);
+        bpmLabel.setBounds(row.removeFromLeft(36));
+        bpmFrom.setBounds(row.removeFromLeft(52));
+        bpmDash.setBounds(row.removeFromLeft(14));
+        bpmTo.setBounds(row.removeFromLeft(52));
+        row.removeFromLeft(8);
+        clearButton.setBounds(row.removeFromRight(64));
+        row.removeFromRight(8);
+        const int w = std::max(60, row.getWidth() / 5 - 6);
+        for (auto* box : {&keyBox, &ratingBox, &colourBox, &genreBox, &tagBox})
+        {
+            box->setBounds(row.removeFromLeft(w));
+            row.removeFromLeft(6);
+        }
+    }
 
     auto left = area.removeFromLeft(kTreeWidth);
     area.removeFromLeft(6);
@@ -834,7 +1117,8 @@ void LibraryBrowser::resized()
         artworkArea = {};
     }
     treeView.setBounds(left);
-    trackTable.setBounds(area);
+    const auto tableArea = filterRow ? area.withTrimmedTop(kFilterRowHeight + 6) : area;
+    trackTable.setBounds(tableArea);
     fileBrowser.setBounds(area);
 }
 

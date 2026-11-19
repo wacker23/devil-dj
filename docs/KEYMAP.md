@@ -69,7 +69,7 @@ Space is deliberately unbound in performance view to avoid accidental stops; it 
 | --- | --- |
 | Move selection | Up / Down, Page Up / Page Down |
 | Collapse / expand tree node | Left / Right |
-| Focus search box | Ctrl+F (Esc returns to performance keys) |
+| Focus search box | Ctrl+F (Enter or Esc returns to performance keys) |
 | Bigger browser (over the waveforms) / back | Ctrl+B |
 | Load selected track to Deck A / B | Tab / Enter |
 | Load to Deck C / D (4-deck mode) | Shift+Tab / Shift+Enter |

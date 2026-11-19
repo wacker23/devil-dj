@@ -56,6 +56,22 @@ public:
     std::function<void(const juce::String& layout)> onColumnLayoutChanged;
     std::function<void(const juce::Array<juce::File>& filesOrFolders)> onImport; // empty array: ask for a folder
     std::function<void()> onToggleSize; // the BIGGER / SMALLER button (Ctrl+B)
+    std::function<void()> onSearchDone; // Enter / Esc in the search box: give the keys back to the decks
+
+    // Search and filters (P2-05). Typing in the search box filters at once; FILTER shows a row with BPM range,
+    // key, minimum rating, colour, genre and tag. Ctrl+F (focusSearch) jumps to the search box.
+    void focusSearch();
+    juce::TextEditor& searchBox() noexcept { return search; }
+    void setFiltersShown(bool shown);
+    bool filtersShown() const noexcept { return showFilters; }
+    void setFilter(const TrackFilter& filter); // sets the controls and applies it
+    TrackFilter filterFromControls() const;
+    void clearFilters();
+    juce::String countText() const { return countLabel.getText(); }
+    juce::ComboBox& keyFilter() noexcept { return keyBox; }
+    juce::ComboBox& genreFilter() noexcept { return genreBox; }
+    juce::ComboBox& tagFilter() noexcept { return tagBox; }
+    static juce::String colourName(std::uint32_t rgb); // "red", "blue", ... for the colour filter
     void setBig(bool big);              // shows the button's state
 
     FileBrowserPanel& folders() noexcept { return fileBrowser; }
@@ -134,6 +150,8 @@ private:
     void updateArtwork();
     void layoutChanged();
     void updateCount();
+    void applyFilter();
+    void refreshFilterChoices(); // genres, tags and colours that exist in the library
 
     library::Database* database;
     std::unique_ptr<library::Connection> reader;
@@ -147,6 +165,14 @@ private:
     FileBrowserPanel fileBrowser;
     juce::TextButton importButton{"IMPORT"}, sizeButton{"BIGGER"}, loadA{"LOAD A"}, loadB{"LOAD B"};
     juce::Label statusLabel, countLabel;
+    juce::TextEditor search, bpmFrom, bpmTo;
+    juce::TextButton filterButton{"FILTER"}, clearButton{"CLEAR"};
+    juce::ComboBox keyBox, ratingBox, colourBox, genreBox, tagBox;
+    juce::Label bpmLabel, bpmDash;
+    std::vector<std::uint32_t> colourChoices;
+    std::vector<std::int64_t> tagChoices;
+    bool showFilters = false;
+    bool settingControls = false;
     juce::Image artwork;
     juce::Rectangle<int> artworkArea;
     View currentView = View::Collection;

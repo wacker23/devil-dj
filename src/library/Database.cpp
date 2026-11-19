@@ -92,7 +92,12 @@ void Database::flush()
 
 util::Result<std::unique_ptr<Connection>> Database::openReader() const
 {
-    return Connection::open(path, Connection::Mode::ReadOnly);
+    auto opened = Connection::open(path, Connection::Mode::ReadOnly);
+    if (opened)
+        // Browsing reads whole tables (sorting, searching 50k tracks): read through memory-mapped I/O, keep a
+        // 32 MB page cache and sort in memory instead of temporary files (P2-05: search < 50 ms on 50k tracks).
+        opened.value()->exec("PRAGMA mmap_size = 268435456; PRAGMA cache_size = -32768; PRAGMA temp_store = MEMORY");
+    return opened;
 }
 
 void Database::writerLoop()

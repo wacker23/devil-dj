@@ -537,6 +537,24 @@ TEST_CASE("Library browser screenshot", "[.screenshot]")
     REQUIRE(stream.openedOk());
     juce::PNGImageFormat png;
     REQUIRE(png.writeImageToStream(image, stream));
+
+    // P2-05: a search and the filter row.
+    ui::TrackFilter f;
+    f.minRating = 3;
+    f.bpmMin = 122.0;
+    f.bpmMax = 126.0;
+    browser.setFiltersShown(true);
+    browser.setFilter(f);
+    browser.setStatus({});
+    browser.setBounds(0, 0, 1416, 331);
+    browser.setBounds(0, 0, 1416, 330);
+    const auto searched = browser.createComponentSnapshot(browser.getLocalBounds());
+    const auto out2 =
+        juce::File(juce::String::fromUTF8(DEVILDJ_SOURCE_DIR)).getChildFile("docs/images/p2-05-search.png");
+    out2.deleteFile();
+    juce::FileOutputStream stream2(out2);
+    REQUIRE(stream2.openedOk());
+    REQUIRE(png.writeImageToStream(searched, stream2));
 }
 TEST_CASE("Library browser: a long list starts at row 1", "[ui][library]")
 {

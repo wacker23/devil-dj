@@ -48,6 +48,25 @@ struct TrackSource
     friend bool operator==(const TrackSource&, const TrackSource&) = default;
 };
 
+// Search and filters (P2-05). Everything set must match (AND). Empty / nullopt = no filter.
+struct TrackFilter
+{
+    juce::String text;                    // words matched at the start of words in title / artist / album / comment
+    std::optional<double> bpmMin, bpmMax; // inclusive
+    std::vector<int> keys;                // any of these (0..23)
+    int minRating = 0;                    // at least this many stars
+    std::vector<std::uint32_t> colours;   // any of these (0xRRGGBB)
+    juce::String genre;                   // this genre (ignoring case)
+    std::vector<std::int64_t> tagIds;     // all of these tags
+
+    bool isEmpty() const noexcept
+    {
+        return text.trim().isEmpty() && !bpmMin && !bpmMax && keys.empty() && minRating <= 0 && colours.empty() &&
+               genre.isEmpty() && tagIds.empty();
+    }
+    friend bool operator==(const TrackFilter&, const TrackFilter&) = default;
+};
+
 // One table row, ready to paint (text converted once per page).
 struct TrackRow
 {
@@ -76,6 +95,14 @@ public:
     void setSource(TrackSource source);
     const TrackSource& source() const noexcept { return currentSource; }
     void setSort(TrackColumn column, bool ascending);
+    void setFilter(TrackFilter filter);
+    const TrackFilter& filter() const noexcept { return currentFilter; }
+    int unfilteredSize(); // tracks in the source without the filter (for "12 of 44 tracks")
+    double lastQueryMs() const noexcept { return queryMs; }
+
+    // The FTS5 query for a search text: each word as a quoted prefix ("mid"* "dri"*), all required. Empty when
+    // the text has no letters or digits.
+    static std::string ftsQuery(const juce::String& text);
     TrackColumn sortColumn() const noexcept { return sortBy; }
     bool sortAscending() const noexcept { return ascending; }
     void reload(); // re-reads the ids and drops the cached pages
@@ -94,11 +121,15 @@ public:
 private:
     const std::vector<TrackRow>* page(int pageIndex);
     std::string orderBy() const;
+    std::string fromWhere(std::vector<std::string>& textParams, std::vector<double>& numberParams,
+                          std::vector<char>& kinds) const;
 
     library::Connection& db;
     TrackSource currentSource;
     TrackColumn sortBy = TrackColumn::Number;
     bool ascending = true;
+    TrackFilter currentFilter;
+    double queryMs = 0.0;
     std::vector<std::int64_t> ids;
     std::unordered_map<int, std::vector<TrackRow>> pages;
     std::list<int> recent; // most recent first

@@ -223,7 +223,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   Left: tree (Collection, Playlists, Smart playlists, History, Folders). Right: virtualized `juce::TableListBox` with configurable/sortable columns (title, artist, BPM, key, time, rating, colour, genre, date added, comment). Artwork thumbnail. Handles 50,000 tracks smoothly.
   Done when: scrolling 50k rows at 60 fps; column layout persists.
 
-- [ ] **P2-05 Search and filter**
+- [x] **P2-05 Search and filter**
   Instant search (title/artist/album/comment) with SQLite FTS5; filters for BPM range, key, rating, colour, genre, tags.
   Done when: search results < 50 ms on 50k tracks.
 

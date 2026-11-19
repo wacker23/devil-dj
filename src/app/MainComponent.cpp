@@ -114,6 +114,7 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     { loadFile(static_cast<engine::DeckId>(deck), file); };
     libraryBrowser->onImport = [this](const juce::Array<juce::File>& files) { importToLibrary(files); };
     libraryBrowser->onToggleSize = [this] { toggleBrowserSize(); };
+    libraryBrowser->onSearchDone = [this] { grabKeyboardFocus(); }; // the decks' keys work again
     for (auto [target, deck] :
          {std::pair<ui::TrackDropTarget*, engine::DeckId>{&deckA, 0}, {&deckB, 1}, {&waveA, 0}, {&waveB, 1}})
         target->onTrackDropped = [this, deck = deck](const juce::File& file) { loadFile(deck, file); };
@@ -276,6 +277,7 @@ void MainComponent::registerActions()
     onPress(ui::globalCommand(GA::BrowserCollapse), [this] { libraryBrowser->collapse(); });
     onPress(ui::globalCommand(GA::BrowserExpand), [this] { libraryBrowser->expand(); });
     onPress(ui::globalCommand(GA::BrowserBigger), [this] { toggleBrowserSize(); });
+    onPress(ui::globalCommand(GA::BrowserSearch), [this] { libraryBrowser->focusSearch(); });
     actions.setHandler(ui::globalCommand(GA::KeymapOverlay),
                        [this](Phase p)
                        {
