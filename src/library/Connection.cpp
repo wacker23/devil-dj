@@ -1,5 +1,7 @@
 #include "Connection.h"
 
+#include "util/RealtimeGuard.h"
+
 #include <sqlite3.h>
 
 namespace devildj::library
@@ -14,6 +16,10 @@ std::string describe(sqlite3* db, int rc)
     std::string text = db != nullptr ? sqlite3_errmsg(db) : sqlite3_errstr(rc);
     return text + " (SQLite " + std::to_string(rc) + ")";
 }
+
+// The audio thread must never touch the database (CLAUDE.md golden rules). Debug builds know which thread that is
+// (RealtimeGuard) and refuse before SQLite runs; no error text is set, since that would allocate there.
+
 } // namespace
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -168,6 +174,8 @@ util::Result<std::unique_ptr<Connection>> Connection::open(const std::filesystem
 
 bool Connection::exec(std::string_view sql)
 {
+    if (util::isInRealtimeContext())
+        return false;
     const std::string text(sql);
     char* message = nullptr;
     const int rc = sqlite3_exec(db, text.c_str(), nullptr, nullptr, &message);
@@ -184,6 +192,8 @@ bool Connection::exec(std::string_view sql)
 
 Statement* Connection::prepare(const std::string& sql)
 {
+    if (util::isInRealtimeContext())
+        return nullptr;
     if (const auto found = cache.find(sql); found != cache.end())
     {
         found->second->reset();

@@ -9,12 +9,36 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 struct sqlite3;
 struct sqlite3_stmt;
 
 namespace devildj::library
 {
+
+// What a write changed, for the change notifications (Database::addChangeListener). `id` is the changed row;
+// for playlist entries it is the playlist, for cues and track tags it is the track.
+enum class Table
+{
+    Tracks,
+    Playlists,
+    PlaylistTracks,
+    Cues,
+    TagCategories,
+    Tags,
+    TrackTags,
+};
+
+struct Change
+{
+    Table table = Table::Tracks;
+    std::int64_t id = 0;
+    bool removed = false; // the row is gone
+
+    friend bool operator==(const Change&, const Change&) = default;
+};
 
 // One prepared SQLite statement. Owned by its Connection's statement cache, so it is prepared once and reused.
 // Parameter and column indices follow SQLite: bind() is 1-based, get*() is 0-based.
@@ -89,20 +113,53 @@ public:
     std::size_t cachedStatementCount() const noexcept { return cache.size(); }
 
     // Runs body inside BEGIN IMMEDIATE ... COMMIT; rolls back when body returns false or a statement fails.
+    // Changes noted inside a rolled-back transaction are dropped. Nesting isn't supported (SQLite has no nested
+    // BEGIN): repositories use savepoint() for their own multi-statement writes, which nests.
     template <typename Body>
     bool transaction(Body&& body)
     {
         if (!exec("BEGIN IMMEDIATE"))
             return false;
+        const auto mark = pendingChanges.size();
         if (!body())
         {
             const auto why = lastErrorText;
             exec("ROLLBACK");
+            pendingChanges.resize(mark);
             lastErrorText = why.empty() ? std::string("transaction rolled back") : why;
             return false;
         }
-        return exec("COMMIT");
+        if (!exec("COMMIT"))
+        {
+            exec("ROLLBACK");
+            pendingChanges.resize(mark);
+            return false;
+        }
+        return true;
     }
+
+    // Like transaction(), but nests (SAVEPOINT / RELEASE): usable inside a transaction() or on its own.
+    template <typename Body>
+    bool savepoint(Body&& body)
+    {
+        if (!exec("SAVEPOINT devildj"))
+            return false;
+        const auto mark = pendingChanges.size();
+        if (!body())
+        {
+            const auto why = lastErrorText;
+            exec("ROLLBACK TO devildj; RELEASE devildj");
+            pendingChanges.resize(mark);
+            lastErrorText = why.empty() ? std::string("rolled back") : why;
+            return false;
+        }
+        return exec("RELEASE devildj");
+    }
+
+    // Change tracking: repositories note what they changed; Database hands the list to its listeners after
+    // each write job and clears it.
+    void noteChange(Table table, std::int64_t id, bool removed = false) { pendingChanges.push_back({table, id, removed}); }
+    std::vector<Change> takeChanges() { return std::exchange(pendingChanges, {}); }
 
     // Single-value helpers (empty optional when there is no row or on an error).
     std::optional<std::int64_t> queryInt(const std::string& sql);
@@ -120,6 +177,7 @@ private:
     sqlite3* db;
     std::unordered_map<std::string, std::unique_ptr<Statement>> cache;
     std::string lastErrorText;
+    std::vector<Change> pendingChanges;
 };
 
 } // namespace devildj::library

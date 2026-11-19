@@ -215,7 +215,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   `library/Importer`: add files/folders (recursive), skip duplicates by path + content hash (xxHash of first/last 1 MB + size), read tags with TagLib (title, artist, album, genre, year, BPM tag, key tag, comment, artwork), queue analysis.
   Done when: importing 2,000 files takes < 60 s excluding analysis; re-import adds nothing.
 
-- [ ] **P2-03 Repositories**
+- [x] **P2-03 Repositories**
   `TrackRepository`, `PlaylistRepository`, `CueRepository`, `TagRepository` with typed C++ structs; all DB access off the audio thread; change notifications to UI.
   Done when: CRUD unit tests per repository.
 

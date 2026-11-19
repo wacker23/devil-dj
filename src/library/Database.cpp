@@ -52,7 +52,7 @@ void Database::write(Job job)
 {
     {
         std::lock_guard lock(mutex);
-        queue.push_back(std::move(job));
+        queue.push_back({std::move(job), nullptr});
     }
     wake.notify_one();
 }
@@ -67,14 +67,17 @@ void Database::writeAndWait(Job job)
     std::mutex doneMutex;
     std::condition_variable doneSignal;
     bool done = false;
-    write(
-        [&](Connection& c)
-        {
-            job(c);
-            std::lock_guard lock(doneMutex);
-            done = true;
-            doneSignal.notify_one();
-        });
+    {
+        std::lock_guard lock(mutex);
+        queue.push_back({[&](Connection& c) { job(c); },
+                         [&]
+                         {
+                             std::lock_guard doneLock(doneMutex);
+                             done = true;
+                             doneSignal.notify_one();
+                         }});
+    }
+    wake.notify_one();
     std::unique_lock lock(doneMutex);
     doneSignal.wait(lock, [&] { return done; });
 }
@@ -100,17 +103,53 @@ void Database::writerLoop()
         wake.wait(lock, [this] { return stopping || !queue.empty(); });
         if (queue.empty()) // stopping, and every queued write has run
             break;
-        auto job = std::move(queue.front());
+        auto entry = std::move(queue.front());
         queue.pop_front();
         busy = true;
         lock.unlock();
-        job(*writer);
+        entry.job(*writer);
+        if (auto changes = writer->takeChanges(); !changes.empty())
+            notify(changes);
+        if (entry.done)
+            entry.done();
+        entry = {};
         lock.lock();
         busy = false;
         if (queue.empty())
             idle.notify_all();
     }
     idle.notify_all();
+}
+
+} // namespace devildj::library
+
+namespace devildj::library
+{
+
+int Database::addChangeListener(ChangeListener listener)
+{
+    std::lock_guard lock(listenerMutex);
+    const int id = nextListenerId++;
+    listeners.emplace_back(id, std::make_shared<ChangeListener>(std::move(listener)));
+    return id;
+}
+
+void Database::removeChangeListener(int id)
+{
+    std::lock_guard lock(listenerMutex);
+    std::erase_if(listeners, [id](const auto& l) { return l.first == id; });
+}
+
+void Database::notify(const std::vector<Change>& changes)
+{
+    std::vector<std::shared_ptr<ChangeListener>> current;
+    {
+        std::lock_guard lock(listenerMutex);
+        for (const auto& [id, l] : listeners)
+            current.push_back(l);
+    }
+    for (const auto& l : current)
+        (*l)(changes);
 }
 
 } // namespace devildj::library

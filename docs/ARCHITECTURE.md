@@ -227,6 +227,7 @@ Each analyzer is a pure function `Result analyze(const AnalysisInput&, const Par
 
 - SQLite in WAL mode at `%APPDATA%\Devil-DJ\library.db`. One writer thread; UI reads through a read-only connection.
 - Repositories return plain structs; UI models (`TrackTableModel`) cache pages of 200 rows.
+- Repositories (`TrackRepository`, `PlaylistRepository`, `CueRepository`, `TagRepository`) work on the connection they are given: a reader connection for reads, the writer connection inside a `Database::write` job for writes. Writes note what they changed (`Change{table, id, removed}`); after each job the writer thread hands the list to `Database` change listeners (rolled-back work is dropped). Listeners run on the writer thread and must post to their own thread (the UI posts to the message thread). Connections refuse to run on the audio thread (Debug, via RealtimeGuard).
 - FTS5 virtual table `tracks_fts(title, artist, album, comment)` kept in sync by triggers.
 
 ## 7. Database schema (v1)

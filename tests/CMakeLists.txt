@@ -38,6 +38,7 @@ target_sources(DevilDJTests PRIVATE
     library/DatabaseTests.cpp
     library/ImporterTests.cpp
     library/LibrarySmokeTests.cpp
+    library/RepositoryTests.cpp
     library/TagReaderTests.cpp
     matcher/MatcherSmokeTests.cpp
     ui/UiSmokeTests.cpp

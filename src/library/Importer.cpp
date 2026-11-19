@@ -3,6 +3,7 @@
 #include "library/ContentHash.h"
 #include "library/Database.h"
 #include "library/TagReader.h"
+#include "library/TrackRepository.h"
 #include "util/ThreadPriority.h"
 
 #include <algorithm>
@@ -252,30 +253,33 @@ ImportResult importTracks(Database& db, std::span<const std::filesystem::path> i
                             if (item.knownPath || !item.error.empty() || item.hash.hex.empty() ||
                                 knownHashes.count(item.hash.hex) > 0 || !item.tags.readable)
                                 continue;
-                            auto* s = c.prepare(
-                                "INSERT INTO tracks (path, content_hash, title, artist, album, genre, year, comment, "
-                                "duration_ms, sample_rate, bitrate, file_size, bpm, musical_key, date_added) "
-                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                            if (s == nullptr)
-                            {
-                                writeError = c.lastError();
-                                return false;
-                            }
                             const auto& t = item.tags;
-                            const auto text = [](const std::string& v)
-                            { return v.empty() ? std::optional<std::string_view>{} : std::optional<std::string_view>{v}; };
-                            s->bind(1, item.path).bind(2, item.hash.hex).bind(3, text(t.title)).bind(4, text(t.artist));
-                            s->bind(5, text(t.album)).bind(6, text(t.genre)).bind(7, t.year).bind(8, text(t.comment));
-                            s->bind(9, t.durationMs).bind(10, t.sampleRate).bind(11, t.bitrateKbps);
-                            s->bind(12, static_cast<std::int64_t>(item.hash.size));
-                            s->bind(13, t.bpm > 0.0 ? std::optional<double>{t.bpm} : std::nullopt);
-                            s->bind(14, t.musicalKey).bind(15, added);
-                            if (!s->run())
+                            Track track;
+                            track.path = item.path;
+                            track.contentHash = item.hash.hex;
+                            track.title = t.title;
+                            track.artist = t.artist;
+                            track.album = t.album;
+                            track.genre = t.genre;
+                            track.year = t.year;
+                            track.comment = t.comment;
+                            if (t.durationMs)
+                                track.durationMs = *t.durationMs;
+                            track.sampleRate = t.sampleRate;
+                            track.bitrateKbps = t.bitrateKbps;
+                            track.fileSize = static_cast<std::int64_t>(item.hash.size);
+                            if (t.bpm > 0.0)
+                                track.bpm = t.bpm;
+                            track.musicalKey = t.musicalKey;
+                            track.dateAdded = added;
+                            TrackRepository tracks(c); // notes a Tracks change for the listeners
+                            const auto addedTrack = tracks.add(track);
+                            if (!addedTrack)
                             {
-                                writeError = s->error();
+                                writeError = addedTrack.error();
                                 return false;
                             }
-                            const auto id = c.lastInsertId();
+                            const auto id = addedTrack.value();
                             inserted.emplace_back(i, id);
                             knownHashes.insert(item.hash.hex); // a second copy later in this import is a duplicate
 
