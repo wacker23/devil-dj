@@ -2,6 +2,7 @@
 
 #include "engine/TrackDecoder.h"
 #include "library/Database.h"
+#include "library/ForeignLibrary.h"
 #include "library/Importer.h"
 #include "library/PlaylistFiles.h"
 #include "util/Log.h"
@@ -45,16 +46,54 @@ public:
 
     void run() override
     {
-        std::vector<std::filesystem::path> paths, playlists;
+        std::vector<std::filesystem::path> paths, playlists, libraries;
         for (const auto& f : inputs)
-            (library::isPlaylistFile(toPath(f)) ? playlists : paths).push_back(toPath(f));
+            (f.hasFileExtension(".xml")              ? libraries
+             : library::isPlaylistFile(toPath(f)) ? playlists
+                                                  : paths)
+                .push_back(toPath(f));
         library::ImportOptions options;
         options.artworkCacheDir = toPath(artwork);
         options.isCancelled = [this] { return threadShouldExit(); };
         options.onProgress = [this](int done, int total)
         { post("Adding to the library... " + juce::String(done) + " / " + juce::String(total)); };
-        // Playlist files (P2-06): each becomes a playlist; tracks not in the library yet are added first.
+        // Libraries from other software (P2-09): tracks, cues, tempo markers and playlists.
         juce::String playlistText;
+        for (const auto& file : libraries)
+        {
+            post("Reading " + juce::String(file.filename().wstring().c_str()) + "...");
+            const auto foreign = library::readForeignLibrary(file);
+            if (!foreign)
+            {
+                playlistText << "Library import failed: " << juce::String::fromUTF8(foreign.error().c_str()) << ". ";
+                continue;
+            }
+            post("Adding " + juce::String(static_cast<int>(foreign.value().tracks.size())) + " tracks from " +
+                 juce::String::fromUTF8(foreign.value().format.c_str()) + "...");
+            const auto folder = "Imported " + foreign.value().format + " " +
+                                juce::Time::getCurrentTime().formatted("%Y-%m-%d %H:%M").toStdString();
+            const auto applied = library::importForeignLibrary(db, foreign.value(), folder, options);
+            if (!applied)
+            {
+                playlistText << "Library import failed: " << juce::String::fromUTF8(applied.error().c_str()) << ". ";
+                continue;
+            }
+            const auto& a = applied.value();
+            playlistText << "From " << juce::String::fromUTF8(foreign.value().format.c_str()) << ": " << a.matched
+                         << " of " << a.tracksInFile << " tracks (" << a.added << " new), " << a.playlists
+                         << " playlists, " << a.cuesAdded << " cues";
+            if (a.missingFiles > 0)
+                playlistText << ", " << a.missingFiles << " files not on this computer";
+            playlistText << ". ";
+            util::logInfo("Library import ({}): {} tracks in the file, {} matched, {} new, {} missing, {} cues, {} "
+                          "beatgrids, {} playlists",
+                          foreign.value().format, a.tracksInFile, a.matched, a.added, a.missingFiles, a.cuesAdded,
+                          a.beatgridsAdded, a.playlists);
+            for (const auto& n : a.notes)
+                util::logWarning("Library import: {}", n);
+        }
+
+        // Playlist files (P2-06): each becomes a playlist; tracks not in the library yet are added first.
         for (const auto& p : playlists)
         {
             post("Importing playlist " + juce::String(p.filename().wstring().c_str()) + "...");
@@ -485,6 +524,21 @@ void MainComponent::toggleBrowserSize()
 bool MainComponent::isImporting() const
 {
     return importJob != nullptr && importJob->isThreadRunning();
+}
+
+void MainComponent::importOtherLibrary()
+{
+    if (libraryDb == nullptr)
+        return;
+    importChooser = std::make_unique<juce::FileChooser>(
+        "Import a library from other software (DJ library XML or iTunes / Apple Music Library.xml)",
+        juce::File::getSpecialLocation(juce::File::userMusicDirectory), "*.xml");
+    importChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                               [this](const juce::FileChooser& fc)
+                               {
+                                   if (const auto file = fc.getResult(); file.existsAsFile())
+                                       importToLibrary({file});
+                               });
 }
 
 void MainComponent::importPlaylistFile(std::optional<std::int64_t> parentFolder)

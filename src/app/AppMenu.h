@@ -21,6 +21,7 @@ public:
     std::function<void()> onAudioSettings;
     std::function<void()> onImportFolder;   // library (P2-04)
     std::function<void()> onImportPlaylist; // M3U / M3U8 (P2-06)
+    std::function<void()> onImportLibrary;  // other software's library XML (P2-09)
     std::function<void()> onToggleDebugOverlay;
     std::function<void()> onToggleTestTone;
     std::function<void(int deck)> onLoadTrack;
@@ -48,6 +49,7 @@ private:
         AudioSettings = 1,
         ImportFolder,
         ImportPlaylist,
+        ImportLibrary,
         DebugOverlay,
         TestTone,
         LoadDeckA,

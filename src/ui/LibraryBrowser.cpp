@@ -1157,7 +1157,7 @@ bool LibraryBrowser::isInterestedInFileDrag(const juce::StringArray& files)
         return false;
     for (const auto& path : files)
         if (const juce::File f(path); f.isDirectory() || engine::isSupportedTrackFile(f) ||
-                                      f.hasFileExtension(".m3u;.m3u8"))
+                                      f.hasFileExtension(".m3u;.m3u8;.xml"))
             return true;
     return false;
 }
@@ -1181,8 +1181,8 @@ void LibraryBrowser::filesDropped(const juce::StringArray& files, int, int)
     juce::Array<juce::File> toImport;
     for (const auto& path : files)
         if (const juce::File f(path); f.isDirectory() || engine::isSupportedTrackFile(f) ||
-                                      f.hasFileExtension(".m3u;.m3u8"))
-            toImport.add(f); // playlist files become playlists
+                                      f.hasFileExtension(".m3u;.m3u8;.xml"))
+            toImport.add(f); // playlist files become playlists, library XML a library import
     if (!toImport.isEmpty() && onImport)
         onImport(toImport);
 }

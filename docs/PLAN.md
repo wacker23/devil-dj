@@ -239,7 +239,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   My-Tag-style custom tag categories, 0–5 star rating, track colour; editable inline and via keyboard (Ctrl+Shift+1…5 rating, see KEYMAP).
   Done when: persisted and filterable.
 
-- [ ] **P2-09 Importers from other software**
+- [x] **P2-09 Importers from other software**
   rekordbox XML import (tracks, playlists, cues, beatgrid tempo markers), iTunes/Apple Music library XML import. Write our own XML parsing against the public format; no AlphaTheta code.
   Done when: sample XML fixture (hand-written) imports cues and playlists correctly.
 

@@ -70,6 +70,7 @@ public:
         menu = std::make_unique<AppMenu>(logDirectory(), showDebugMenu);
         menu->onImportFolder = [this] { mainComponent->importToLibrary({}); };
         menu->onImportPlaylist = [this] { mainComponent->importPlaylistFile(); };
+        menu->onImportLibrary = [this] { mainComponent->importOtherLibrary(); };
         menu->onAudioSettings = [this]
         {
             AudioSettingsComponent::Callbacks callbacks;

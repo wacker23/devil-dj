@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Hand-written test fixture in the iTunes / Apple Music library XML layout (P2-09). Made-up tracks; {{DIR}} is
+     replaced by the test with a temporary folder of generated audio files. -->
+<plist version="1.0">
+<dict>
+	<key>Major Version</key><integer>1</integer>
+	<key>Application Version</key><string>12.0</string>
+	<key>Music Folder</key><string>file://localhost/{{DIR}}/</string>
+	<key>Tracks</key>
+	<dict>
+		<key>2001</key>
+		<dict>
+			<key>Track ID</key><integer>2001</integer>
+			<key>Name</key><string>Opener</string>
+			<key>Artist</key><string>Neon Owl</string>
+			<key>Album</key><string>After Hours</string>
+			<key>Genre</key><string>Deep House</string>
+			<key>BPM</key><integer>121</integer>
+			<key>Date Added</key><date>2019-06-01T20:15:00Z</date>
+			<key>Play Count</key><integer>12</integer>
+			<key>Rating</key><integer>80</integer>
+			<key>Comments</key><string>iTunes &amp; me</string>
+			<key>Sample Rate</key><integer>44100</integer>
+			<key>Location</key><string>file://localhost/{{DIR}}/Opener.mp3</string>
+		</dict>
+		<key>2002</key>
+		<dict>
+			<key>Track ID</key><integer>2002</integer>
+			<key>Name</key><string>Second Track</string>
+			<key>Rating</key><integer>60</integer>
+			<key>Rating Computed</key><true/>
+			<key>Location</key><string>file://localhost/{{DIR}}/Second%20Track.mp3</string>
+		</dict>
+		<key>2003</key>
+		<dict>
+			<key>Track ID</key><integer>2003</integer>
+			<key>Name</key><string>Gone</string>
+			<key>Location</key><string>file://localhost/{{DIR}}/missing.mp3</string>
+		</dict>
+		<key>2004</key>
+		<dict>
+			<key>Track ID</key><integer>2004</integer>
+			<key>Name</key><string>A radio stream</string>
+			<key>Track Type</key><string>URL</string>
+			<key>Location</key><string>http://example.com/stream</string>
+		</dict>
+	</dict>
+	<key>Playlists</key>
+	<array>
+		<dict>
+			<key>Name</key><string>Library</string>
+			<key>Master</key><true/>
+			<key>Playlist Items</key>
+			<array>
+				<dict><key>Track ID</key><integer>2001</integer></dict>
+				<dict><key>Track ID</key><integer>2002</integer></dict>
+			</array>
+		</dict>
+		<dict>
+			<key>Name</key><string>Music</string>
+			<key>Distinguished Kind</key><integer>4</integer>
+			<key>Playlist Items</key>
+			<array>
+				<dict><key>Track ID</key><integer>2001</integer></dict>
+			</array>
+		</dict>
+		<dict>
+			<key>Name</key><string>Night</string>
+			<key>Playlist Persistent ID</key><string>B2</string>
+			<key>Parent Persistent ID</key><string>F1</string>
+			<key>Playlist Items</key>
+			<array>
+				<dict><key>Track ID</key><integer>2002</integer></dict>
+				<dict><key>Track ID</key><integer>2003</integer></dict>
+				<dict><key>Track ID</key><integer>2001</integer></dict>
+			</array>
+		</dict>
+		<dict>
+			<key>Name</key><string>Sets</string>
+			<key>Playlist Persistent ID</key><string>F1</string>
+			<key>Folder</key><true/>
+		</dict>
+		<dict>
+			<key>Name</key><string>Top</string>
+			<key>Playlist Persistent ID</key><string>C3</string>
+			<key>Playlist Items</key>
+			<array>
+				<dict><key>Track ID</key><integer>2001</integer></dict>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

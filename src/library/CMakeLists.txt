@@ -3,6 +3,7 @@ add_library(devildj_library STATIC
     Connection.cpp
     ContentHash.cpp
     Database.cpp
+    ForeignLibrary.cpp
     CueRepository.cpp
     Importer.cpp
     Migrations.cpp
@@ -11,7 +12,8 @@ add_library(devildj_library STATIC
     SmartRules.cpp
     TagReader.cpp
     TagRepository.cpp
-    TrackRepository.cpp)
+    TrackRepository.cpp
+    XmlReader.cpp)
 add_library(devildj::library ALIAS devildj_library)
 
 target_sources(devildj_library PUBLIC
@@ -21,6 +23,7 @@ target_sources(devildj_library PUBLIC
         Connection.h
         ContentHash.h
         Database.h
+        ForeignLibrary.h
         CueRepository.h
         Importer.h
         Migrations.h
@@ -30,7 +33,8 @@ target_sources(devildj_library PUBLIC
         RepositoryUtil.h
         TagReader.h
         TagRepository.h
-        TrackRepository.h)
+        TrackRepository.h
+        XmlReader.h)
 
 target_include_directories(devildj_library PUBLIC "${PROJECT_SOURCE_DIR}/src")
 target_compile_features(devildj_library PUBLIC cxx_std_20)

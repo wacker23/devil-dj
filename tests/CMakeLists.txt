@@ -36,6 +36,7 @@ target_sources(DevilDJTests PRIVATE
     engine/TrackDecoderTests.cpp
     engine/TrackLoaderTests.cpp
     library/DatabaseTests.cpp
+    library/ForeignLibraryTests.cpp
     library/ImporterTests.cpp
     library/LibrarySmokeTests.cpp
     library/PlaylistFilesTests.cpp
