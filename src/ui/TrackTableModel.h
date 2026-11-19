@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "library/SmartRules.h"
+#include "util/MusicalKey.h"
 
 namespace devildj::library
 {
@@ -125,7 +126,13 @@ public:
     int pageLoads() const noexcept { return loads; } // for tests: how many pages were read
     const juce::String& error() const noexcept { return lastError; }
 
-    static juce::String keyName(int musicalKey);  // 0..23 -> "C", "F#m", ... (empty if out of range)
+    // Key column: musical ("F#m") or Camelot ("11A") (P2-15); sorting by key follows it (Camelot: 1A, 1B, 2A ...).
+    void setKeyNotation(util::KeyNotation notation);
+    util::KeyNotation keyNotation() const noexcept { return notation; }
+
+    static juce::String keyName(int musicalKey); // 0..23 -> "C", "F#m", ... (empty if out of range)
+    static juce::String keyName(int musicalKey, util::KeyNotation notation);
+    static juce::String keyChoiceName(int musicalKey); // both, for menus: "F#m  11A"
     static juce::String timeText(double seconds); // "5:07"
 
 private:
@@ -136,6 +143,7 @@ private:
     library::Connection& db;
     TrackSource currentSource;
     TrackColumn sortBy = TrackColumn::Number;
+    util::KeyNotation notation = util::KeyNotation::Musical;
     bool ascending = true;
     TrackFilter currentFilter;
     double queryMs = 0.0;

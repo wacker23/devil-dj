@@ -281,7 +281,7 @@ LibraryBrowser::LibraryBrowser(library::Database* db, juce::File artworkFolder, 
     keyBox.addItem("Any key", 1);
     for (int pitch = 0; pitch < 12; ++pitch)
         for (int minor = 0; minor < 2; ++minor)
-            keyBox.addItem(TrackTableModel::keyName(pitch + 12 * minor), 2 + pitch + 12 * minor);
+            keyBox.addItem(TrackTableModel::keyChoiceName(pitch + 12 * minor), 2 + pitch + 12 * minor);
     ratingBox.addItem("Any rating", 1);
     for (int r = 1; r <= 5; ++r)
         ratingBox.addItem(stars(r) + (r < 5 ? " or more" : ""), 1 + r);
@@ -952,6 +952,15 @@ void LibraryBrowser::refreshFromLibrary(bool tracks, bool playlists)
         trackTable.repaint();
         updateCount();
     }
+}
+
+void LibraryBrowser::setKeyNotation(util::KeyNotation notation)
+{
+    if (tableModel == nullptr || tableModel->keyNotation() == notation)
+        return;
+    tableModel->setKeyNotation(notation);
+    trackTable.updateContent();
+    trackTable.repaint();
 }
 
 void LibraryBrowser::setBig(bool big)

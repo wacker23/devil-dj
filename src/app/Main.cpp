@@ -95,6 +95,14 @@ public:
         menu->onBackupNow = [this] { backupNow(); };
         menu->onRestoreBackup = [this] { chooseRestore(); };
         menu->onOpenBackups = [] { backup::defaultFolder().createDirectory(); backup::defaultFolder().startAsProcess(); };
+        const bool camelot = settings->get(keys::keyNotation) == 1;
+        menu->setKeyNotation(camelot ? 1 : 0);
+        mainComponent->setKeyNotation(camelot ? util::KeyNotation::Camelot : util::KeyNotation::Musical);
+        menu->onKeyNotation = [this](int notation)
+        {
+            settings->set(keys::keyNotation, notation);
+            mainComponent->setKeyNotation(notation == 1 ? util::KeyNotation::Camelot : util::KeyNotation::Musical);
+        };
         menu->onImportPlaylist = [this] { mainComponent->importPlaylistFile(); };
         menu->onImportLibrary = [this] { mainComponent->importOtherLibrary(); };
         menu->onCheckMissing = [this] { mainComponent->checkMissingFiles(false); };

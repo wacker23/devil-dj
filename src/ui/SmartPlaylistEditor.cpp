@@ -150,7 +150,7 @@ public:
         for (int i = 0; i < static_cast<int>(std::size(kAllFields)); ++i)
             field.addItem(fieldLabel(kAllFields[i]), i + 1);
         for (int k = 0; k < 24; ++k)
-            key.addItem(TrackTableModel::keyName((k % 2) * 12 + k / 2), (k % 2) * 12 + k / 2 + 1); // C, Cm, Db, ...
+            key.addItem(TrackTableModel::keyChoiceName((k % 2) * 12 + k / 2), (k % 2) * 12 + k / 2 + 1); // C, Cm, Db, ...
         for (auto* c : {&field, &op, &key})
         {
             style(*c);

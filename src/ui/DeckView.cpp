@@ -219,6 +219,19 @@ void DeckView::paint(juce::Graphics& g)
                    juce::String(juce::roundToInt(state.tempoRangePercent)) + ")",
                bpmArea, juce::Justification::centredRight);
 
+    // Key, left of the BPM.
+    if (key.isNotEmpty())
+    {
+        auto keyArea = header.removeFromRight(64);
+        g.setColour(kText);
+        g.setFont(juce::FontOptions(20.0f, juce::Font::bold));
+        g.drawText(key, keyArea.removeFromTop(28), juce::Justification::centredRight);
+        g.setColour(kDim);
+        g.setFont(juce::FontOptions(11.0f));
+        g.drawText("KEY", keyArea, juce::Justification::centredRight);
+        header.removeFromRight(kMargin);
+    }
+
     // Title / artist.
     g.setColour(kText);
     g.setFont(juce::FontOptions(18.0f, juce::Font::bold));
@@ -257,6 +270,14 @@ void DeckView::paint(juce::Graphics& g)
         g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
         g.drawText(badges.joinIntoString("  "), info, juce::Justification::centredRight, true);
     }
+}
+
+void DeckView::setKeyText(const juce::String& text)
+{
+    if (text == key)
+        return;
+    key = text;
+    repaint();
 }
 
 void DeckView::paintOverChildren(juce::Graphics& g)

@@ -265,7 +265,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   Grid = list of anchors (beat index, sample position, BPM until next anchor). UI tools: set downbeat here, shift grid ±1 ms / ±1 beat, BPM ×2 / ÷2, tap tempo, metronome click on cue bus, lock analysis.
   Done when: grid edits persist; metronome stays on the grid for 10 minutes on a 128 BPM click track.
 
-- [ ] **P2-15 Key detection (our own)**
+- [x] **P2-15 Key detection (our own)**
   Chromagram (FFT 8192, hop 2048, 36 bins/octave folded to 12, tuning estimation), averaged over the track with energy weighting, correlated against 24 key profiles; output key + confidence. Display as musical key and Camelot code (user setting).
   Done when: all 24 generated chord loops detected correctly; eval-set accuracy reported (target ≥ 75 % exact, ≥ 90 % including relative/fifth).
 

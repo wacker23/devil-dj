@@ -26,4 +26,7 @@ inline const SettingKey<juce::String> browserFolder{"browserFolder", {}};
 // juce::TableHeaderComponent::toString(). Empty = the default layout.
 inline const SettingKey<juce::String> libraryColumns{"libraryColumns", {}};
 
+// How keys are shown (P2-15): 0 = musical ("F#m"), 1 = Camelot ("11A").
+inline const SettingKey<int> keyNotation{"keyNotation", 0};
+
 } // namespace devildj::app::keys

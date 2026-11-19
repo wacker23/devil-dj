@@ -48,6 +48,9 @@ public:
     juce::TextButton& gridButton() noexcept { return grid; }
     juce::TextButton& tapButton() noexcept { return tap; }
     std::function<void()> onGridMenu; // GRID: the beatgrid tools (P2-14)
+    // The loaded track's key as the app shows it (library key, in the user's notation; P2-15). Empty = none.
+    void setKeyText(const juce::String& text);
+    const juce::String& keyText() const noexcept { return key; }
     std::function<void()> onTap;      // TAP: tap tempo
     juce::Slider& tempoSlider() noexcept { return tempo; }
     Overview& overview() noexcept { return *overviewView; }
@@ -60,6 +63,7 @@ private:
     std::shared_ptr<const engine::TrackBuffer> track;
     engine::DeckState state;
     double sampleRate = 48000.0;
+    juce::String key;
 
     std::unique_ptr<HoldButton> cue;
     juce::TextButton play{"PLAY"}, sync{"SYNC"}, keyLock{"KEY LOCK"}, grid{"GRID"}, tap{"TAP"};

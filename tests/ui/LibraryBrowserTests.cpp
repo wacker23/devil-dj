@@ -141,6 +141,66 @@ TEST_CASE("Track table: key names and times", "[ui][library]")
     CHECK(ui::TrackTableModel::timeText(0.0).isEmpty());
 }
 
+TEST_CASE("Track table: keys as musical or Camelot, sorted by the wheel (P2-15)", "[ui][library][key]")
+{
+    TestLibrary lib("keys");
+    // C major (8B), A minor (8A), G major (9B), F# minor (11A), B major (1B), G# minor (1A), no key.
+    const std::vector<std::pair<std::string, int>> tracks = {{"c", 0}, {"am", 21}, {"g", 7}, {"fsm", 18},
+                                                             {"b", 11}, {"gsm", 20}, {"none", -1}};
+    for (const auto& [title, key] : tracks)
+    {
+        const auto id = lib.add(title, 120.0);
+        lib.db->writeAndWait(
+            [&, key = key](library::Connection& c)
+            {
+                CHECK(c.exec("UPDATE tracks SET musical_key = " + (key < 0 ? std::string("NULL") : std::to_string(key)) +
+                             " WHERE id = " + std::to_string(id)));
+            });
+    }
+    ui::TrackTableModel model(*lib.reader);
+    model.setSort(TrackColumn::Key, true);
+    CHECK(model.row(0)->key == "C");
+    // Musical: by key number (C, G, B, F#m, G#m, Am), empty last.
+    CHECK(titles(model) == std::vector<juce::String>{"c", "g", "b", "fsm", "gsm", "am", "none"});
+
+    model.setKeyNotation(util::KeyNotation::Camelot);
+    CHECK(model.keyNotation() == util::KeyNotation::Camelot);
+    // Camelot: 1A, 1B, 8A, 8B, 9B, 11A, empty last.
+    CHECK(titles(model) == std::vector<juce::String>{"gsm", "b", "am", "c", "g", "fsm", "none"});
+    std::vector<juce::String> keys;
+    for (int i = 0; i < model.size(); ++i)
+        keys.push_back(model.row(i)->key);
+    CHECK(keys == std::vector<juce::String>{"1A", "1B", "8A", "8B", "9B", "11A", ""});
+    model.setSort(TrackColumn::Key, false);
+    CHECK(titles(model).front() == "fsm");
+
+    // Another sort column: the text changes, the order doesn't.
+    model.setSort(TrackColumn::Title, true);
+    CHECK(model.row(0)->title == "am");
+    CHECK(model.row(0)->key == "8A");
+    model.setKeyNotation(util::KeyNotation::Musical);
+    CHECK(model.row(0)->title == "am");
+    CHECK(model.row(0)->key == "Am");
+
+    // Menus show both.
+    CHECK(ui::TrackTableModel::keyChoiceName(18) == "F#m  11A");
+    CHECK(ui::TrackTableModel::keyChoiceName(-1).isEmpty());
+}
+
+TEST_CASE("Deck view: shows the key it is given", "[ui][key]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    engine::AudioEngine engine;
+    ui::DeckView deck(engine, 0, [](engine::BufferId) { return nullptr; });
+    CHECK(deck.keyText().isEmpty());
+    deck.setKeyText("8A");
+    CHECK(deck.keyText() == "8A");
+    deck.setSize(600, 200);
+    juce::Image image(juce::Image::ARGB, 600, 200, true);
+    juce::Graphics g(image);
+    deck.paintEntireComponent(g, false); // draws without a track
+}
+
 TEST_CASE("Track table: collection and playlists, sorted, empty values last", "[ui][library]")
 {
     TestLibrary lib("model");

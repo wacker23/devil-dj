@@ -79,6 +79,7 @@ public:
     juce::ComboBox& tagFilter() noexcept { return tagBox; }
     static juce::String colourName(std::uint32_t rgb); // "red", "blue", ... for the colour filter
     void setBig(bool big);              // shows the button's state
+    void setKeyNotation(util::KeyNotation notation); // the Key column (P2-15)
 
     FileBrowserPanel& folders() noexcept { return fileBrowser; }
     TrackTableModel* model() noexcept { return tableModel.get(); }

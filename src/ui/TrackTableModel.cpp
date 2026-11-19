@@ -21,7 +21,7 @@ juce::String text(const library::Statement& s, int column)
 }
 
 // The SQL behind each column's sort. Empty values go last either way; ties keep import / playlist order.
-std::string sortExpression(TrackColumn c)
+std::string sortExpression(TrackColumn c, util::KeyNotation notation)
 {
     switch (c)
     {
@@ -29,7 +29,12 @@ std::string sortExpression(TrackColumn c)
         case TrackColumn::Artist: return "t.artist COLLATE NOCASE";
         case TrackColumn::Album: return "t.album COLLATE NOCASE";
         case TrackColumn::Bpm: return "t.bpm";
-        case TrackColumn::Key: return "t.musical_key";
+        case TrackColumn::Key:
+            // Camelot: by wheel number, A (minor) before B (major). A minor key's number is its relative major's.
+            return notation == util::KeyNotation::Camelot
+                       ? "((7 * ((t.musical_key % 12) + CASE WHEN t.musical_key >= 12 THEN 3 ELSE 0 END) + 7) % 12) "
+                         "* 2 + (t.musical_key < 12)"
+                       : "t.musical_key";
         case TrackColumn::Time: return "t.duration_ms";
         case TrackColumn::Rating: return "nullif(t.rating, 0)";
         case TrackColumn::Colour: return "t.color";
@@ -64,10 +69,35 @@ TrackTableModel::TrackTableModel(library::Connection& reader)
 
 juce::String TrackTableModel::keyName(int k)
 {
-    static const char* const names[] = {"C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"};
-    if (k < 0 || k > 23)
+    return keyName(k, util::KeyNotation::Musical);
+}
+
+juce::String TrackTableModel::keyName(int k, util::KeyNotation n)
+{
+    return juce::String(util::keyName(k, n));
+}
+
+juce::String TrackTableModel::keyChoiceName(int k)
+{
+    if (!util::isValidKey(k))
         return {};
-    return juce::String(names[k % 12]) + (k >= 12 ? "m" : "");
+    return keyName(k) + "  " + keyName(k, util::KeyNotation::Camelot);
+}
+
+void TrackTableModel::setKeyNotation(util::KeyNotation n)
+{
+    if (n == notation)
+        return;
+    notation = n;
+    if (sortBy == TrackColumn::Key)
+    {
+        reload(); // the order changes
+    }
+    else
+    {
+        pages.clear(); // only the key text changes
+        recent.clear();
+    }
 }
 
 juce::String TrackTableModel::timeText(double seconds)
@@ -99,7 +129,7 @@ std::string TrackTableModel::orderBy() const
 {
     const std::string dir = ascending ? " ASC" : " DESC";
     const std::string natural = currentSource.kind == TrackSource::Kind::Playlist ? "pt.position" : "t.id";
-    const auto expr = sortExpression(sortBy);
+    const auto expr = sortExpression(sortBy, notation);
     if (expr.empty())
         return " ORDER BY " + natural + dir;
     return " ORDER BY (" + expr + ") IS NULL, " + expr + dir + ", " + natural;
@@ -349,7 +379,7 @@ const std::vector<TrackRow>* TrackTableModel::page(int pageIndex)
         r.genre = text(*s, 4);
         r.comment = text(*s, 5);
         if (const auto k = s->getOptionalInt(6))
-            r.key = keyName(static_cast<int>(*k));
+            r.key = keyName(static_cast<int>(*k), notation);
         r.bpm = s->getOptionalDouble(7).value_or(0.0);
         r.seconds = static_cast<double>(s->getOptionalInt(8).value_or(0)) / 1000.0;
         r.rating = static_cast<int>(s->getInt(9));

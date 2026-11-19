@@ -1100,6 +1100,7 @@ void MainComponent::loadGridFor(engine::DeckId deck, const juce::File& file, dou
     auto& d = deckGrids[deck];
     d = {};
     d.bufferRate = bufferRate;
+    showDeckKey(deck); // none until the library says
     if (gridReader != nullptr)
         if (auto* s = gridReader->prepare("SELECT id, sample_rate FROM tracks WHERE path = ? COLLATE NOCASE"))
         {
@@ -1115,6 +1116,22 @@ void MainComponent::loadGridFor(engine::DeckId deck, const juce::File& file, dou
         engine.send(engine::SetMetronome{deck, true});
 }
 
+void MainComponent::showDeckKey(engine::DeckId deck)
+{
+    if (deck >= deckGrids.size())
+        return;
+    (deck == 0 ? deckA : deckB).setKeyText(ui::TrackTableModel::keyName(deckGrids[deck].musicalKey, keyNotation));
+}
+
+void MainComponent::setKeyNotation(util::KeyNotation notation)
+{
+    keyNotation = notation;
+    if (libraryBrowser != nullptr)
+        libraryBrowser->setKeyNotation(notation);
+    for (engine::DeckId d = 0; d < 2; ++d)
+        showDeckKey(d);
+}
+
 void MainComponent::reloadGrid(engine::DeckId deck)
 {
     if (deck >= deckGrids.size() || gridReader == nullptr)
@@ -1122,6 +1139,13 @@ void MainComponent::reloadGrid(engine::DeckId deck)
     auto& d = deckGrids[deck];
     if (d.trackId == 0 || d.bufferRate <= 0.0)
         return;
+    // The key too (analysis results arrive here, P2-15).
+    if (auto* k = gridReader->prepare("SELECT musical_key FROM tracks WHERE id = ?"))
+    {
+        d.musicalKey = k->bind(1, d.trackId).step() ? static_cast<int>(k->getOptionalInt(0).value_or(-1)) : -1;
+        k->reset();
+        showDeckKey(deck);
+    }
     util::Beatgrid grid;
     if (const auto stored = library::BeatgridRepository(*gridReader).get(d.trackId))
     {

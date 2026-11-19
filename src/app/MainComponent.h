@@ -8,6 +8,7 @@
 #include "analysis/AnalysisService.h"
 #include "library/Database.h"
 #include "util/Beatgrid.h"
+#include "util/MusicalKey.h"
 #include "ui/Actions.h"
 #include "ui/DebugOverlay.h"
 #include "ui/DeckView.h"
@@ -138,7 +139,10 @@ private:
         util::Beatgrid grid; // buffer samples
         util::TapTempo taps;
         bool metronome = false;
+        int musicalKey = -1; // the library's key for the loaded track
     };
+    util::KeyNotation keyNotation = util::KeyNotation::Musical;
+    void showDeckKey(engine::DeckId deck);
     std::array<DeckGrid, 2> deckGrids;
     std::unique_ptr<library::Connection> gridReader; // message thread
     int gridListener = 0;
@@ -164,6 +168,7 @@ public:
     void resetTempo(engine::DeckId deck);
     void setTempoRange(double rangePercent);
     void setHighQualityResampling(bool on);
+    void setKeyNotation(util::KeyNotation notation); // library Key column and the decks (P2-15)
     void toggleKeyLock(engine::DeckId deck);
     void setIsolator(bool on);
     void setCrossfaderCurve(int curve);

@@ -27,6 +27,8 @@ public:
     std::function<void()> onBackupNow;      // P2-11
     std::function<void()> onRestoreBackup;  // P2-11
     std::function<void()> onOpenBackups;    // P2-11
+    std::function<void(int notation)> onKeyNotation; // 0 musical, 1 Camelot (P2-15)
+    void setKeyNotation(int notation) noexcept { keyNotation = notation; }
     std::function<void()> onToggleDebugOverlay;
     std::function<void()> onToggleTestTone;
     std::function<void(int deck)> onLoadTrack;
@@ -60,6 +62,8 @@ private:
         BackupNow,
         RestoreBackup,
         OpenBackups,
+        KeyMusical,
+        KeyCamelot,
         DebugOverlay,
         TestTone,
         LoadDeckA,
@@ -99,6 +103,7 @@ private:
     bool showDebugMenu;
     double tempoRange = 10.0;
     bool highQuality = false;
+    int keyNotation = 0;
     bool isolator = false;
     int crossfaderCurve = 0;
     int assign[2] = {0, 2};

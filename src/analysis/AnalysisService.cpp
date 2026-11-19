@@ -1,6 +1,7 @@
 #include "AnalysisService.h"
 
 #include "analysis/BeatTracker.h"
+#include "analysis/KeyDetector.h"
 #include "dsp/SincResampler.h"
 #include "library/Connection.h"
 #include "library/Database.h"
@@ -50,6 +51,15 @@ void AnalysisService::beatAnalyzer(const AnalysisInput& input, AnalysisResult& r
     result.beatgridJson = beatgridJson(grid, input.full.sampleRate);
 }
 
+void AnalysisService::keyAnalyzer(const AnalysisInput& input, AnalysisResult& result)
+{
+    const auto key = detectKey(input.mono.data(), static_cast<int>(input.mono.size()), AnalysisInput::kMonoRate);
+    if (!key.valid)
+        return; // nothing tonal: a key from the tags stays
+    result.musicalKey = key.key;
+    result.keyConfidence = key.confidence;
+}
+
 void AnalysisService::basicsAnalyzer(const AnalysisInput& input, AnalysisResult& result)
 {
     // The exact length and rate from the decoded audio (tags and file headers can be off, VBR MP3s especially).
@@ -71,6 +81,7 @@ AnalysisService::AnalysisService(library::Database& database, Decoder decoder, O
     {
         options.analyzers.push_back(&AnalysisService::basicsAnalyzer);
         options.analyzers.push_back(&AnalysisService::beatAnalyzer);
+        options.analyzers.push_back(&AnalysisService::keyAnalyzer);
     }
     int n = options.workers;
     if (n <= 0)

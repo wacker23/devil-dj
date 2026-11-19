@@ -96,6 +96,11 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
         menu.addSeparator();
         menu.addItem(HighQualityResampling, "High-quality resampling (sinc)", true, highQuality);
         menu.addSeparator();
+        juce::PopupMenu keyMenu;
+        keyMenu.addItem(KeyMusical, "Musical (Am, F#)", true, keyNotation == 0);
+        keyMenu.addItem(KeyCamelot, "Camelot (8A, 2B)", true, keyNotation == 1);
+        menu.addSubMenu("Show keys as", keyMenu);
+        menu.addSeparator();
         menu.addItem(OpenKeymapFolder, "Open keymap folder (keymap.json)");
         menu.addItem(ReloadKeymap, "Reload keymap");
         menu.addItem(-1, "Hold Ctrl + / to see the keyboard map", false);
@@ -156,6 +161,13 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
         case OpenBackups:
             if (onOpenBackups)
                 onOpenBackups();
+            break;
+
+        case KeyMusical:
+        case KeyCamelot:
+            keyNotation = menuItemID == KeyCamelot ? 1 : 0;
+            if (onKeyNotation)
+                onKeyNotation(keyNotation);
             break;
 
         case CheckMissing:
