@@ -4,6 +4,7 @@
 #include "library/Connection.h"
 #include "library/Database.h"
 #include "library/PlaylistRepository.h"
+#include "library/MissingFiles.h"
 #include "library/PlaylistFiles.h"
 #include "library/SmartRules.h"
 #include "ui/SmartPlaylistEditor.h"
@@ -376,6 +377,7 @@ void LibraryBrowser::rebuildTree()
     auto* root = treeRoot.get();
 
     root->addSubItem(new Item(*this, View::Collection, "Collection"));
+    root->addSubItem(new Item(*this, View::Missing, "Missing files"));
     auto* playlists = new Item(*this, View::Playlist, "Playlists", 0, true);
     auto* smart = new Item(*this, View::SmartPlaylist, "Smart playlists", 0, true);
     auto* history = new Item(*this, View::History, "History", 0, true);
@@ -440,7 +442,8 @@ void LibraryBrowser::rebuildTree()
     for (int i = 0; i < treeView.getNumRowsInTree(); ++i)
         if (auto* item = dynamic_cast<Item*>(treeView.getItemOnRow(i));
             item != nullptr && !item->isFolder && item->itemView == currentView &&
-            (currentView == View::Collection || currentView == View::Folders || item->playlistId == currentPlaylist))
+            (currentView == View::Collection || currentView == View::Folders || currentView == View::Missing ||
+             item->playlistId == currentPlaylist))
         {
             item->setSelected(true, true, juce::dontSendNotification);
             break;
@@ -474,6 +477,8 @@ void LibraryBrowser::setView(View v, std::int64_t playlistId)
             s = {TrackSource::Kind::Playlist, playlistId};
         else if (v == View::SmartPlaylist)
             s = {playlistId > 0 ? TrackSource::Kind::Smart : TrackSource::Kind::Playlist, playlistId};
+        else if (v == View::Missing)
+            s = {TrackSource::Kind::Missing, 0};
         tableModel->setSource(s);
         trackTable.updateContent();
         trackTable.deselectAllRows();
@@ -588,7 +593,10 @@ void LibraryBrowser::paintCell(juce::Graphics& g, int row, int column, int width
         case TrackColumn::Comment: text = r->comment; break;
         case TrackColumn::Colour: break;
     }
-    g.setColour(selected ? juce::Colours::white : (col == TrackColumn::Number ? kDim : kText));
+    // A missing file: the row in red (its file isn't where the library says).
+    g.setColour(r->missing ? juce::Colour(0xffe07a70).withAlpha(selected ? 1.0f : 0.85f)
+                : selected ? juce::Colours::white
+                           : (col == TrackColumn::Number ? kDim : kText));
     g.setFont(juce::FontOptions(13.5f));
     g.drawText(text, 5, 0, width - 10, height, justification, true);
 }
@@ -821,8 +829,12 @@ bool LibraryBrowser::loadSelected(int deck)
     const auto file = selectedTrackFile();
     if (!file.existsAsFile())
     {
-        if (selectedTrackId() != 0)
-            setStatus("File not found: " + file.getFullPathName());
+        if (const auto id = selectedTrackId(); id != 0)
+        {
+            setStatus("File not found: " + file.getFullPathName() + " (right-click > Relocate to find it)");
+            if (database != nullptr)
+                library::setTrackMissing(*database, id, true); // shows up in Missing files
+        }
         return selectedTrackId() != 0;
     }
     if (onLoad)
@@ -1293,6 +1305,7 @@ void LibraryBrowser::paintOverChildren(juce::Graphics& g)
                                       ? "No tracks yet. Press IMPORT or drop a music folder here."
                                   : currentView == View::SmartPlaylist ? "No tracks match this smart playlist's rules (yet)."
                                   : currentView == View::History       ? "Played tracks will appear here."
+                                  : currentView == View::Missing       ? "No missing files."
                                                                        : "Empty playlist.";
         g.drawFittedText(text, where.reduced(20), juce::Justification::centredTop, 2);
     }
@@ -1585,6 +1598,8 @@ juce::PopupMenu LibraryBrowser::menuForTree(std::int64_t id, View section)
 {
     juce::PopupMenu m;
     juce::Component::SafePointer<LibraryBrowser> self(this);
+    if (tableModel != nullptr && section == View::Missing)
+        return menuForMissing();
     if (tableModel != nullptr && section == View::SmartPlaylist)
     {
         if (id == 0)
@@ -1773,6 +1788,13 @@ juce::PopupMenu LibraryBrowser::menuForTracks()
     m.addSeparator();
     const auto file = selectedTrackFile();
     m.addItem("Show in Explorer", file.existsAsFile(), false, [file] { file.revealToUser(); });
+    if (!file.existsAsFile())
+        m.addItem("Relocate (search a folder for it)...",
+                  [self, ids]
+                  {
+                      if (self != nullptr && self->onRelocate)
+                          self->onRelocate(ids);
+                  });
     return m;
 }
 
@@ -2192,6 +2214,38 @@ juce::PopupMenu LibraryBrowser::tagMenu()
     }
     if (manage.getNumItems() > 0)
         m.addSubMenu("Rename / delete", manage);
+    return m;
+}
+
+// --- missing files (P2-10) ----------------------------------------------------------------------------------------
+
+void LibraryBrowser::showMissing()
+{
+    for (int i = 0; i < treeView.getNumRowsInTree(); ++i)
+        if (auto* item = dynamic_cast<Item*>(treeView.getItemOnRow(i)); item != nullptr && item->itemView == View::Missing)
+        {
+            item->setSelected(true, true, juce::dontSendNotification);
+            break;
+        }
+    setView(View::Missing, 0);
+}
+
+juce::PopupMenu LibraryBrowser::menuForMissing()
+{
+    juce::PopupMenu m;
+    juce::Component::SafePointer<LibraryBrowser> self(this);
+    m.addItem("Check for missing files now",
+              [self]
+              {
+                  if (self != nullptr && self->onCheckMissing)
+                      self->onCheckMissing();
+              });
+    m.addItem("Relocate missing files (search a folder)...",
+              [self]
+              {
+                  if (self != nullptr && self->onRelocate)
+                      self->onRelocate({});
+              });
     return m;
 }
 

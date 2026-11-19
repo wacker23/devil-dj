@@ -243,7 +243,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   rekordbox XML import (tracks, playlists, cues, beatgrid tempo markers), iTunes/Apple Music library XML import. Write our own XML parsing against the public format; no AlphaTheta code.
   Done when: sample XML fixture (hand-written) imports cues and playlists correctly.
 
-- [ ] **P2-10 Missing files**
+- [x] **P2-10 Missing files**
   Detect missing files, "relocate" dialog (search a folder by filename + size), "show all missing".
   Done when: moving a folder and relocating restores all links.
 

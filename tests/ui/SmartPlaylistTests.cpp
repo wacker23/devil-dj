@@ -163,7 +163,7 @@ TEST_CASE("Smart playlists: created, shown and always up to date", "[ui][smart]"
         CHECK(all[0].kind == library::PlaylistKind::Smart);
         CHECK(library::parseRules(all[0].ruleJson).value() == rules);
         CHECK(browser.treeRowNames().joinIntoString("|") ==
-              "Collection|Playlists|Smart playlists|Warm-up BPM|History|Folders");
+              "Collection|Missing files|Playlists|Smart playlists|Warm-up BPM|History|Folders");
 
         browser.showPlaylist(id);
         CHECK(browser.view() == ui::LibraryBrowser::View::SmartPlaylist);

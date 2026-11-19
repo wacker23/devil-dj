@@ -244,7 +244,7 @@ TEST_CASE("Library browser: tree, views, keyboard and loading", "[ui][library]")
 
     // Tree: the five sections, playlists inside their folder, smart playlists in their own section.
     CHECK(browser.treeRowNames().joinIntoString("|") ==
-          "Collection|Playlists|Gigs|Friday|Smart playlists|Fast ones|History|Folders");
+          "Collection|Missing files|Playlists|Gigs|Friday|Smart playlists|Fast ones|History|Folders");
 
     CHECK(browser.view() == ui::LibraryBrowser::View::Collection);
     CHECK(browser.model()->size() == 2);
@@ -263,11 +263,16 @@ TEST_CASE("Library browser: tree, views, keyboard and loading", "[ui][library]")
     CHECK(browser.loadSelected(0)); // the file isn't there: reported, not loaded
     CHECK(loads.size() == 1);
     CHECK(browser.status().contains("File not found"));
+    lib.db->flush(); // the load marked it missing (P2-10): let that write and the refresh happen
+    browser.handlePendingLibraryChanges();
 
     // Left: into the tree; Down moves through the selectable items (folders are skipped); Right: back.
     browser.collapse();
     CHECK(browser.treeHasFocus());
-    browser.moveSelection(1); // Collection -> Friday (Playlists and Gigs are folders)
+    browser.moveSelection(1); // Collection -> Missing files (P2-10)
+    CHECK(browser.view() == ui::LibraryBrowser::View::Missing);
+    CHECK(browser.model()->size() == 1); // Closer: its load just found no file and marked it
+    browser.moveSelection(1); // -> Friday (Playlists and Gigs are folders)
     CHECK(browser.view() == ui::LibraryBrowser::View::Playlist);
     CHECK(browser.model()->size() == 2);
     CHECK(browser.model()->trackIdAt(0) == t2); // playlist order

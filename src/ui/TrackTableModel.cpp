@@ -49,7 +49,7 @@ std::string pageSql()
     std::string sql = "SELECT id, title, artist, album, genre, comment, musical_key, bpm, duration_ms, rating, color, "
                       "date_added, path, (SELECT group_concat(name, ', ') FROM (SELECT g.name FROM track_tags tt "
                       "JOIN tags g ON g.id = tt.tag_id WHERE tt.track_id = tracks.id ORDER BY g.name COLLATE NOCASE)) "
-                      "FROM tracks WHERE id IN (";
+                      ", missing FROM tracks WHERE id IN (";
     for (int i = 0; i < TrackTableModel::kPageSize; ++i)
         sql += i == 0 ? "?" : ",?";
     return sql + ")";
@@ -154,6 +154,8 @@ std::string TrackTableModel::fromWhere(std::vector<library::SqlParam>& params, c
         where.push_back("tracks_fts MATCH ?");
         params.push_back(q);
     }
+    if (currentSource.kind == TrackSource::Kind::Missing)
+        where.push_back("t.missing = 1");
     if (currentSource.kind == TrackSource::Kind::Smart)
     {
         // P2-07: the playlist's rules, read now, so the list is always current.
@@ -356,6 +358,7 @@ const std::vector<TrackRow>* TrackTableModel::page(int pageIndex)
         r.dateAdded = s->getInt(11);
         r.path = text(*s, 12);
         r.tags = text(*s, 13);
+        r.missing = s->getInt(14) != 0;
         if (r.title.isEmpty()) // untagged: show the file name
             r.title = r.path.fromLastOccurrenceOf("\\", false, false).upToLastOccurrenceOf(".", false, false);
         byId.emplace(r.id, std::move(r));

@@ -50,6 +50,7 @@ public:
         SmartPlaylist, // P2-07: rules, no tracks yet
         History,       // P2-23
         Folders,
+        Missing, // P2-10: every track whose file is missing
     };
 
     // db may be null (the library couldn't be opened): only Folders works then, and `problem` says why.
@@ -146,6 +147,13 @@ public:
     juce::PopupMenu colourMenu();
     juce::PopupMenu tagMenu();
     static int starAt(int xInCell); // which star (1..5) a click in the Rating cell hits, 0 = left of them
+
+    // Missing files (P2-10): "Missing files" in the tree lists them (drawn red in every list); right-click there
+    // or on tracks to check again or relocate (search a folder by file name + size). The app does the work.
+    std::function<void()> onCheckMissing;
+    std::function<void(const std::vector<std::int64_t>& trackIds)> onRelocate; // empty = every missing track
+    void showMissing();
+    juce::PopupMenu menuForMissing();
 
     // Smart playlists (P2-07): rules in rule_json; the table always shows what they match right now.
     void createSmartPlaylist(const juce::String& name, const library::SmartRules& rules);

@@ -45,7 +45,8 @@ struct TrackSource
     {
         Collection,
         Playlist,
-        Smart, // P2-07: the tracks its rules match
+        Smart,   // P2-07: the tracks its rules match
+        Missing, // P2-10: tracks whose file isn't where the library says
     };
     Kind kind = Kind::Collection;
     std::int64_t playlistId = 0;
@@ -82,6 +83,7 @@ struct TrackRow
     std::optional<std::uint32_t> colour;
     std::int64_t dateAdded = 0;
     juce::String tags; // "Peak, Warm-up" (names, sorted)
+    bool missing = false; // the file isn't there (P2-10)
 };
 
 // Data behind the library table (ARCHITECTURE §6: "UI models cache pages of 200 rows"). On a source or sort

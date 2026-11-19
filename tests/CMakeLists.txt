@@ -39,6 +39,7 @@ target_sources(DevilDJTests PRIVATE
     library/ForeignLibraryTests.cpp
     library/ImporterTests.cpp
     library/LibrarySmokeTests.cpp
+    library/MissingFilesTests.cpp
     library/PlaylistFilesTests.cpp
     library/SmartRulesTests.cpp
     library/RepositoryTests.cpp

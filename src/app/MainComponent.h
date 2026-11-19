@@ -51,6 +51,11 @@ public:
     // result show in the browser's status line.
     void importToLibrary(const juce::Array<juce::File>& filesOrFolders,
                          std::optional<std::int64_t> playlistParent = std::nullopt);
+    // Missing files (P2-10): check every track's file (also done at start, quietly), and relocate - ask for a folder
+    // and search it by file name + size. Both run on the library worker thread.
+    void checkMissingFiles(bool quiet = false);
+    void relocateMissingFiles(const std::vector<std::int64_t>& trackIds = {});
+
     // Asks for a library file from other software (DJ library XML / iTunes Library.xml) and imports it (P2-09).
     void importOtherLibrary();
     // Asks for an .m3u / .m3u8 file and imports it as a playlist (P2-06).

@@ -4,6 +4,7 @@
 #include "library/Database.h"
 #include "library/ForeignLibrary.h"
 #include "library/Importer.h"
+#include "library/MissingFiles.h"
 #include "library/PlaylistFiles.h"
 #include "util/Log.h"
 #include "util/ProcessStats.h"
@@ -26,6 +27,38 @@ std::filesystem::path toPath(const juce::File& f)
 {
     return std::filesystem::path(f.getFullPathName().toWideCharPointer());
 }
+
+// A library job (missing-file check, relocate) on its own low-priority thread; its result goes to the browser's
+// status line.
+class LibraryTask final : public juce::Thread
+{
+public:
+    using Work = std::function<juce::String(LibraryTask&)>;
+    LibraryTask(juce::String name, Work w, ui::LibraryBrowser& b)
+        : juce::Thread(std::move(name))
+        , work(std::move(w))
+        , browser(&b)
+    {
+    }
+    ~LibraryTask() override { stopThread(10000); }
+    void run() override { post(work(*this)); }
+    bool cancelled() { return threadShouldExit(); }
+    void post(const juce::String& text)
+    {
+        if (text.isEmpty())
+            return;
+        juce::MessageManager::callAsync(
+            [b = browser, text]
+            {
+                if (b != nullptr)
+                    b->setStatus(text);
+            });
+    }
+
+private:
+    Work work;
+    juce::Component::SafePointer<ui::LibraryBrowser> browser;
+};
 
 // Runs library::importTracks on its own low-priority thread; progress and the result go to the browser's status
 // line on the message thread.
@@ -132,6 +165,8 @@ public:
         if (r.failed > 0)
             text << ", " << r.failed << " unreadable";
         text << " (" << juce::String(r.seconds, 1) << " s)";
+        if (r.relocated > 0)
+            text << ", " << r.relocated << " moved file" << (r.relocated == 1 ? "" : "s") << " found again";
         if (r.found == 0)
             text = "No music files found there";
         util::logInfo("Library import: {} found, {} added, {} known, {} duplicates, {} failed, {:.1f} s", r.found,
@@ -187,6 +222,14 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     libraryBrowser->onToggleSize = [this] { toggleBrowserSize(); };
     libraryBrowser->onSearchDone = [this] { grabKeyboardFocus(); }; // the decks' keys work again
     libraryBrowser->onImportPlaylist = [this](std::optional<std::int64_t> parent) { importPlaylistFile(parent); };
+    libraryBrowser->onCheckMissing = [this] { checkMissingFiles(false); };
+    libraryBrowser->onRelocate = [this](const std::vector<std::int64_t>& ids) { relocateMissingFiles(ids); };
+    if (libraryDb != nullptr)
+        juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this)]
+                                        {
+                                            if (safe != nullptr)
+                                                safe->checkMissingFiles(true); // at start, in the background
+                                        });
     for (auto [target, deck] :
          {std::pair<ui::TrackDropTarget*, engine::DeckId>{&deckA, 0}, {&deckB, 1}, {&waveA, 0}, {&waveB, 1}})
         target->onTrackDropped = [this, deck = deck](const juce::File& file) { loadFile(deck, file); };
@@ -524,6 +567,77 @@ void MainComponent::toggleBrowserSize()
 bool MainComponent::isImporting() const
 {
     return importJob != nullptr && importJob->isThreadRunning();
+}
+
+void MainComponent::checkMissingFiles(bool quiet)
+{
+    if (libraryDb == nullptr)
+        return;
+    if (isImporting())
+    {
+        if (!quiet)
+            libraryBrowser->setStatus("The library is busy - try again in a moment");
+        return;
+    }
+    auto* db = libraryDb;
+    importJob = std::make_unique<LibraryTask>(
+        "Missing files",
+        [db, quiet](LibraryTask& task)
+        {
+            if (!quiet)
+                task.post("Checking every track's file...");
+            const auto r = library::scanForMissingFiles(*db, [&task] { return task.cancelled(); });
+            util::logInfo("Missing files: {} checked, {} missing ({} new, {} found again)", r.checked, r.missing,
+                          r.newlyMissing, r.foundAgain);
+            if (r.missing == 0)
+                return quiet ? juce::String() : juce::String("All " + juce::String(r.checked) + " files are there");
+            return juce::String(r.missing) + (r.missing == 1 ? " track's file is" : " tracks' files are") +
+                   " missing - see Missing files (right-click there to relocate)";
+        },
+        *libraryBrowser);
+    importJob->startThread(juce::Thread::Priority::low);
+}
+
+void MainComponent::relocateMissingFiles(const std::vector<std::int64_t>& trackIds)
+{
+    if (libraryDb == nullptr)
+        return;
+    if (isImporting())
+    {
+        libraryBrowser->setStatus("The library is busy - try again in a moment");
+        return;
+    }
+    importChooser = std::make_unique<juce::FileChooser>("Where are the missing files now? (searched with subfolders)",
+                                                        juce::File::getSpecialLocation(juce::File::userMusicDirectory));
+    importChooser->launchAsync(
+        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
+        [this, trackIds](const juce::FileChooser& fc)
+        {
+            const auto folder = fc.getResult();
+            if (!folder.isDirectory() || libraryDb == nullptr || isImporting())
+                return;
+            auto* db = libraryDb;
+            importJob = std::make_unique<LibraryTask>(
+                "Relocate",
+                [db, trackIds, where = toPath(folder)](LibraryTask& task)
+                {
+                    task.post("Searching " + juce::String(where.wstring().c_str()) + "...");
+                    const auto r = library::relocateMissingFiles(*db, where, trackIds, [&task] { return task.cancelled(); });
+                    util::logInfo("Relocate: {} looked for, {} found, {} not found, {} files searched", r.lookedFor,
+                                  r.relocated, r.notFound, r.filesIndexed);
+                    for (const auto& n : r.notes)
+                        util::logWarning("Relocate: {}", n);
+                    if (r.lookedFor == 0)
+                        return juce::String("No missing files to look for");
+                    juce::String text;
+                    text << "Found " << r.relocated << " of " << r.lookedFor << " missing files";
+                    if (r.notFound > 0)
+                        text << " (" << r.notFound << " not in that folder)";
+                    return text;
+                },
+                *libraryBrowser);
+            importJob->startThread(juce::Thread::Priority::low);
+        });
 }
 
 void MainComponent::importOtherLibrary()

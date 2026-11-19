@@ -7,6 +7,7 @@ add_library(devildj_library STATIC
     CueRepository.cpp
     Importer.cpp
     Migrations.cpp
+    MissingFiles.cpp
     PlaylistFiles.cpp
     PlaylistRepository.cpp
     SmartRules.cpp
@@ -27,6 +28,7 @@ target_sources(devildj_library PUBLIC
         CueRepository.h
         Importer.h
         Migrations.h
+        MissingFiles.h
         PlaylistFiles.h
         PlaylistRepository.h
         SmartRules.h

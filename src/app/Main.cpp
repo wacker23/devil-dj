@@ -71,6 +71,8 @@ public:
         menu->onImportFolder = [this] { mainComponent->importToLibrary({}); };
         menu->onImportPlaylist = [this] { mainComponent->importPlaylistFile(); };
         menu->onImportLibrary = [this] { mainComponent->importOtherLibrary(); };
+        menu->onCheckMissing = [this] { mainComponent->checkMissingFiles(false); };
+        menu->onRelocate = [this] { mainComponent->relocateMissingFiles(); };
         menu->onAudioSettings = [this]
         {
             AudioSettingsComponent::Callbacks callbacks;

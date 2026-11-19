@@ -35,6 +35,7 @@ struct ImportResult
     int added = 0;            // new tracks
     int alreadyInLibrary = 0; // same path as a track in the library
     int duplicates = 0;       // same content as a track already in the library (or earlier in this import)
+    int relocated = 0;        // same content as a library track whose file is gone: the track now points here (P2-10)
     int failed = 0;           // couldn't be read
     bool cancelled = false;
     double seconds = 0.0;

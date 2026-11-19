@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <set>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace devildj::library
@@ -161,6 +162,7 @@ ImportResult importTracks(Database& db, std::span<const std::filesystem::path> i
 
     // What the library already has (one read at the start, then kept up to date as batches commit).
     std::unordered_set<std::string> knownPaths, knownHashes;
+    std::unordered_map<std::string, std::pair<std::int64_t, std::string>> trackByHash; // hash -> (id, path)
     {
         auto reader = db.openReader();
         if (!reader)
@@ -169,11 +171,12 @@ ImportResult importTracks(Database& db, std::span<const std::filesystem::path> i
             result.failed = result.found;
             return result;
         }
-        auto* s = reader.value()->prepare("SELECT path, content_hash FROM tracks");
+        auto* s = reader.value()->prepare("SELECT path, content_hash, id FROM tracks");
         while (s != nullptr && s->step())
         {
             knownPaths.insert(pathKey(s->getText(0)));
             knownHashes.insert(s->getText(1));
+            trackByHash.try_emplace(s->getText(1), s->getInt(2), s->getText(0));
         }
     }
 
@@ -238,6 +241,7 @@ ImportResult importTracks(Database& db, std::span<const std::filesystem::path> i
 
         // Write the batch in one transaction on the writer thread.
         std::vector<std::pair<std::size_t, std::int64_t>> inserted; // item index, track id
+        std::vector<std::size_t> relocatedItems;
         std::vector<std::pair<std::size_t, std::string>> artworkFiles;
         std::string writeError;
         const std::int64_t added = nowSeconds();
@@ -250,8 +254,33 @@ ImportResult importTracks(Database& db, std::span<const std::filesystem::path> i
                         for (std::size_t i = 0; i < count; ++i)
                         {
                             auto& item = items[i];
-                            if (item.knownPath || !item.error.empty() || item.hash.hex.empty() ||
-                                knownHashes.count(item.hash.hex) > 0 || !item.tags.readable)
+                            if (item.knownPath || !item.error.empty() || item.hash.hex.empty())
+                                continue;
+                            if (knownHashes.count(item.hash.hex) > 0)
+                            {
+                                // The same file as a library track: a copy, or the track's file moved here (P2-10).
+                                const auto owner = trackByHash.find(item.hash.hex);
+                                std::error_code ec;
+                                if (owner != trackByHash.end() &&
+                                    !std::filesystem::exists(
+                                        std::filesystem::path(std::u8string(
+                                            reinterpret_cast<const char8_t*>(owner->second.second.data()),
+                                            owner->second.second.size())),
+                                        ec))
+                                {
+                                    auto* move = c.prepare("UPDATE tracks SET path = ?, missing = 0 WHERE id = ?");
+                                    if (move == nullptr || !move->bind(1, item.path).bind(2, owner->second.first).run())
+                                    {
+                                        writeError = move != nullptr ? move->error() : c.lastError();
+                                        return false;
+                                    }
+                                    c.noteChange(Table::Tracks, owner->second.first);
+                                    owner->second.second = item.path;
+                                    relocatedItems.push_back(i);
+                                }
+                                continue;
+                            }
+                            if (!item.tags.readable)
                                 continue;
                             const auto& t = item.tags;
                             Track track;
@@ -282,6 +311,7 @@ ImportResult importTracks(Database& db, std::span<const std::filesystem::path> i
                             const auto id = addedTrack.value();
                             inserted.emplace_back(i, id);
                             knownHashes.insert(item.hash.hex); // a second copy later in this import is a duplicate
+                            trackByHash.try_emplace(item.hash.hex, id, item.path);
 
                             if (storeArtwork && !t.artwork.empty())
                             {
@@ -319,6 +349,12 @@ ImportResult importTracks(Database& db, std::span<const std::filesystem::path> i
         }
 
         std::vector<bool> wasInserted(count, false);
+        for (const auto i : relocatedItems)
+        {
+            wasInserted[i] = true; // counted below as relocated, not as a duplicate
+            ++result.relocated;
+            knownPaths.insert(pathKey(items[i].path));
+        }
         for (const auto& [i, id] : inserted)
         {
             wasInserted[i] = true;

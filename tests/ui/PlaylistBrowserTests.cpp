@@ -107,7 +107,7 @@ TEST_CASE("Playlists: create, folders, rename, delete", "[ui][playlists]")
     b.createPlaylist("Friday", gigs->id);
     rig.settle();
     CHECK(b.treeRowNames().joinIntoString("|") ==
-          "Collection|Playlists|Gigs|Friday|Warm-up|Smart playlists|History|Folders");
+          "Collection|Missing files|Playlists|Gigs|Friday|Warm-up|Smart playlists|History|Folders");
 
     // Names: a free default name next to taken ones.
     CHECK(b.uniquePlaylistName("New playlist", std::nullopt) == "New playlist");
@@ -238,7 +238,7 @@ TEST_CASE("Playlists: drag tracks onto the tree, and rows onto decks", "[ui][pla
     CHECK(rig.contents(target) == std::vector<std::int64_t>{rig.tracks[1], rig.tracks[3]});
 
     // Section headings and folders don't take tracks.
-    juce::TreeViewItem* heading = b.tree().getItemOnRow(1); // "Playlists"
+    juce::TreeViewItem* heading = b.tree().getItemOnRow(2); // "Playlists"
     CHECK_FALSE(heading->isInterestedInDragSource(details));
 
     // A deck loads the first dragged track.

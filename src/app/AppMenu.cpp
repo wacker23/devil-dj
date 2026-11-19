@@ -30,6 +30,8 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
         menu.addItem(ImportFolder, "Add music folder to the library...");
         menu.addItem(ImportPlaylist, "Import playlist (M3U / M3U8)...");
         menu.addItem(ImportLibrary, "Import library from other software (XML)...");
+        menu.addItem(CheckMissing, "Check for missing files");
+        menu.addItem(Relocate, "Relocate missing files (search a folder)...");
         menu.addSeparator();
         menu.addItem(LoadDeckA, "Load track to deck A...");
         menu.addItem(LoadDeckB, "Load track to deck B...");
@@ -134,6 +136,16 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
         case ImportLibrary:
             if (onImportLibrary)
                 onImportLibrary();
+            break;
+
+        case CheckMissing:
+            if (onCheckMissing)
+                onCheckMissing();
+            break;
+
+        case Relocate:
+            if (onRelocate)
+                onRelocate();
             break;
 
         case DebugOverlay:
