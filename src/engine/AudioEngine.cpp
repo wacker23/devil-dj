@@ -410,6 +410,7 @@ void AudioEngine::requestTrack(DeckId deckId, const TrackBuffer* buffer, BufferI
 {
     auto& slot = decks[deckId];
     slot.grid = {};
+    slot.queuedCount = 0;
     slot.clickActive = false;
     if (slot.hasPending && slot.pendingId != id)
         releaseBuffer(slot.pendingId); // superseded before it was ever used
@@ -438,29 +439,131 @@ void AudioEngine::swapPendingTracks() noexcept
 
 void AudioEngine::apply(const Play& command) noexcept
 {
-    if (command.deck < kMaxDecks && !decks[command.deck].hasPending)
+    if (command.deck >= kMaxDecks || decks[command.deck].hasPending)
+        return;
+    auto& slot = decks[command.deck];
+    // Quantized, with a deck leading the clock: start on the clock's next grid point (in time with it).
+    const bool quantized = (quantizeOn || command.quantized) && clock.sourceDeck() >= 0 &&
+                           clock.sourceDeck() != static_cast<int>(command.deck) && !slot.deck.isPlaying();
+    if (quantized)
     {
-        decks[command.deck].deck.play();
-        decks[command.deck].snapPending = decks[command.deck].synced; // into phase as it starts
+        const double next = std::ceil(clock.beatAtBlockStart() / quantizeBeats - 1e-9) * quantizeBeats;
+        queue(slot, {DeckSlot::QueuedAction::Kind::Play, next, 0.0});
+        return;
     }
+    startPlaying(slot);
+}
+
+void AudioEngine::startPlaying(DeckSlot& slot) noexcept
+{
+    slot.deck.play();
+    slot.snapPending = slot.synced; // into phase as it starts (P2-19)
+}
+
+void AudioEngine::queue(DeckSlot& slot, DeckSlot::QueuedAction action) noexcept
+{
+    if (slot.queuedCount < DeckSlot::kMaxQueued) // full: the newest is dropped (16 waiting is plenty)
+        slot.queued[static_cast<std::size_t>(slot.queuedCount++)] = action;
+}
+
+void AudioEngine::apply(const SetQuantize& command) noexcept
+{
+    quantizeOn = command.on;
+    // 1/8, 1/4, 1/2 or 1 beat (the nearest).
+    double best = 1.0;
+    for (const double b : {0.125, 0.25, 0.5, 1.0})
+        if (std::abs(b - command.beats) < std::abs(best - command.beats))
+            best = b;
+    quantizeBeats = best;
+}
+
+void AudioEngine::renderDeckWithActions(DeckSlot& slot, float* l, float* r, int numSamples) noexcept
+{
+    int done = 0;
+    while (slot.queuedCount > 0)
+    {
+        auto& a = slot.queued[0];
+        // Where in this chunk the first one falls due (actions run in order).
+        int due = numSamples;
+        double overshoot = 0.0;
+        if (a.kind == DeckSlot::QueuedAction::Kind::Play)
+        {
+            const double offset = clock.sampleAt(a.at) - static_cast<double>(clock.blockStart());
+            due = static_cast<int>(std::max(0.0, std::round(offset)));
+        }
+        else
+        {
+            const double rate = slot.deck.rate();
+            if (!slot.deck.isPlaying() || rate <= 0.0)
+            {
+                due = done; // not moving forward: nothing to wait for
+            }
+            else
+            {
+                const double steps = std::ceil((a.at - slot.deck.position()) / rate - 1e-9);
+                due = done + static_cast<int>(std::max(0.0, std::min(steps, 1e9)));
+                overshoot = slot.deck.position() + (due - done) * rate - a.at;
+            }
+        }
+        if (due >= numSamples)
+            break;
+        if (due > done)
+        {
+            slot.deck.render(l + done, r + done, due - done);
+            done = due;
+        }
+        const auto action = a;
+        for (int k = 1; k < slot.queuedCount; ++k)
+            slot.queued[static_cast<std::size_t>(k - 1)] = slot.queued[static_cast<std::size_t>(k)];
+        --slot.queuedCount;
+        if (action.kind == DeckSlot::QueuedAction::Kind::Play)
+            startPlaying(slot);
+        else
+            slot.deck.seek(action.to + std::max(0.0, overshoot));
+    }
+    if (done < numSamples)
+        slot.deck.render(l + done, r + done, numSamples - done);
 }
 
 void AudioEngine::apply(const Pause& command) noexcept
 {
-    if (command.deck < kMaxDecks)
-        decks[command.deck].deck.pause();
+    if (command.deck >= kMaxDecks)
+        return;
+    auto& slot = decks[command.deck];
+    slot.deck.pause();
+    // A quantized play still waiting is called off.
+    int kept = 0;
+    for (int k = 0; k < slot.queuedCount; ++k)
+        if (slot.queued[static_cast<std::size_t>(k)].kind != DeckSlot::QueuedAction::Kind::Play)
+            slot.queued[static_cast<std::size_t>(kept++)] = slot.queued[static_cast<std::size_t>(k)];
+    slot.queuedCount = kept;
 }
 
 void AudioEngine::apply(const TogglePlay& command) noexcept
 {
-    if (command.deck < kMaxDecks && !decks[command.deck].hasPending)
-        decks[command.deck].deck.togglePlay();
+    if (command.deck >= kMaxDecks || decks[command.deck].hasPending)
+        return;
+    const auto& slot = decks[command.deck];
+    const bool waiting = std::any_of(slot.queued.begin(), slot.queued.begin() + slot.queuedCount,
+                                     [](const auto& a) { return a.kind == DeckSlot::QueuedAction::Kind::Play; });
+    if (slot.deck.transport() == Deck::Transport::Playing || waiting)
+        apply(Pause{command.deck});
+    else
+        apply(Play{command.deck}); // from a held cue: keeps playing
 }
 
 void AudioEngine::apply(const CuePress& command) noexcept
 {
-    if (command.deck < kMaxDecks && !decks[command.deck].hasPending)
-        decks[command.deck].deck.cuePress();
+    if (command.deck >= kMaxDecks || decks[command.deck].hasPending)
+        return;
+    auto& slot = decks[command.deck];
+    // Quantized cue set: paused, the cue (and the playhead) snap to the nearest grid point first.
+    if (quantizeOn && !slot.grid.empty() && slot.deck.transport() == Deck::Transport::Paused)
+    {
+        const double beat = std::round(slot.grid.beatAt(slot.deck.position()) / quantizeBeats) * quantizeBeats;
+        slot.deck.seek(slot.grid.sampleAt(beat));
+    }
+    slot.deck.cuePress();
 }
 
 void AudioEngine::apply(const CueRelease& command) noexcept
@@ -471,8 +574,25 @@ void AudioEngine::apply(const CueRelease& command) noexcept
 
 void AudioEngine::apply(const Seek& command) noexcept
 {
-    if (command.deck < kMaxDecks && !decks[command.deck].hasPending)
-        decks[command.deck].deck.seek(command.samplePos);
+    if (command.deck >= kMaxDecks || decks[command.deck].hasPending)
+        return;
+    auto& slot = decks[command.deck];
+    if ((quantizeOn || command.quantized) && !slot.grid.empty())
+    {
+        // Land on a grid point; while playing, jump as the playhead crosses its next one (the phase stays).
+        const auto& g = slot.grid;
+        const double to = g.sampleAt(std::round(g.beatAt(command.samplePos) / quantizeBeats) * quantizeBeats);
+        if (slot.deck.isPlaying() && slot.deck.rate() > 0.0)
+        {
+            const double next =
+                (std::floor(g.beatAt(slot.deck.position()) / quantizeBeats + 1e-9) + 1.0) * quantizeBeats;
+            queue(slot, {DeckSlot::QueuedAction::Kind::Jump, g.sampleAt(next), to});
+            return;
+        }
+        slot.deck.seek(to);
+        return;
+    }
+    slot.deck.seek(command.samplePos);
 }
 
 void AudioEngine::apply(const SetTempo& command) noexcept
@@ -711,7 +831,7 @@ void AudioEngine::renderDecks(int numSamples) noexcept
             continue;
         }
         const double before = slot.deck.position();
-        slot.deck.render(l, r, numSamples);
+        renderDeckWithActions(slot, l, r, numSamples);
         renderMetronome(i, before, slot.deck.position(), numSamples);
         strips[i].processPreFader(l, r, numSamples);
         m.meter.process(l, r, numSamples);
@@ -824,6 +944,7 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         s.synced = slot.synced;
         s.master = clock.sourceDeck() == static_cast<int>(i);
         s.phaseErrorMs = slot.phaseErrorMs;
+        s.queuedActions = slot.queuedCount;
         if (s.hasGrid)
         {
             s.beat = slot.grid.beatAt(s.positionSamples);
@@ -869,6 +990,8 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
     current.masterSource = static_cast<std::int8_t>(clock.sourceDeck());
     current.clockMode = static_cast<std::uint8_t>(clock.mode());
     current.internalBpm = clock.internalBpm();
+    current.quantize = quantizeOn;
+    current.quantizeBeats = static_cast<float>(quantizeBeats);
 
     state.write(current);
 }

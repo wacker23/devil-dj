@@ -110,6 +110,7 @@ private:
     void apply(const SetClockSource& command) noexcept;
     void apply(const SetInternalTempo& command) noexcept;
     void apply(const SetSync& command) noexcept;
+    void apply(const SetQuantize& command) noexcept;
     void followMaster() noexcept;                              // P2-19: every synced deck that doesn't lead
     bool tempoToMaster(DeckId deck, double percent) noexcept; // sync lock: a follower's fader moves the master
     void advanceClock(int numSamples) noexcept;
@@ -152,6 +153,20 @@ private:
         bool synced = false;      // P2-19
         bool snapPending = false; // jump into phase once (sync pressed, play started) if far off
         double phaseErrorMs = 0.0;
+        // Quantized actions waiting for their grid point (P2-20; ARCHITECTURE §3.4), in order.
+        struct QueuedAction
+        {
+            enum class Kind : std::uint8_t
+            {
+                Play, // at master beat `at`
+                Jump, // when the playhead crosses buffer sample `at`: to `to` (+ the overshoot)
+            };
+            Kind kind = Kind::Play;
+            double at = 0.0, to = 0.0;
+        };
+        static constexpr int kMaxQueued = 16;
+        std::array<QueuedAction, kMaxQueued> queued{};
+        int queuedCount = 0;
         bool metronome = false;
         float metronomeGain = 0.5f;
         // The click being played: a short decaying sine, continued across chunks.
@@ -185,6 +200,12 @@ private:
     dsp::Limiter cueLimiter; // the headphones can't clip either, and stay aligned with the limited master
     dsp::LevelMeter cueMeter;
     MasterClock clock;
+    bool quantizeOn = false;
+    double quantizeBeats = 1.0;
+    void startPlaying(DeckSlot& slot) noexcept;
+    void queue(DeckSlot& slot, DeckSlot::QueuedAction action) noexcept;
+    // Renders one deck, split at the samples where its queued actions fall due.
+    void renderDeckWithActions(DeckSlot& slot, float* l, float* r, int numSamples) noexcept;
     void updateCueMix() noexcept;
     void mixHeadphones(int numSamples) noexcept;
     void finishBuses(int numSamples) noexcept;

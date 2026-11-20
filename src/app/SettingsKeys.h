@@ -33,4 +33,8 @@ inline const SettingKey<int> keyNotation{"keyNotation", 0};
 inline const SettingKey<bool> autoGain{"autoGain", true};
 inline const SettingKey<int> autoGainTarget{"autoGainTarget", -10};
 
+// Quantize (P2-20): on / off and the resolution in eighths of a beat (1 = 1/8, 2 = 1/4, 4 = 1/2, 8 = 1 beat).
+inline const SettingKey<bool> quantize{"quantize", false};
+inline const SettingKey<int> quantizeEighths{"quantizeEighths", 8};
+
 } // namespace devildj::app::keys

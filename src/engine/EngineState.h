@@ -40,6 +40,7 @@ struct DeckState
     bool synced = false;       // SYNC on (P2-19)
     bool master = false;       // this deck leads the master clock
     double phaseErrorMs = 0.0; // synced and following: how far its beat is from the master's (+ = behind)
+    int queuedActions = 0;     // quantized actions waiting for their grid point (P2-20)
 };
 
 // Mixer channel settings as the audio thread has them (targets; the sound follows within 20 ms).
@@ -107,6 +108,10 @@ struct EngineState
     std::int8_t masterSource = -1; // the leading deck, -1 = the internal tempo
     std::uint8_t clockMode = 0;    // MasterClock::Mode
     double internalBpm = 120.0;
+
+    // Quantize (P2-20).
+    bool quantize = false;
+    float quantizeBeats = 1.0f;
 };
 
 static_assert(std::is_trivially_copyable_v<EngineState>, "EngineState must stay trivially copyable");

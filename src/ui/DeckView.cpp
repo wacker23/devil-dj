@@ -264,6 +264,11 @@ void DeckView::paint(juce::Graphics& g)
     juce::StringArray badges;
     if (state.master)
         badges.add("MASTER");
+    if (engine.readState().quantize && state.hasGrid)
+    {
+        const int eighths = juce::roundToInt(engine.readState().quantizeBeats * 8.0f);
+        badges.add(eighths >= 8 ? juce::String("Q") : "Q 1/" + juce::String(8 / std::max(1, eighths)));
+    }
     if (state.hasGrid && state.playing)
         badges.add("BEAT " + juce::String(state.barBeat));
     if (state.metronome)

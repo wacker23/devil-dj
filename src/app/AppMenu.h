@@ -36,6 +36,13 @@ public:
         autoGainTarget = targetLufs;
     }
     static constexpr int kAutoGainTargets[] = {-8, -10, -12, -14};
+    std::function<void(bool on, int eighths)> onQuantize; // P2-20
+    void setQuantize(bool on, int eighths) noexcept
+    {
+        quantize = on;
+        quantizeEighths = eighths;
+    }
+    static constexpr int kQuantizeEighths[] = {1, 2, 4, 8};
     std::function<void()> onToggleDebugOverlay;
     std::function<void()> onToggleTestTone;
     std::function<void(int deck)> onLoadTrack;
@@ -74,6 +81,9 @@ private:
         AutoGainToggle,
         AutoGainTargetFirst, // one per kAutoGainTargets
         AutoGainTargetLast = AutoGainTargetFirst + 3,
+        QuantizeToggle,
+        QuantizeFirst, // one per kQuantizeEighths
+        QuantizeLast = QuantizeFirst + 3,
         DebugOverlay,
         TestTone,
         LoadDeckA,
@@ -116,6 +126,8 @@ private:
     int keyNotation = 0;
     bool autoGain = true;
     int autoGainTarget = -10;
+    bool quantize = false;
+    int quantizeEighths = 8;
     bool isolator = false;
     int crossfaderCurve = 0;
     int assign[2] = {0, 2};

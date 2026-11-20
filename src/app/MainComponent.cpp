@@ -473,6 +473,13 @@ void MainComponent::registerActions()
                     sendCrossfader();
                 });
     onPress(ui::globalCommand(GA::DebugOverlay), [this] { toggleDebugOverlay(); });
+    onPress(ui::globalCommand(GA::Quantize),
+            [this]
+            {
+                setQuantize(!quantize, quantizeBeats);
+                if (onQuantizeChanged)
+                    onQuantizeChanged(quantize, quantizeBeats);
+            });
     const auto move = [this](ui::GlobalAction a, int rows)
     {
         actions.setHandler(ui::globalCommand(a),
@@ -1169,6 +1176,13 @@ void MainComponent::setKeyNotation(util::KeyNotation notation)
         libraryBrowser->setKeyNotation(notation);
     for (engine::DeckId d = 0; d < 2; ++d)
         showDeckKey(d);
+}
+
+void MainComponent::setQuantize(bool on, double beats)
+{
+    quantize = on;
+    quantizeBeats = beats;
+    engine.send(engine::SetQuantize{on, static_cast<float>(beats)});
 }
 
 void MainComponent::setAutoGain(bool on, double targetLufs)

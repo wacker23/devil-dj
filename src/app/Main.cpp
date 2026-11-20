@@ -98,6 +98,21 @@ public:
         const bool camelot = settings->get(keys::keyNotation) == 1;
         menu->setKeyNotation(camelot ? 1 : 0);
         mainComponent->setKeyNotation(camelot ? util::KeyNotation::Camelot : util::KeyNotation::Musical);
+        menu->setQuantize(settings->get(keys::quantize), settings->get(keys::quantizeEighths));
+        mainComponent->setQuantize(settings->get(keys::quantize), settings->get(keys::quantizeEighths) / 8.0);
+        menu->onQuantize = [this](bool on, int eighths)
+        {
+            settings->set(keys::quantize, on);
+            settings->set(keys::quantizeEighths, eighths);
+            mainComponent->setQuantize(on, eighths / 8.0);
+        };
+        mainComponent->onQuantizeChanged = [this](bool on, double beats)
+        {
+            const int eighths = static_cast<int>(std::lround(beats * 8.0));
+            settings->set(keys::quantize, on);
+            settings->set(keys::quantizeEighths, eighths);
+            menu->setQuantize(on, eighths);
+        };
         menu->setAutoGain(settings->get(keys::autoGain), settings->get(keys::autoGainTarget));
         mainComponent->setAutoGain(settings->get(keys::autoGain), settings->get(keys::autoGainTarget));
         menu->onAutoGain = [this](bool on, int target)

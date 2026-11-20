@@ -48,7 +48,7 @@ Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / r
 | Preview highlighted suggestion in headphones (hold) | Ctrl+N |
 | Cycle intent: hold → up → down → switch | Ctrl+Shift+N |
 | Rate the last transition 👍 / 👎 (teaches the Track Matcher) | ' / Shift+' |
-| Quantize on/off | ` (backquote) |
+| Quantize on/off (resolution: Options > Quantize) | ` (backquote) |
 | Pad mode: Hot Cue / Beat Loop / Beat Jump / Slicer | F1 / F2 / F3 / F4 |
 | Pad mode: Key Shift / Keyboard / Pad FX / Sampler | Shift+F1 / Shift+F2 / Shift+F3 / Shift+F4 |
 | FX1 on/off / next effect | F5 / F6 |

@@ -57,7 +57,8 @@ struct UnloadTrack
     DeckId deck = 0;
 };
 
-// Transport (P1-06; names as in ARCHITECTURE §3.2). `quantized` is honoured from P2-20.
+// Transport (P1-06; names as in ARCHITECTURE §3.2). `quantized` (P2-20) quantizes this one command even when
+// the global quantize is off.
 struct Play
 {
     DeckId deck = 0;
@@ -88,6 +89,7 @@ struct Seek
 {
     DeckId deck = 0;
     double samplePos = 0.0; // in samples of the loaded TrackBuffer (= device rate)
+    bool quantized = false; // P2-20: see Play
 };
 
 // Tempo and pitch (P1-07).
@@ -209,6 +211,15 @@ struct SetInternalTempo
     double bpm = 120.0;
 };
 
+// Quantize (P2-20): with it on, play from pause starts on the master clock's next grid point, a cue set while
+// paused snaps to the nearest grid point, and a jump while playing happens as the playhead crosses its next grid
+// point and lands on one (keeping the phase). Resolution in beats: 1/8, 1/4, 1/2 or 1.
+struct SetQuantize
+{
+    bool on = false;
+    float beats = 1.0f;
+};
+
 // Beat sync (P2-19): the deck follows the master clock's tempo (half / double aware) and phase.
 struct SetSync
 {
@@ -220,7 +231,7 @@ using EngineCommand =
     std::variant<SetTestTone, SetOutputLayout, LoadTrack, UnloadTrack, Play, Pause, TogglePlay, CuePress, CueRelease,
                  Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo, PitchBend, SetInterpolationQuality, SetKeyLock,
                  SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge, SetParam, SetBeatgrid, SetMetronome,
-                 SetClockSource, SetInternalTempo, SetSync>;
+                 SetClockSource, SetInternalTempo, SetSync, SetQuantize>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

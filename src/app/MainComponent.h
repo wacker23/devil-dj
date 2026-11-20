@@ -148,6 +148,8 @@ private:
     };
     bool autoGain = true;
     double autoGainTarget = -10.0;
+    bool quantize = false;
+    double quantizeBeats = 1.0;
     void applyAutoGain(engine::DeckId deck, bool atLoad);
     util::KeyNotation keyNotation = util::KeyNotation::Musical;
     void showDeckKey(engine::DeckId deck);
@@ -178,6 +180,10 @@ public:
     void setHighQualityResampling(bool on);
     void setKeyNotation(util::KeyNotation notation); // library Key column and the decks (P2-15)
     void setAutoGain(bool on, double targetLufs);    // P2-16: applies to the next loads
+    // Quantize (P2-20): on / off and the resolution in beats; the ` key toggles it (onQuantizeChanged tells the
+    // app, to save it and tick the menu).
+    void setQuantize(bool on, double beats);
+    std::function<void(bool on, double beats)> onQuantizeChanged;
     void toggleKeyLock(engine::DeckId deck);
     void setIsolator(bool on);
     void setCrossfaderCurve(int curve);

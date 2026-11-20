@@ -41,6 +41,7 @@ target_sources(DevilDJTests PRIVATE
     engine/EngineSmokeTests.cpp
     engine/Mp3GaplessTests.cpp
     engine/OutputRouterTests.cpp
+    engine/QuantizeTests.cpp
     engine/SyncTests.cpp
     engine/TrackDecoderTests.cpp
     engine/TrackLoaderTests.cpp

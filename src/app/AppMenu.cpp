@@ -107,6 +107,13 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
             gainMenu.addItem(AutoGainTargetFirst + i, "Target " + juce::String(kAutoGainTargets[i]) + " LUFS", true,
                              autoGainTarget == kAutoGainTargets[i]);
         menu.addSubMenu("Auto Gain", gainMenu);
+        juce::PopupMenu quantizeMenu;
+        quantizeMenu.addItem(QuantizeToggle, "Quantize (` key)", true, quantize);
+        quantizeMenu.addSeparator();
+        static const char* const names[] = {"1/8 beat", "1/4 beat", "1/2 beat", "1 beat"};
+        for (int i = 0; i < 4; ++i)
+            quantizeMenu.addItem(QuantizeFirst + i, names[i], true, quantizeEighths == kQuantizeEighths[i]);
+        menu.addSubMenu("Quantize", quantizeMenu);
         menu.addSeparator();
         menu.addItem(OpenKeymapFolder, "Open keymap folder (keymap.json)");
         menu.addItem(ReloadKeymap, "Reload keymap");
@@ -133,6 +140,16 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
 
 void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
 {
+    if (menuItemID == QuantizeToggle || (menuItemID >= QuantizeFirst && menuItemID <= QuantizeLast))
+    {
+        if (menuItemID == QuantizeToggle)
+            quantize = !quantize;
+        else
+            quantizeEighths = kQuantizeEighths[menuItemID - QuantizeFirst];
+        if (onQuantize)
+            onQuantize(quantize, quantizeEighths);
+        return;
+    }
     if (menuItemID >= AutoGainTargetFirst && menuItemID <= AutoGainTargetLast)
     {
         autoGainTarget = kAutoGainTargets[menuItemID - AutoGainTargetFirst];
