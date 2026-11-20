@@ -97,8 +97,8 @@ DeckView::DeckView(engine::AudioEngine& audioEngine, engine::DeckId deckId, Trac
     grid.setTooltip("Beatgrid tools: set downbeat, shift, BPM x2 / /2, metronome, lock (Ctrl+Shift keys)");
     tap.setTooltip("Tap tempo: tap 4 times or more in time with the track");
     keyLock.onClick = [this] { engine.send(engine::SetKeyLock{deck, !state.keyLock}); };
-    sync.setEnabled(false);
-    sync.setTooltip("Sync needs beat grids (Phase 2, P2-19)");
+    sync.onClick = [this] { engine.send(engine::SetSync{deck, !state.synced}); };
+    sync.setTooltip("Sync: match the master's tempo and beat (C / . keys); the master is the deck marked MASTER");
     keyLock.setTooltip("Key lock: tempo changes keep the pitch");
     cue->setTooltip("Cue: hold to preview from the cue point; while paused, sets the cue point");
 
@@ -155,6 +155,8 @@ void DeckView::refresh()
                     static_cast<juce::Button*>(&tap)})
         b->setEnabled(state.loaded);
     grid.setToggleState(state.metronome || state.gridLocked, juce::dontSendNotification);
+    sync.setToggleState(state.synced, juce::dontSendNotification);
+    sync.setEnabled(state.loaded && state.hasGrid); // sync needs a beatgrid
 
     const double range = state.tempoRangePercent > 0.0 ? state.tempoRangePercent : 10.0;
     if (tempo.getMaximum() != range)
@@ -260,6 +262,8 @@ void DeckView::paint(juce::Graphics& g)
                juce::Justification::centredLeft);
     info.removeFromRight(112); // GRID / TAP
     juce::StringArray badges;
+    if (state.master)
+        badges.add("MASTER");
     if (state.hasGrid && state.playing)
         badges.add("BEAT " + juce::String(state.barBeat));
     if (state.metronome)

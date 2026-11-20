@@ -183,6 +183,23 @@ void Deck::nudgeTempo(double deltaPercent) noexcept
     setTempoPercent(tempo + deltaPercent);
 }
 
+void Deck::setSyncTempo(double percent) noexcept
+{
+    for (const double r : {6.0, 10.0, 16.0, 50.0})
+        if (std::abs(percent) <= r || r == 50.0)
+        {
+            if (r > range)
+                range = r;
+            break;
+        }
+    setTempoPercent(percent);
+}
+
+void Deck::setRateCorrection(double factor) noexcept
+{
+    correction = std::clamp(factor, 1.0 - kMaxRateCorrection, 1.0 + kMaxRateCorrection);
+}
+
 void Deck::setTempoRange(double rangePercent) noexcept
 {
     constexpr double ranges[] = {6.0, 10.0, 16.0, 50.0};

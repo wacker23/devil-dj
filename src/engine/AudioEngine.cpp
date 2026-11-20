@@ -164,6 +164,7 @@ void AudioEngine::advanceClock(int numSamples) noexcept
         auto& in = inputs[i];
         in.playing = slot.deck.track() != nullptr && slot.deck.isPlaying();
         in.hasGrid = !slot.grid.empty();
+        in.synced = slot.synced;
         if (in.hasGrid)
         {
             const double position = slot.deck.position();
@@ -172,6 +173,113 @@ void AudioEngine::advanceClock(int numSamples) noexcept
         }
     }
     clock.beginBlock(numSamples, inputs);
+    followMaster();
+}
+
+namespace
+{
+// The deck beats per master beat (1/2, 1 or 2) that make the rate closest to 1: a 64 BPM track syncs to a
+// 128 BPM master at its own tempo, every second master beat.
+double syncMultiple(double masterBpm, double gridBpm) noexcept
+{
+    double best = 1.0;
+    for (const double q : {0.5, 1.0, 2.0})
+        if (std::abs(std::log(masterBpm * q / gridBpm)) < std::abs(std::log(masterBpm * best / gridBpm)))
+            best = q;
+    return best;
+}
+
+double wrapHalf(double x) noexcept
+{
+    return x - std::floor(x + 0.5); // [-0.5, 0.5)
+}
+
+// When sync starts (pressed, or play on a synced deck) and the deck is further off than this, it jumps into phase
+// once (with its 2 ms fade). Smaller errors - and the drift while it plays - the rate nudge closes: at most 0.5 %
+// faster or slower, so 2 ms take 0.4 s, under a beat at any usual tempo.
+constexpr double kSnapSeconds = 0.002;
+constexpr double kCatchUpSeconds = 0.05; // the nudge aims to close the error in this long (then at most 0.5 %)
+} // namespace
+
+void AudioEngine::followMaster() noexcept
+{
+    const double masterBpm = clock.bpm();
+    for (std::size_t i = 0; i < decks.size(); ++i)
+    {
+        auto& slot = decks[i];
+        auto& deck = slot.deck;
+        slot.phaseErrorMs = 0.0;
+        if (!slot.synced || slot.grid.empty() || deck.track() == nullptr || static_cast<int>(i) == clock.sourceDeck())
+        {
+            deck.setRateCorrection(1.0);
+            continue;
+        }
+        const double position = deck.position();
+        const double gridBpm = slot.grid.bpmAt(position);
+        if (!(gridBpm > 0.0) || !(masterBpm > 0.0))
+            continue;
+        // Tempo: the master's (or half / double), as heard.
+        const double q = syncMultiple(masterBpm, gridBpm);
+        deck.setSyncTempo((masterBpm * q / gridBpm - 1.0) * 100.0);
+        if (!deck.isPlaying())
+        {
+            deck.setRateCorrection(1.0);
+            continue;
+        }
+        // Phase: where its beat should be (the master's, in its own beats), + = behind.
+        double error = wrapHalf(clock.beatAtBlockStart() * q - slot.grid.beatAt(position));
+        if (slot.snapPending)
+        {
+            slot.snapPending = false;
+            if (std::abs(error) * 60.0 / (masterBpm * q) > kSnapSeconds) // one jump, then the nudge keeps it
+            {
+                deck.seek(slot.grid.sampleAt(slot.grid.beatAt(position) + error));
+                error = 0.0;
+            }
+        }
+        const double errorSeconds = error * 60.0 / (masterBpm * q);
+        slot.phaseErrorMs = 1000.0 * errorSeconds;
+        deck.setRateCorrection(1.0 + std::clamp(errorSeconds / kCatchUpSeconds, -Deck::kMaxRateCorrection,
+                                                Deck::kMaxRateCorrection));
+    }
+}
+
+bool AudioEngine::tempoToMaster(DeckId deck, double percent) noexcept
+{
+    // Sync lock: a synced deck that follows can't set its own tempo; its fader sets the master's (so every
+    // synced deck moves with it).
+    auto& slot = decks[deck];
+    const int lead = clock.sourceDeck();
+    if (!slot.synced || slot.grid.empty() || lead == static_cast<int>(deck))
+        return false;
+    const double gridBpm = slot.grid.bpmAt(slot.deck.position());
+    if (!(gridBpm > 0.0))
+        return false;
+    const double q = syncMultiple(clock.bpm(), gridBpm);
+    const double wanted = gridBpm * (1.0 + percent / 100.0) / q; // the master tempo that gives this deck that tempo
+    if (lead >= 0)
+    {
+        auto& master = decks[static_cast<std::size_t>(lead)];
+        const double masterGrid = master.grid.bpmAt(master.deck.position());
+        if (masterGrid > 0.0)
+            master.deck.setSyncTempo((wanted / masterGrid - 1.0) * 100.0);
+    }
+    else
+    {
+        clock.setInternalBpm(wanted);
+    }
+    return true;
+}
+
+void AudioEngine::apply(const SetSync& command) noexcept
+{
+    if (command.deck >= kMaxDecks)
+        return;
+    auto& slot = decks[command.deck];
+    slot.synced = command.on;
+    slot.snapPending = command.on;
+    if (!command.on)
+        slot.deck.setRateCorrection(1.0);
 }
 
 void AudioEngine::apply(const SetClockSource& command) noexcept
@@ -331,7 +439,10 @@ void AudioEngine::swapPendingTracks() noexcept
 void AudioEngine::apply(const Play& command) noexcept
 {
     if (command.deck < kMaxDecks && !decks[command.deck].hasPending)
+    {
         decks[command.deck].deck.play();
+        decks[command.deck].snapPending = decks[command.deck].synced; // into phase as it starts
+    }
 }
 
 void AudioEngine::apply(const Pause& command) noexcept
@@ -366,13 +477,14 @@ void AudioEngine::apply(const Seek& command) noexcept
 
 void AudioEngine::apply(const SetTempo& command) noexcept
 {
-    if (command.deck < kMaxDecks)
+    if (command.deck < kMaxDecks && !tempoToMaster(command.deck, command.percent))
         decks[command.deck].deck.setTempoPercent(command.percent);
 }
 
 void AudioEngine::apply(const NudgeTempo& command) noexcept
 {
-    if (command.deck < kMaxDecks)
+    if (command.deck < kMaxDecks &&
+        !tempoToMaster(command.deck, decks[command.deck].deck.tempoPercent() + command.deltaPercent))
         decks[command.deck].deck.nudgeTempo(command.deltaPercent);
 }
 
@@ -384,7 +496,7 @@ void AudioEngine::apply(const SetTempoRange& command) noexcept
 
 void AudioEngine::apply(const ResetTempo& command) noexcept
 {
-    if (command.deck < kMaxDecks)
+    if (command.deck < kMaxDecks && !tempoToMaster(command.deck, 0.0))
         decks[command.deck].deck.resetTempo();
 }
 
@@ -709,6 +821,9 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         s.hasGrid = !slot.grid.empty();
         s.gridLocked = slot.grid.locked;
         s.metronome = slot.metronome;
+        s.synced = slot.synced;
+        s.master = clock.sourceDeck() == static_cast<int>(i);
+        s.phaseErrorMs = slot.phaseErrorMs;
         if (s.hasGrid)
         {
             s.beat = slot.grid.beatAt(s.positionSamples);

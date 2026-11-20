@@ -11,7 +11,7 @@ struct ClockDeckInput
 {
     bool playing = false;
     bool hasGrid = false;
-    bool synced = true; // P2-19 adds the sync buttons; until then every deck counts as synced
+    bool synced = false; // SYNC on (P2-19): preferred as the leader in Auto
     double beat = 0.0;  // the deck's grid beat at its playhead
     double bpm = 0.0;   // its tempo as heard: the grid's BPM there x the deck's rate
 };
@@ -19,7 +19,8 @@ struct ClockDeckInput
 // The master clock (P2-18; ARCHITECTURE §3.5): master BPM and beat position (double beats), advanced once per
 // block on the audio thread, for sync (P2-19), quantize (P2-20) and the scheduler (Beat Maker, Code Beat).
 //
-// Source: a chosen deck, Auto (the first playing synced deck with a grid) or the internal tempo. While a deck
+// Source: a chosen deck, Auto (the leading deck while it plays, else the first playing synced deck with a grid,
+// else the first playing deck with a grid) or the internal tempo. While a deck
 // leads, the clock's beat is that deck's grid beat plus a whole number of bars (chosen when the deck takes over,
 // as close as possible to where the clock was), so bar counts don't jump and the beat follows the deck's phase.
 // With no deck leading, the clock runs on from where it was at the internal tempo - which takes the last

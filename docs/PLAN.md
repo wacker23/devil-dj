@@ -283,7 +283,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   `engine/MasterClock`: master BPM and beat phase (double beats) advanced per sample block; master source = a chosen deck (auto: the first playing synced deck) or internal tempo. Provides `beatAt(sampleTime)` / `sampleAt(beat)` for the scheduler.
   Done when: unit tests for phase continuity across tempo changes.
 
-- [ ] **P2-19 Beat Sync**
+- [x] **P2-19 Beat Sync**
   Sync button: follower matches master BPM (half/double aware) and phase. Phase correction = proportional rate nudge limited to ±0.5 %, converges < 1 beat; "sync lock" keeps it during tempo changes; tempo fader moves all synced decks.
   Done when: two click tracks at 124 and 128 BPM, synced, stay within 1 ms for 10 minutes (automated engine test, offline render).
 

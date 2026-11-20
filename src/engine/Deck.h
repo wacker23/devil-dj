@@ -80,6 +80,12 @@ public:
     // 6, 10, 16 or 50 (other values snap to the nearest). The tempo is clamped to the new range.
     void setTempoRange(double rangePercent) noexcept;
     void resetTempo() noexcept { setTempoPercent(0.0); }
+    // Sync (P2-19): the tempo a sync needs; the fader range widens (6 -> 10 -> 16 -> 50 %) if it doesn't fit.
+    void setSyncTempo(double percent) noexcept;
+    // Sync's phase correction: a factor on the rate, within 1 +- kMaxRateCorrection.
+    void setRateCorrection(double factor) noexcept;
+    double rateCorrection() const noexcept { return correction; }
+    static constexpr double kMaxRateCorrection = 0.005;
     // Target bend in percent (clamped to +-kMaxPitchBendPercent); the actual bend slews towards it.
     void setPitchBend(double percent) noexcept;
     void setInterpolation(dsp::Resampler::Quality quality) noexcept { resampler.setQuality(quality); }
@@ -105,7 +111,7 @@ public:
     double tempoPercent() const noexcept { return tempo; }
     double tempoRange() const noexcept { return range; }
     double pitchBendPercent() const noexcept { return bend; }
-    double rate() const noexcept { return (1.0 + tempo / 100.0) * (1.0 + bend / 100.0); }
+    double rate() const noexcept { return (1.0 + tempo / 100.0) * (1.0 + bend / 100.0) * correction; }
 
     // Writes numSamples into left/right (overwrites).
     void render(float* left, float* right, int numSamples) noexcept;
@@ -186,6 +192,7 @@ private:
 
     dsp::Resampler resampler;
     double tempo = 0.0;      // percent
+    double correction = 1.0; // sync's phase nudge (P2-19)
     double range = 10.0;     // percent
     double bend = 0.0;       // percent, current (slewing)
     double bendTarget = 0.0; // percent

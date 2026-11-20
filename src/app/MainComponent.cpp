@@ -429,6 +429,7 @@ void MainComponent::registerActions()
                         engine.send(engine::SetParam{engine::channelParam(d, param), kill ? -1000.0f : 0.0f});
                     });
         onPress(cmd(DA::KeyLock), [this, d] { toggleKeyLock(d); });
+        onPress(cmd(DA::Sync), [this, d] { engine.send(engine::SetSync{d, !engine.readState().decks[d].synced}); });
         // Beatgrid (P2-14).
         onPress(cmd(DA::GridDownbeat), [this, d] { editGrid(d, GridEdit::Downbeat); });
         for (const auto [action, edit] : {std::pair{DA::GridEarlier, GridEdit::EarlierMs},
@@ -902,6 +903,9 @@ juce::StringArray MainComponent::statusLines()
             const juce::String what = s.cuePreview ? "CUE" : s.playing ? "PLAY" : s.atEnd ? "END" : "pause";
             lines.add("   " + what + "  " + clock(s.positionSamples, state.sampleRate) + " / " +
                       clock(s.lengthSamples, state.sampleRate) + "  cue " + clock(s.cuePointSamples, state.sampleRate));
+            if (s.synced)
+                lines.add("   SYNC" + juce::String(s.master ? " (master)" : "") + "  phase " +
+                          juce::String(s.phaseErrorMs, 2) + " ms");
             lines.add(juce::String("   ") + (s.scratching ? "SCRATCH  " : "") + (s.keyLock ? "KEY LOCK  " : "") +
                       "tempo " + juce::String(s.tempoPercent >= 0 ? "+" : "") + juce::String(s.tempoPercent, 1) +
                       " % (range +-" + juce::String(juce::roundToInt(s.tempoRangePercent)) + ")  bend " +

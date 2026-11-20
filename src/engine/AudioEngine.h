@@ -109,6 +109,9 @@ private:
     void apply(const SetMetronome& command) noexcept;
     void apply(const SetClockSource& command) noexcept;
     void apply(const SetInternalTempo& command) noexcept;
+    void apply(const SetSync& command) noexcept;
+    void followMaster() noexcept;                              // P2-19: every synced deck that doesn't lead
+    bool tempoToMaster(DeckId deck, double percent) noexcept; // sync lock: a follower's fader moves the master
     void advanceClock(int numSamples) noexcept;
     // Metronome clicks for the beats the deck crossed in this chunk, into the cue bus (P2-14).
     void renderMetronome(std::size_t deck, double before, double after, int numSamples) noexcept;
@@ -146,6 +149,9 @@ private:
         const TrackBuffer* pendingBuffer = nullptr;
         BufferId pendingId = 0;
         util::Beatgrid grid; // P2-14, in this deck's buffer samples
+        bool synced = false;      // P2-19
+        bool snapPending = false; // jump into phase once (sync pressed, play started) if far off
+        double phaseErrorMs = 0.0;
         bool metronome = false;
         float metronomeGain = 0.5f;
         // The click being played: a short decaying sine, continued across chunks.

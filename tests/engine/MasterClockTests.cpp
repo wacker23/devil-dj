@@ -192,13 +192,26 @@ TEST_CASE("Master clock: who leads (Auto, a chosen deck, internal)", "[engine][c
     CHECK(lead() == 2); // Auto stays with the deck that leads
     d[2].playing = false;
     CHECK(lead() == 0); // ... until it stops: the first other one
-    d[0].synced = false;
     d[1] = {true, false, true, 0.0, 0.0}; // playing without a grid: can't lead
-    CHECK(lead() == MasterClock::kInternal);
-    d[0].synced = true;
-    d[0].bpm = 1000.0; // nonsense tempo: can't lead
+    d[0].bpm = 1000.0;                    // nonsense tempo: can't lead
     CHECK(lead() == MasterClock::kInternal);
     d[0].bpm = 130.0;
+    CHECK(lead() == 0);
+    // A synced playing deck is preferred over one without SYNC; with none synced, any playing deck leads (a synced
+    // deck needs something to follow).
+    d[0].synced = false;
+    d[2] = {true, true, true, 10.0, 125.0};
+    clock.setMode(Mode::Internal);
+    lead();
+    clock.setMode(Mode::Auto);
+    CHECK(lead() == 2);
+    d[2].synced = false;
+    clock.setMode(Mode::Internal);
+    lead();
+    clock.setMode(Mode::Auto);
+    CHECK(lead() == 0);
+    d[0].synced = true;
+    d[2] = {false, true, true, 10.0, 125.0};
 
     clock.setMode(Mode::Deck, 2);
     CHECK(lead() == MasterClock::kInternal); // chosen deck B... C is stopped

@@ -37,6 +37,9 @@ struct DeckState
     int barBeat = 1;      // 1..4: which beat of the bar the current beat is
     double gridBpm = 0.0; // the grid's tempo here (the track's own, without the tempo fader)
     bool metronome = false;
+    bool synced = false;       // SYNC on (P2-19)
+    bool master = false;       // this deck leads the master clock
+    double phaseErrorMs = 0.0; // synced and following: how far its beat is from the master's (+ = behind)
 };
 
 // Mixer channel settings as the audio thread has them (targets; the sound follows within 20 ms).

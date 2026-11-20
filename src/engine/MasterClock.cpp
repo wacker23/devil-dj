@@ -52,12 +52,15 @@ int MasterClock::chooseSource(std::span<const ClockDeckInput> decks) const noexc
             return chosenDeck >= 0 && chosenDeck < static_cast<int>(decks.size()) && usable(chosenDeck) ? chosenDeck
                                                                                                         : kInternal;
         case Mode::Auto:
-            // Stay with the leading deck while it is usable; else the first that is.
-            if (source >= 0 && source < static_cast<int>(decks.size()) && usable(source) &&
-                decks[static_cast<std::size_t>(source)].synced)
+            // Stay with the leading deck while it is usable; else the first playing synced deck; else the first
+            // playing deck (a synced deck needs someone to follow).
+            if (source >= 0 && source < static_cast<int>(decks.size()) && usable(source))
                 return source;
             for (int i = 0; i < static_cast<int>(decks.size()); ++i)
                 if (usable(i) && decks[static_cast<std::size_t>(i)].synced)
+                    return i;
+            for (int i = 0; i < static_cast<int>(decks.size()); ++i)
+                if (usable(i))
                     return i;
             return kInternal;
     }

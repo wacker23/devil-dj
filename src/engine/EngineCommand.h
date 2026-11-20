@@ -209,11 +209,18 @@ struct SetInternalTempo
     double bpm = 120.0;
 };
 
+// Beat sync (P2-19): the deck follows the master clock's tempo (half / double aware) and phase.
+struct SetSync
+{
+    DeckId deck = 0;
+    bool on = false;
+};
+
 using EngineCommand =
     std::variant<SetTestTone, SetOutputLayout, LoadTrack, UnloadTrack, Play, Pause, TogglePlay, CuePress, CueRelease,
                  Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo, PitchBend, SetInterpolationQuality, SetKeyLock,
                  SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge, SetParam, SetBeatgrid, SetMetronome,
-                 SetClockSource, SetInternalTempo>;
+                 SetClockSource, SetInternalTempo, SetSync>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 
