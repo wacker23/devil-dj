@@ -1,6 +1,7 @@
 #include "MainComponent.h"
 
 #include "analysis/Loudness.h"
+#include "library/HistoryRepository.h"
 
 #include "engine/TrackDecoder.h"
 #include "library/Database.h"
@@ -292,6 +293,8 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
         if (analysisTotal > 0)
             util::logInfo("Analysis: {} tracks to analyze", analysisTotal);
         analysisProgress = std::make_unique<juce::TimedCallback>([this] { showAnalysisProgress(); });
+        historyTimer = std::make_unique<juce::TimedCallback>([this] { trackHistory(); });
+        historyTimer->startTimerHz(4);
         analysisProgress->startTimer(500);
     }
     libraryBrowser->onRelocate = [this](const std::vector<std::int64_t>& ids) { relocateMissingFiles(ids); };
@@ -690,6 +693,35 @@ juce::File MainComponent::artworkFolder()
 juce::File MainComponent::cacheFolder()
 {
     return juce::File::getSpecialLocation(juce::File::windowsLocalAppData).getChildFile("Devil-DJ/cache");
+}
+
+void MainComponent::trackHistory()
+{
+    const double now = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+    const double elapsed = historyLastTick > 0.0 ? std::min(1.0, now - historyLastTick) : 0.0;
+    historyLastTick = now;
+    if (libraryDb == nullptr)
+        return;
+    const auto& s = engine.readState();
+    for (engine::DeckId d = 0; d < 2; ++d)
+    {
+        const auto& deck = s.decks[d];
+        const auto played = playTracker.update(d, deck.playing && !deck.cuePreview, elapsed);
+        if (!played)
+            continue;
+        const auto at = static_cast<std::int64_t>(juce::Time::currentTimeMillis() / 1000);
+        libraryDb->write(
+            [session = historySession, trackId = *played, at, deck = static_cast<int>(d)](library::Connection& c)
+            {
+                library::HistoryRepository history(c);
+                if (session->load() == 0)
+                    if (const auto id = history.startSession(at))
+                        session->store(id.value());
+                if (session->load() != 0)
+                    if (!history.recordPlay(session->load(), trackId, at, deck))
+                        util::logWarning("History: {}", history.error());
+            });
+    }
 }
 
 void MainComponent::showAnalysisProgress()
@@ -1176,6 +1208,7 @@ void MainComponent::loadGridFor(engine::DeckId deck, const juce::File& file, dou
             }
             s->reset();
         }
+    playTracker.loaded(deck, d.trackId); // P2-23: the history counts library tracks
     reloadGrid(deck);
     if (d.metronome)
         engine.send(engine::SetMetronome{deck, true});

@@ -54,6 +54,7 @@ target_sources(DevilDJTests PRIVATE
     library/MissingFilesTests.cpp
     library/PlaylistFilesTests.cpp
     library/SmartRulesTests.cpp
+    library/HistoryTests.cpp
     library/RepositoryTests.cpp
     library/TagReaderTests.cpp
     matcher/MatcherSmokeTests.cpp

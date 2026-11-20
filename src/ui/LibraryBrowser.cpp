@@ -3,6 +3,7 @@
 #include "engine/TrackDecoder.h"
 #include "library/Connection.h"
 #include "library/Database.h"
+#include "library/HistoryRepository.h"
 #include "library/PlaylistRepository.h"
 #include "library/MissingFiles.h"
 #include "library/PlaylistFiles.h"
@@ -1614,6 +1615,39 @@ void LibraryBrowser::confirmDelete(std::int64_t id)
                                            }));
 }
 
+juce::String LibraryBrowser::exportTracklist(std::int64_t sessionId, const juce::File& file)
+{
+    if (reader == nullptr)
+        return "no library";
+    library::HistoryRepository history(*reader);
+    const auto result = history.exportTracklist(sessionId, std::filesystem::path(file.getFullPathName().toWideCharPointer()));
+    if (!result)
+        return juce::String::fromUTF8(result.error().c_str());
+    setStatus("Wrote " + juce::String(result.value()) + " tracks to " + file.getFileName());
+    return {};
+}
+
+void LibraryBrowser::chooseTracklistFile(std::int64_t id)
+{
+    if (reader == nullptr)
+        return;
+    const auto p = library::PlaylistRepository(*reader).get(id);
+    const auto name = p ? juce::File::createLegalFileName(juce::String::fromUTF8(p->name.c_str())) : juce::String("History");
+    exportChooser = std::make_unique<juce::FileChooser>(
+        "Export tracklist", juce::File::getSpecialLocation(juce::File::userMusicDirectory).getChildFile(name + ".txt"),
+        "*.txt");
+    juce::Component::SafePointer<LibraryBrowser> self(this);
+    exportChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
+                               [self, id](const juce::FileChooser& chooser)
+                               {
+                                   const auto file = chooser.getResult();
+                                   if (self == nullptr || file == juce::File())
+                                       return;
+                                   if (const auto error = self->exportTracklist(id, file); error.isNotEmpty())
+                                       self->setStatus("Export failed: " + error);
+                               });
+}
+
 void LibraryBrowser::chooseExportFile(std::int64_t id)
 {
     const auto info = playlistInfo(id);
@@ -1727,6 +1761,13 @@ juce::PopupMenu LibraryBrowser::menuForTree(std::int64_t id, View section)
                       {
                           if (self != nullptr)
                               self->chooseExportFile(id);
+                      });
+        if (info->kind == library::PlaylistKind::History)
+            m.addItem("Export tracklist (text)...",
+                      [self, id]
+                      {
+                          if (self != nullptr)
+                              self->chooseTracklistFile(id);
                       });
         m.addItem("Delete...",
                   [self, id]

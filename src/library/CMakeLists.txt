@@ -5,6 +5,7 @@ add_library(devildj_library STATIC
     ContentHash.cpp
     Database.cpp
     ForeignLibrary.cpp
+    HistoryRepository.cpp
     CueRepository.cpp
     Importer.cpp
     Migrations.cpp
@@ -27,6 +28,7 @@ target_sources(devildj_library PUBLIC
         ContentHash.h
         Database.h
         ForeignLibrary.h
+        HistoryRepository.h
         CueRepository.h
         Importer.h
         Migrations.h

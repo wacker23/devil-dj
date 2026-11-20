@@ -299,7 +299,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   Key Sync: transpose a deck to the master deck's key (smallest semitone move, compatible-key option). Key Shift ±1 semitone steps (needs key lock).
   Done when: transposed key shows in the deck header; test with generated chords.
 
-- [ ] **P2-23 History**
+- [x] **P2-23 History**
   Every track played > 60 s goes into the session history (date-stamped playlist); export as text tracklist. Also store each transition (previous track → next track, time) for the Track Matcher's history feature.
   Done when: history survives restart; transitions queryable.
 

@@ -128,6 +128,8 @@ public:
     bool removeSelectedFromPlaylist();          // false when the view isn't a playlist or nothing is selected
     void moveSelectedRows(int insertBeforeRow); // reorder inside the shown playlist (0..rows)
     juce::String exportPlaylist(std::int64_t playlistId, const juce::File& file); // error, empty when written
+    // A history session as a text tracklist (P2-23). Error, empty when written.
+    juce::String exportTracklist(std::int64_t sessionId, const juce::File& file);
     std::vector<int> selectedRows() const;
     std::vector<std::int64_t> selectedTrackIds() const;
     std::int64_t shownPlaylist() const noexcept; // the playlist in the table, 0 for the collection
@@ -215,6 +217,7 @@ private:
     void askName(const juce::String& title, const juce::String& initial, std::function<void(juce::String)> done);
     void confirmDelete(std::int64_t playlistId);
     void chooseExportFile(std::int64_t playlistId);
+    void chooseTracklistFile(std::int64_t sessionId);
     std::optional<library::Playlist> playlistInfo(std::int64_t playlistId);
     std::int64_t selectAfterRebuild = 0;
     std::vector<int> selectRowsAfterReload; // rows moved by a drag: selected again once the new order is read

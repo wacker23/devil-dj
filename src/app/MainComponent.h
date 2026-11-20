@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PlayTracker.h"
 #include "SoakTest.h"
 #include "engine/AudioDeviceService.h"
 #include "engine/AudioEngine.h"
@@ -165,6 +166,12 @@ private:
     // Analysis (P2-12): imported and not-yet-analyzed tracks, in the background; progress in the browser.
     std::unique_ptr<analysis::AnalysisService> analysisService;
     std::unique_ptr<juce::TimedCallback> analysisProgress;
+    // History (P2-23): plays over 60 s go into this run's session (created with its first play).
+    PlayTracker playTracker;
+    std::unique_ptr<juce::TimedCallback> historyTimer;
+    double historyLastTick = 0.0;
+    std::shared_ptr<std::atomic<std::int64_t>> historySession = std::make_shared<std::atomic<std::int64_t>>(0);
+    void trackHistory();
     void showAnalysisProgress();
     int analysisTotal = 0;
     std::unique_ptr<juce::FileChooser> importChooser;

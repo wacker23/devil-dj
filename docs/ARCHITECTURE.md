@@ -316,6 +316,8 @@ CREATE TABLE analysis_artifacts (
 CREATE VIRTUAL TABLE tracks_fts USING fts5(title, artist, album, comment, content='tracks', content_rowid='id');
 ```
 
+History (P2-23, `library::HistoryRepository`): one session per app run, created with its first play: a History playlist named "YYYY-MM-DD HH:MM" (its `id` is `history.session_id`), its tracks in play order. Each play adds the track to the playlist and a `history` row whose `previous_track_id` is the session's last track (the transition). Queries: entries(session), sessions(), transitions(), transitionCount(A, B), playedAfter(A); tracklist / exportTracklist (UTF-8 text with a BOM). The app's `PlayTracker` counts a library track as played after 60 s of playing since its load (once per load), checked 4 times a second.
+
 Migrations live in `library/Migrations.cpp` as an ordered list of SQL strings; `PRAGMA user_version` stores the applied version.
 
 Schema v2 (Phase 2, task P2-24, and later Track Matcher tasks) adds `track_features`, `track_embeddings`, `choice_log`, `matcher_models` and `track_neighbors` — defined in `docs/MATCHER_SPEC.md` §11. History rows also record the previous track so transitions can be counted.
