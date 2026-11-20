@@ -251,6 +251,10 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     libraryBrowser->onCheckMissing = [this] { checkMissingFiles(false); };
     deckA.onGridMenu = [this] { showGridMenu(0); };
     deckB.onGridMenu = [this] { showGridMenu(1); };
+    deckA.onBeatJump = [this](int direction) { beatJump(0, direction); };
+    deckB.onBeatJump = [this](int direction) { beatJump(1, direction); };
+    deckA.onJumpSizeMenu = [this] { showJumpSizeMenu(0); };
+    deckB.onJumpSizeMenu = [this] { showJumpSizeMenu(1); };
     deckA.onTap = [this] { tapTempo(0); };
     deckB.onTap = [this] { tapTempo(1); };
     waveA.setGridSource([this] { return deckGrid(0); });
@@ -430,6 +434,18 @@ void MainComponent::registerActions()
                     });
         onPress(cmd(DA::KeyLock), [this, d] { toggleKeyLock(d); });
         onPress(cmd(DA::Sync), [this, d] { engine.send(engine::SetSync{d, !engine.readState().decks[d].synced}); });
+        // Beat jump (P2-21).
+        onPress(cmd(DA::BeatJumpBack), [this, d] { beatJump(d, -1); });
+        onPress(cmd(DA::BeatJumpForward), [this, d] { beatJump(d, 1); });
+        onPress(cmd(DA::BeatJumpSizeDown), [this, d] { stepJumpSize(d, -1); });
+        onPress(cmd(DA::BeatJumpSizeUp), [this, d] { stepJumpSize(d, 1); });
+        for (const auto [action, ms] : {std::pair{DA::FineJumpBack, -5.0}, std::pair{DA::FineJumpForward, 5.0}})
+            actions.setHandler(cmd(action),
+                               [this, d, ms = ms](Phase p)
+                               {
+                                   if (p != Phase::Release)
+                                       engine.send(engine::JumpBy{d, ms / 1000.0}); // held: repeats
+                               });
         // Beatgrid (P2-14).
         onPress(cmd(DA::GridDownbeat), [this, d] { editGrid(d, GridEdit::Downbeat); });
         for (const auto [action, edit] : {std::pair{DA::GridEarlier, GridEdit::EarlierMs},
@@ -1176,6 +1192,42 @@ void MainComponent::setKeyNotation(util::KeyNotation notation)
         libraryBrowser->setKeyNotation(notation);
     for (engine::DeckId d = 0; d < 2; ++d)
         showDeckKey(d);
+}
+
+juce::String MainComponent::jumpSizeText(double beats)
+{
+    return beats < 1.0 ? "1/" + juce::String(juce::roundToInt(1.0 / beats)) : juce::String(juce::roundToInt(beats));
+}
+
+double MainComponent::jumpSize(engine::DeckId deck) const noexcept
+{
+    return kJumpSizes[static_cast<std::size_t>(jumpSizeIndex[deck])];
+}
+
+void MainComponent::beatJump(engine::DeckId deck, int direction)
+{
+    if (deck < 2)
+        engine.send(engine::BeatJump{deck, direction * jumpSize(deck)});
+}
+
+void MainComponent::stepJumpSize(engine::DeckId deck, int steps)
+{
+    if (deck >= 2)
+        return;
+    jumpSizeIndex[deck] = std::clamp(jumpSizeIndex[deck] + steps, 0, static_cast<int>(std::size(kJumpSizes)) - 1);
+    (deck == 0 ? deckA : deckB).setJumpSizeText(jumpSizeText(jumpSize(deck)));
+}
+
+void MainComponent::showJumpSizeMenu(engine::DeckId deck)
+{
+    if (deck >= 2)
+        return;
+    juce::PopupMenu m;
+    m.addSectionHeader("Beat jump size (beats)");
+    for (int i = 0; i < static_cast<int>(std::size(kJumpSizes)); ++i)
+        m.addItem(jumpSizeText(kJumpSizes[static_cast<std::size_t>(i)]), true, i == jumpSizeIndex[deck],
+                  [this, deck, i] { stepJumpSize(deck, i - jumpSizeIndex[deck]); });
+    m.showMenuAsync(juce::PopupMenu::Options().withMousePosition());
 }
 
 void MainComponent::setQuantize(bool on, double beats)

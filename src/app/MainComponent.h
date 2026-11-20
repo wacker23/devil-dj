@@ -150,6 +150,7 @@ private:
     double autoGainTarget = -10.0;
     bool quantize = false;
     double quantizeBeats = 1.0;
+    std::array<int, 2> jumpSizeIndex{kDefaultJumpSize, kDefaultJumpSize};
     void applyAutoGain(engine::DeckId deck, bool atLoad);
     util::KeyNotation keyNotation = util::KeyNotation::Musical;
     void showDeckKey(engine::DeckId deck);
@@ -183,6 +184,14 @@ public:
     // Quantize (P2-20): on / off and the resolution in beats; the ` key toggles it (onQuantizeChanged tells the
     // app, to save it and tick the menu).
     void setQuantize(bool on, double beats);
+    // Beat jump (P2-21): each deck's jump size, an index into kJumpSizes.
+    static constexpr double kJumpSizes[] = {0.125, 0.25, 0.5, 1, 2, 4, 8, 16, 32, 64, 128};
+    static constexpr int kDefaultJumpSize = 5; // 4 beats
+    static juce::String jumpSizeText(double beats); // "1/8", "1/2", "4", ...
+    void beatJump(engine::DeckId deck, int direction);
+    void stepJumpSize(engine::DeckId deck, int steps);
+    void showJumpSizeMenu(engine::DeckId deck);
+    double jumpSize(engine::DeckId deck) const noexcept;
     std::function<void(bool on, double beats)> onQuantizeChanged;
     void toggleKeyLock(engine::DeckId deck);
     void setIsolator(bool on);

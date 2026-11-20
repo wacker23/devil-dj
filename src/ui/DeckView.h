@@ -57,6 +57,13 @@ public:
     void setKeyText(const juce::String& text);
     const juce::String& keyText() const noexcept { return key; }
     std::function<void()> onTap;      // TAP: tap tempo
+    // Beat jump (P2-21): the arrows jump back / forward by the size; the size button opens the size menu.
+    std::function<void(int direction)> onBeatJump;
+    std::function<void()> onJumpSizeMenu;
+    void setJumpSizeText(const juce::String& text) { jumpSize.setButtonText(text); }
+    juce::TextButton& jumpBackButton() noexcept { return jumpBack; }
+    juce::TextButton& jumpForwardButton() noexcept { return jumpForward; }
+    juce::TextButton& jumpSizeButton() noexcept { return jumpSize; }
     juce::Slider& tempoSlider() noexcept { return tempo; }
     Overview& overview() noexcept { return *overviewView; }
 
@@ -75,6 +82,8 @@ private:
 
     std::unique_ptr<HoldButton> cue;
     juce::TextButton play{"PLAY"}, sync{"SYNC"}, keyLock{"KEY LOCK"}, grid{"GRID"}, tap{"TAP"};
+    juce::TextButton jumpBack{juce::CharPointer_UTF8("\xe2\x97\x80")}, jumpForward{juce::CharPointer_UTF8("\xe2\x96\xb6")},
+        jumpSize{"4"};
     juce::Slider tempo{juce::Slider::LinearVertical, juce::Slider::NoTextBox};
     std::unique_ptr<Overview> overviewView;
     juce::VBlankAttachment vblank;

@@ -477,6 +477,46 @@ void AudioEngine::apply(const SetQuantize& command) noexcept
     quantizeBeats = best;
 }
 
+void AudioEngine::apply(const BeatJump& command) noexcept
+{
+    if (command.deck >= kMaxDecks || decks[command.deck].hasPending)
+        return;
+    auto& slot = decks[command.deck];
+    const auto& g = slot.grid;
+    if (g.empty() || slot.deck.track() == nullptr || command.beats == 0.0)
+        return;
+    const double length = static_cast<double>(slot.deck.length());
+    const auto clampToTrack = [&](double sample) { return std::clamp(sample, 0.0, length); };
+    // A jump already waiting for its grid point: this one adds to it.
+    if (slot.queuedCount > 0)
+    {
+        auto& last = slot.queued[static_cast<std::size_t>(slot.queuedCount - 1)];
+        if (last.kind == DeckSlot::QueuedAction::Kind::Jump)
+        {
+            last.to = clampToTrack(g.sampleAt(g.beatAt(last.to) + command.beats));
+            return;
+        }
+    }
+    const double beat = g.beatAt(slot.deck.position());
+    if (quantizeOn && slot.deck.isPlaying() && slot.deck.rate() > 0.0)
+    {
+        const double next = (std::floor(beat / quantizeBeats + 1e-9) + 1.0) * quantizeBeats;
+        queue(slot, {DeckSlot::QueuedAction::Kind::Jump, g.sampleAt(next),
+                     clampToTrack(g.sampleAt(next + command.beats))});
+        return;
+    }
+    slot.deck.seek(clampToTrack(g.sampleAt(beat + command.beats)));
+}
+
+void AudioEngine::apply(const JumpBy& command) noexcept
+{
+    if (command.deck >= kMaxDecks || decks[command.deck].hasPending)
+        return;
+    auto& deck = decks[command.deck].deck;
+    if (deck.track() != nullptr)
+        deck.seek(deck.position() + command.seconds * sampleRate);
+}
+
 void AudioEngine::renderDeckWithActions(DeckSlot& slot, float* l, float* r, int numSamples) noexcept
 {
     int done = 0;

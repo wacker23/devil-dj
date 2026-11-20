@@ -220,6 +220,22 @@ struct SetQuantize
     float beats = 1.0f;
 };
 
+// Beat jump (P2-21): exactly `beats` grid beats forward (+) or back (-), so the phase is kept. With quantize on
+// and the deck playing it happens on the next grid point (see SetQuantize); another jump pressed while one waits
+// adds to it. No beatgrid: nothing happens. (Moving a loop with it comes with loops, P3-03.)
+struct BeatJump
+{
+    DeckId deck = 0;
+    double beats = 0.0;
+};
+
+// A fine jump by time (P2-21: +-5 ms), at once, never quantized.
+struct JumpBy
+{
+    DeckId deck = 0;
+    double seconds = 0.0;
+};
+
 // Beat sync (P2-19): the deck follows the master clock's tempo (half / double aware) and phase.
 struct SetSync
 {
@@ -231,7 +247,7 @@ using EngineCommand =
     std::variant<SetTestTone, SetOutputLayout, LoadTrack, UnloadTrack, Play, Pause, TogglePlay, CuePress, CueRelease,
                  Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo, PitchBend, SetInterpolationQuality, SetKeyLock,
                  SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge, SetParam, SetBeatgrid, SetMetronome,
-                 SetClockSource, SetInternalTempo, SetSync, SetQuantize>;
+                 SetClockSource, SetInternalTempo, SetSync, SetQuantize, BeatJump, JumpBy>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

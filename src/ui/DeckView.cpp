@@ -109,9 +109,29 @@ DeckView::DeckView(engine::AudioEngine& audioEngine, engine::DeckId deckId, Trac
     // refresh() updates the slider without notification, so this only fires for the user (drag, double-click).
     tempo.onValueChange = [this] { engine.send(engine::SetTempo{deck, 0.0 - tempo.getValue()}); };
 
+    jumpBack.onClick = [this]
+    {
+        if (onBeatJump)
+            onBeatJump(-1);
+    };
+    jumpForward.onClick = [this]
+    {
+        if (onBeatJump)
+            onBeatJump(1);
+    };
+    jumpSize.onClick = [this]
+    {
+        if (onJumpSizeMenu)
+            onJumpSizeMenu();
+    };
+    jumpBack.setTooltip("Beat jump back by the jump size (5 / - keys)");
+    jumpForward.setTooltip("Beat jump forward by the jump size (6 / = keys)");
+    jumpSize.setTooltip("Beat jump size in beats (larger / smaller: Shift+6 / Ctrl+Shift+6, Shift+= / Ctrl+Shift+=)");
     for (auto* b : {static_cast<juce::Button*>(cue.get()), static_cast<juce::Button*>(&play),
                     static_cast<juce::Button*>(&sync), static_cast<juce::Button*>(&keyLock),
-                    static_cast<juce::Button*>(&grid), static_cast<juce::Button*>(&tap)})
+                    static_cast<juce::Button*>(&grid), static_cast<juce::Button*>(&tap),
+                    static_cast<juce::Button*>(&jumpBack), static_cast<juce::Button*>(&jumpForward),
+                    static_cast<juce::Button*>(&jumpSize)})
     {
         b->setColour(juce::TextButton::buttonColourId, kPanel);
         b->setColour(juce::TextButton::buttonOnColourId, kAccent);
@@ -156,6 +176,8 @@ void DeckView::refresh()
         b->setEnabled(state.loaded);
     grid.setToggleState(state.metronome || state.gridLocked, juce::dontSendNotification);
     sync.setToggleState(state.synced, juce::dontSendNotification);
+    for (auto* b : {&jumpBack, &jumpForward})
+        b->setEnabled(state.loaded && state.hasGrid); // beats need a beatgrid
     sync.setEnabled(state.loaded && state.hasGrid); // sync needs a beatgrid
 
     const double range = state.tempoRangePercent > 0.0 ? state.tempoRangePercent : 10.0;
@@ -192,6 +214,14 @@ void DeckView::resized()
     buttons.removeFromLeft(kMargin);
     sync.setBounds(buttons.removeFromLeft(w));
     keyLock.setBounds(buttons.removeFromRight(w + 16));
+    // Beat jump between them: < size >.
+    buttons.removeFromLeft(kMargin);
+    buttons.removeFromRight(kMargin);
+    auto jump = buttons.withSizeKeepingCentre(std::min(buttons.getWidth(), 150), buttons.getHeight());
+    const int arrow = jump.getWidth() * 3 / 10;
+    jumpBack.setBounds(jump.removeFromLeft(arrow));
+    jumpForward.setBounds(jump.removeFromRight(arrow));
+    jumpSize.setBounds(jump.reduced(2, 0));
 }
 
 void DeckView::paint(juce::Graphics& g)

@@ -291,7 +291,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   Global quantize toggle + resolution (1/8 … 1 beat). Cue, hot cue, loop in, beat jump and play-from-cue snap to the grid, executed sample-accurately on the audio thread at the next grid point.
   Done when: engine test: triggered actions land on beat ±1 sample.
 
-- [ ] **P2-21 Beat Jump**
+- [x] **P2-21 Beat Jump**
   Jump ±(1/8, 1/4, 1/2, 1, 2, 4, 8, 16, 32, 64, 128) beats and a fine 5 ms jump; while looping, moves the loop.
   Done when: unit tests; keyboard bindings in KEYMAP.
 

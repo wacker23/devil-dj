@@ -67,7 +67,11 @@ namespace devildj::ui
     X(GridHalve, "Grid: BPM /2", false)                                                                                \
     X(TapTempo, "Tap tempo", false)                                                                                    \
     X(Metronome, "Metronome on / off (headphones)", false)                                                             \
-    X(GridLock, "Grid: lock / unlock (analysis leaves it alone)", false)
+    X(GridLock, "Grid: lock / unlock (analysis leaves it alone)", false)                                              \
+    X(BeatJumpSizeDown, "Beat jump size smaller", false)                                                               \
+    X(BeatJumpSizeUp, "Beat jump size larger", false)                                                                  \
+    X(FineJumpBack, "Fine jump back 5 ms", true)                                                                       \
+    X(FineJumpForward, "Fine jump forward 5 ms", true)
 
 #define DEVILDJ_GLOBAL_ACTIONS(X)                                                                                      \
     X(CrossfaderLeft, "Crossfader left (hold to glide)", false)                                                        \

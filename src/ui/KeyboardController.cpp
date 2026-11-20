@@ -306,6 +306,10 @@ std::vector<KeyBinding> defaultKeymap()
         {Digit4, Digit0, mods::None, DA::LoopDouble},
         {Digit5, Minus, mods::None, DA::BeatJumpBack},
         {Digit6, Equals, mods::None, DA::BeatJumpForward},
+        {Digit5, Minus, mods::Ctrl, DA::FineJumpBack}, // P2-21 (Ctrl+Shift+5 is a rating: the size is on 6 / =)
+        {Digit6, Equals, mods::Ctrl, DA::FineJumpForward},
+        {Digit6, Equals, mods::Shift, DA::BeatJumpSizeUp},
+        {Digit6, Equals, mods::Ctrl | mods::Shift, DA::BeatJumpSizeDown},
         {Digit1, Digit7, mods::Shift, DA::TempoDown},
         {Digit2, Digit8, mods::Shift, DA::TempoUp},
         {Digit3, Digit9, mods::Shift, DA::FilterToLowPass},

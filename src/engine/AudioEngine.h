@@ -111,6 +111,8 @@ private:
     void apply(const SetInternalTempo& command) noexcept;
     void apply(const SetSync& command) noexcept;
     void apply(const SetQuantize& command) noexcept;
+    void apply(const BeatJump& command) noexcept;
+    void apply(const JumpBy& command) noexcept;
     void followMaster() noexcept;                              // P2-19: every synced deck that doesn't lead
     bool tempoToMaster(DeckId deck, double percent) noexcept; // sync lock: a follower's fader moves the master
     void advanceClock(int numSamples) noexcept;

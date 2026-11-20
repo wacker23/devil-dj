@@ -22,6 +22,8 @@ Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / r
 | Pitch bend − / + (hold) | 1 / 2 | 7 / 8 |
 | Loop halve / double | 3 / 4 | 9 / 0 |
 | Beat jump back / forward (current jump size) | 5 / 6 | - / = |
+| Fine jump back / forward 5 ms (repeats while held) | Ctrl+5 / Ctrl+6 | Ctrl+- / Ctrl+= |
+| Beat jump size larger / smaller (1/8 ... 128 beats; also the size button on the deck) | Shift+6 / Ctrl+Shift+6 | Shift+= / Ctrl+Shift+= |
 | Tempo − / + 0.1 % (repeats while held) | Shift+1 / Shift+2 | Shift+7 / Shift+8 |
 | Filter sweep to low-pass / high-pass (hold) | Shift+3 / Shift+4 | Shift+9 / Shift+0 |
 | Filter reset | Shift+5 | Shift+- |
