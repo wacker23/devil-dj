@@ -71,7 +71,9 @@ namespace devildj::ui
     X(BeatJumpSizeDown, "Beat jump size smaller", false)                                                               \
     X(BeatJumpSizeUp, "Beat jump size larger", false)                                                                  \
     X(FineJumpBack, "Fine jump back 5 ms", true)                                                                       \
-    X(FineJumpForward, "Fine jump forward 5 ms", true)
+    X(FineJumpForward, "Fine jump forward 5 ms", true)                                                                 \
+    X(KeyShiftDown, "Key shift -1 semitone", false)                                                                    \
+    X(KeyShiftUp, "Key shift +1 semitone", false)
 
 #define DEVILDJ_GLOBAL_ACTIONS(X)                                                                                      \
     X(CrossfaderLeft, "Crossfader left (hold to glide)", false)                                                        \

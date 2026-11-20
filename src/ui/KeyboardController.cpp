@@ -302,6 +302,8 @@ std::vector<KeyBinding> defaultKeymap()
         {F, Semicolon, mods::Shift, DA::PadAlt8},
         {Digit1, Digit7, mods::None, DA::BendDown},
         {Digit2, Digit8, mods::None, DA::BendUp},
+        {Digit1, Digit7, mods::Ctrl, DA::KeyShiftDown}, // P2-22
+        {Digit2, Digit8, mods::Ctrl, DA::KeyShiftUp},
         {Digit3, Digit9, mods::None, DA::LoopHalve},
         {Digit4, Digit0, mods::None, DA::LoopDouble},
         {Digit5, Minus, mods::None, DA::BeatJumpBack},

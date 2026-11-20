@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cmath>
+#include <cstdlib>
+#include <optional>
 #include <string>
 
 namespace devildj::util
@@ -56,6 +59,66 @@ inline bool isFifthApart(int a, int b) noexcept
         return false;
     const int d = ((b % 12) - (a % 12) + 12) % 12;
     return d == 7 || d == 5;
+}
+
+// ---- Key Sync and Key Shift (P2-22) ----
+
+// The key `semitones` up (+) or down (-), same mode.
+inline int transposeKey(int key, int semitones) noexcept
+{
+    if (!isValidKey(key))
+        return key;
+    return (key >= 12 ? 12 : 0) + ((key % 12 + semitones) % 12 + 12) % 12;
+}
+
+// 1..12 on the Camelot wheel (C major 8B, A minor 8A); 0 for no key.
+inline int camelotNumber(int key) noexcept
+{
+    if (!isValidKey(key))
+        return 0;
+    const int majorPitch = key >= 12 ? (key % 12 + 3) % 12 : key;
+    return (7 * majorPitch + 7) % 12 + 1;
+}
+
+// Mix without clashing: the same Camelot number (the same key or its relative major / minor), or one step round the
+// wheel in the same mode (a fifth up or down).
+inline bool harmonicallyCompatible(int a, int b) noexcept
+{
+    if (!isValidKey(a) || !isValidKey(b))
+        return false;
+    const int na = camelotNumber(a), nb = camelotNumber(b);
+    if (na == nb)
+        return true;
+    const int step = ((nb - na) % 12 + 12) % 12;
+    return (a >= 12) == (b >= 12) && (step == 1 || step == 11);
+}
+
+// The pitch change a tempo makes without key lock, in whole semitones (12 log2 rate, rounded).
+inline int semitonesFromRate(double rate) noexcept
+{
+    return rate > 0.0 ? static_cast<int>(std::lround(12.0 * std::log2(rate))) : 0;
+}
+
+// The key a deck is heard in: the track's key, moved by Key Shift (key lock on) or by its tempo (off).
+inline int heardKey(int key, bool keyLock, int keyShift, double tempoRate) noexcept
+{
+    return transposeKey(key, keyLock ? keyShift : semitonesFromRate(tempoRate));
+}
+
+// Key Sync: the smallest Key Shift (-6..+6; at a tie, down) that puts `deckKey` on the master's Camelot number -
+// the master's key or its relative - or, with `compatible`, on any key compatible with it. nullopt without keys.
+inline std::optional<int> keySyncShift(int deckKey, int masterKey, bool compatible = false) noexcept
+{
+    if (!isValidKey(deckKey) || !isValidKey(masterKey))
+        return std::nullopt;
+    for (int distance = 0; distance <= 6; ++distance)
+        for (const int s : {-distance, distance})
+        {
+            const int k = transposeKey(deckKey, s);
+            if (compatible ? harmonicallyCompatible(k, masterKey) : camelotNumber(k) == camelotNumber(masterKey))
+                return s;
+        }
+    return std::nullopt;
 }
 
 } // namespace devildj::util

@@ -27,6 +27,7 @@ struct DeckState
     double tempoRangePercent = 10.0;
     double pitchBendPercent = 0.0; // current (slewed) bend
     bool keyLock = false;
+    int keyShift = 0; // semitones (heard with key lock; P2-22)
     bool scratching = false;        // jog held (or easing back after release)
     std::int8_t transposeSemis = 0; // Key Shift
 

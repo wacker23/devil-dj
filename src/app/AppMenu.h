@@ -43,6 +43,8 @@ public:
         quantizeEighths = eighths;
     }
     static constexpr int kQuantizeEighths[] = {1, 2, 4, 8};
+    std::function<void(bool on)> onKeySyncCompatible; // P2-22
+    void setKeySyncCompatible(bool on) noexcept { keySyncCompatible = on; }
     std::function<void()> onToggleDebugOverlay;
     std::function<void()> onToggleTestTone;
     std::function<void(int deck)> onLoadTrack;
@@ -84,6 +86,7 @@ private:
         QuantizeToggle,
         QuantizeFirst, // one per kQuantizeEighths
         QuantizeLast = QuantizeFirst + 3,
+        KeySyncCompatible,
         DebugOverlay,
         TestTone,
         LoadDeckA,
@@ -128,6 +131,7 @@ private:
     int autoGainTarget = -10;
     bool quantize = false;
     int quantizeEighths = 8;
+    bool keySyncCompatible = false;
     bool isolator = false;
     int crossfaderCurve = 0;
     int assign[2] = {0, 2};

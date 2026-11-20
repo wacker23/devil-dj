@@ -158,6 +158,11 @@ void DeckView::refresh()
         sampleRate = s.sampleRate;
     state = s.decks[deck];
 
+    if (const auto key = keyText(); key != shownKey)
+    {
+        shownKey = key;
+        repaint();
+    }
     if (state.bufferId != shownBuffer)
     {
         shownBuffer = state.bufferId;
@@ -253,10 +258,11 @@ void DeckView::paint(juce::Graphics& g)
                    juce::String(juce::roundToInt(state.tempoRangePercent)) + ")",
                bpmArea, juce::Justification::centredRight);
 
-    // Key, left of the BPM.
-    if (key.isNotEmpty())
+    // Key, left of the BPM: as heard (Key Shift / tempo, P2-22).
+    if (const auto key = keyText(); key.isNotEmpty())
     {
-        auto keyArea = header.removeFromRight(64);
+        auto keyArea = header.removeFromRight(juce::GlyphArrangement::getStringWidthInt(
+                                                  juce::FontOptions(20.0f, juce::Font::bold), key) + 8);
         g.setColour(kText);
         g.setFont(juce::FontOptions(20.0f, juce::Font::bold));
         g.drawText(key, keyArea.removeFromTop(28), juce::Justification::centredRight);
@@ -332,12 +338,24 @@ void DeckView::clearPreview()
     overviewView->repaint();
 }
 
-void DeckView::setKeyText(const juce::String& text)
+void DeckView::setTrackKey(int musicalKey, util::KeyNotation notation)
 {
-    if (text == key)
-        return;
-    key = text;
+    trackKey = musicalKey;
+    keyNotation = notation;
     repaint();
+}
+
+juce::String DeckView::keyText() const
+{
+    if (!util::isValidKey(trackKey))
+        return {};
+    const double tempoRate = 1.0 + state.tempoPercent / 100.0;
+    const int heard = util::heardKey(trackKey, state.keyLock, state.keyShift, tempoRate);
+    const int moved = state.keyLock ? state.keyShift : util::semitonesFromRate(tempoRate);
+    juce::String text(util::keyName(heard, keyNotation));
+    if (moved != 0)
+        text << " (" << (moved > 0 ? "+" : "") << moved << ")";
+    return text;
 }
 
 void DeckView::paintOverChildren(juce::Graphics& g)

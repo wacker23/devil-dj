@@ -3,6 +3,7 @@
 #include "engine/AudioEngine.h"
 #include "engine/TrackBuffer.h"
 #include "ui/TrackDropTarget.h"
+#include "util/MusicalKey.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -53,9 +54,10 @@ public:
     void clearPreview();
     bool hasPreview() const noexcept { return preview != nullptr; }
 
-    // The loaded track's key as the app shows it (library key, in the user's notation; P2-15). Empty = none.
-    void setKeyText(const juce::String& text);
-    const juce::String& keyText() const noexcept { return key; }
+    // The loaded track's key (the library's, 0..23; -1 = none) in the user's notation (P2-15). The header shows the
+    // key it is heard in: moved by Key Shift with key lock, or by the tempo without (P2-22), e.g. "Ebm (+1)".
+    void setTrackKey(int musicalKey, util::KeyNotation notation);
+    juce::String keyText() const;
     std::function<void()> onTap;      // TAP: tap tempo
     // Beat jump (P2-21): the arrows jump back / forward by the size; the size button opens the size menu.
     std::function<void(int direction)> onBeatJump;
@@ -78,7 +80,9 @@ private:
     engine::BufferId previewOver = 0;
     engine::DeckState state;
     double sampleRate = 48000.0;
-    juce::String key;
+    int trackKey = -1;
+    util::KeyNotation keyNotation = util::KeyNotation::Musical;
+    juce::String shownKey;
 
     std::unique_ptr<HoldButton> cue;
     juce::TextButton play{"PLAY"}, sync{"SYNC"}, keyLock{"KEY LOCK"}, grid{"GRID"}, tap{"TAP"};

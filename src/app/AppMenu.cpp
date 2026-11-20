@@ -114,6 +114,7 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
         for (int i = 0; i < 4; ++i)
             quantizeMenu.addItem(QuantizeFirst + i, names[i], true, quantizeEighths == kQuantizeEighths[i]);
         menu.addSubMenu("Quantize", quantizeMenu);
+        menu.addItem(KeySyncCompatible, "Key Sync: compatible keys too (smaller moves)", true, keySyncCompatible);
         menu.addSeparator();
         menu.addItem(OpenKeymapFolder, "Open keymap folder (keymap.json)");
         menu.addItem(ReloadKeymap, "Reload keymap");
@@ -192,6 +193,12 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
         case OpenBackups:
             if (onOpenBackups)
                 onOpenBackups();
+            break;
+
+        case KeySyncCompatible:
+            keySyncCompatible = !keySyncCompatible;
+            if (onKeySyncCompatible)
+                onKeySyncCompatible(keySyncCompatible);
             break;
 
         case AutoGainToggle:

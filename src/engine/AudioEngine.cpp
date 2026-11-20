@@ -976,6 +976,7 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         s.tempoRangePercent = d.tempoRange();
         s.pitchBendPercent = d.pitchBendPercent();
         s.keyLock = d.keyLock();
+        s.keyShift = d.keyShift();
         s.scratching = d.isScratching();
         s.transposeSemis = static_cast<std::int8_t>(d.keyShift());
         s.hasGrid = !slot.grid.empty();

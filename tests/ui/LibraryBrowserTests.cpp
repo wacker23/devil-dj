@@ -193,8 +193,10 @@ TEST_CASE("Deck view: shows the key it is given", "[ui][key]")
     engine::AudioEngine engine;
     ui::DeckView deck(engine, 0, [](engine::BufferId) { return nullptr; });
     CHECK(deck.keyText().isEmpty());
-    deck.setKeyText("8A");
+    deck.setTrackKey(21, util::KeyNotation::Camelot);
     CHECK(deck.keyText() == "8A");
+    deck.setTrackKey(21, util::KeyNotation::Musical);
+    CHECK(deck.keyText() == "Am");
     deck.setSize(600, 200);
     juce::Image image(juce::Image::ARGB, 600, 200, true);
     juce::Graphics g(image);

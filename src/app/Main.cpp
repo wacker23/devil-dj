@@ -113,6 +113,13 @@ public:
             settings->set(keys::quantizeEighths, eighths);
             menu->setQuantize(on, eighths);
         };
+        menu->setKeySyncCompatible(settings->get(keys::keySyncCompatible));
+        mainComponent->setKeySyncCompatible(settings->get(keys::keySyncCompatible));
+        menu->onKeySyncCompatible = [this](bool on)
+        {
+            settings->set(keys::keySyncCompatible, on);
+            mainComponent->setKeySyncCompatible(on);
+        };
         menu->setAutoGain(settings->get(keys::autoGain), settings->get(keys::autoGainTarget));
         mainComponent->setAutoGain(settings->get(keys::autoGain), settings->get(keys::autoGainTarget));
         menu->onAutoGain = [this](bool on, int target)

@@ -295,7 +295,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   Jump ±(1/8, 1/4, 1/2, 1, 2, 4, 8, 16, 32, 64, 128) beats and a fine 5 ms jump; while looping, moves the loop.
   Done when: unit tests; keyboard bindings in KEYMAP.
 
-- [ ] **P2-22 Key Sync and Key Shift**
+- [x] **P2-22 Key Sync and Key Shift**
   Key Sync: transpose a deck to the master deck's key (smallest semitone move, compatible-key option). Key Shift ±1 semitone steps (needs key lock).
   Done when: transposed key shows in the deck header; test with generated chords.
 

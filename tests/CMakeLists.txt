@@ -36,6 +36,7 @@ target_sources(DevilDJTests PRIVATE
     engine/MetronomeTests.cpp
     engine/MixerMasterTests.cpp
     engine/HeadphoneCueTests.cpp
+    engine/KeyShiftTests.cpp
     engine/MasterClockTests.cpp
     engine/DeckTempoTests.cpp
     engine/DeckTests.cpp

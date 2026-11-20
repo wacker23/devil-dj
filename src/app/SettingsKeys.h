@@ -37,4 +37,8 @@ inline const SettingKey<int> autoGainTarget{"autoGainTarget", -10};
 inline const SettingKey<bool> quantize{"quantize", false};
 inline const SettingKey<int> quantizeEighths{"quantizeEighths", 8};
 
+// Key Sync (P2-22): also accept keys compatible with the master's (a step round the Camelot wheel), not only its
+// own Camelot number - smaller moves.
+inline const SettingKey<bool> keySyncCompatible{"keySyncCompatible", false};
+
 } // namespace devildj::app::keys

@@ -151,6 +151,7 @@ private:
     bool quantize = false;
     double quantizeBeats = 1.0;
     std::array<int, 2> jumpSizeIndex{kDefaultJumpSize, kDefaultJumpSize};
+    bool keySyncCompatible = false;
     void applyAutoGain(engine::DeckId deck, bool atLoad);
     util::KeyNotation keyNotation = util::KeyNotation::Musical;
     void showDeckKey(engine::DeckId deck);
@@ -189,6 +190,10 @@ public:
     static constexpr int kDefaultJumpSize = 5; // 4 beats
     static juce::String jumpSizeText(double beats); // "1/8", "1/2", "4", ...
     void beatJump(engine::DeckId deck, int direction);
+    // Key Sync / Key Shift (P2-22): both turn key lock on (a shift is only heard with it).
+    void keySync(engine::DeckId deck);
+    void shiftKey(engine::DeckId deck, int semitones);
+    void setKeySyncCompatible(bool on) noexcept { keySyncCompatible = on; }
     void stepJumpSize(engine::DeckId deck, int steps);
     void showJumpSizeMenu(engine::DeckId deck);
     double jumpSize(engine::DeckId deck) const noexcept;

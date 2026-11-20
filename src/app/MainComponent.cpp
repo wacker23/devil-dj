@@ -435,6 +435,9 @@ void MainComponent::registerActions()
         onPress(cmd(DA::KeyLock), [this, d] { toggleKeyLock(d); });
         onPress(cmd(DA::Sync), [this, d] { engine.send(engine::SetSync{d, !engine.readState().decks[d].synced}); });
         // Beat jump (P2-21).
+        onPress(cmd(DA::KeySync), [this, d] { keySync(d); }); // P2-22
+        onPress(cmd(DA::KeyShiftDown), [this, d] { shiftKey(d, -1); });
+        onPress(cmd(DA::KeyShiftUp), [this, d] { shiftKey(d, 1); });
         onPress(cmd(DA::BeatJumpBack), [this, d] { beatJump(d, -1); });
         onPress(cmd(DA::BeatJumpForward), [this, d] { beatJump(d, 1); });
         onPress(cmd(DA::BeatJumpSizeDown), [this, d] { stepJumpSize(d, -1); });
@@ -1182,7 +1185,7 @@ void MainComponent::showDeckKey(engine::DeckId deck)
 {
     if (deck >= deckGrids.size())
         return;
-    (deck == 0 ? deckA : deckB).setKeyText(ui::TrackTableModel::keyName(deckGrids[deck].musicalKey, keyNotation));
+    (deck == 0 ? deckA : deckB).setTrackKey(deckGrids[deck].musicalKey, keyNotation);
 }
 
 void MainComponent::setKeyNotation(util::KeyNotation notation)
@@ -1192,6 +1195,34 @@ void MainComponent::setKeyNotation(util::KeyNotation notation)
         libraryBrowser->setKeyNotation(notation);
     for (engine::DeckId d = 0; d < 2; ++d)
         showDeckKey(d);
+}
+
+void MainComponent::keySync(engine::DeckId deck)
+{
+    if (deck >= 2)
+        return;
+    const auto& s = engine.readState();
+    // The master: the deck leading the clock, else the other deck.
+    int master = s.masterSource;
+    if (master < 0 || master == deck || master >= 2)
+        master = 1 - deck;
+    const auto& m = s.decks[static_cast<std::size_t>(master)];
+    const int masterKey = util::heardKey(deckGrids[static_cast<std::size_t>(master)].musicalKey, m.keyLock, m.keyShift,
+                                         1.0 + m.tempoPercent / 100.0);
+    const auto shift = util::keySyncShift(deckGrids[deck].musicalKey, masterKey, keySyncCompatible);
+    if (!shift || !s.decks[deck].loaded || !m.loaded)
+        return;
+    engine.send(engine::SetKeyLock{deck, true});
+    engine.send(engine::SetKeyShift{deck, *shift});
+}
+
+void MainComponent::shiftKey(engine::DeckId deck, int semitones)
+{
+    if (deck >= 2)
+        return;
+    const auto& s = engine.readState().decks[deck];
+    engine.send(engine::SetKeyLock{deck, true});
+    engine.send(engine::SetKeyShift{deck, std::clamp(s.keyShift + semitones, -12, 12)});
 }
 
 juce::String MainComponent::jumpSizeText(double beats)
