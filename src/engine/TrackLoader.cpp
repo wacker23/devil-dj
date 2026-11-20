@@ -1,6 +1,7 @@
 #include "engine/TrackLoader.h"
 
 #include "analysis/WaveformBuilder.h"
+#include "analysis/WaveformCache.h"
 #include "library/TagReader.h"
 
 #include "engine/TrackDecoder.h"
@@ -23,7 +24,7 @@ class TrackLoader::LoadJob final : public juce::ThreadPoolJob
 public:
     LoadJob(DeckId deckId, std::uint64_t request, juce::File fileToLoad, double rate,
             std::shared_ptr<std::atomic<bool>> cancelFlag, PostFunction postFn, std::weak_ptr<int> alive,
-            TrackLoader* owner)
+            TrackLoader* owner, juce::File cacheFolder)
         : ThreadPoolJob("Load " + fileToLoad.getFileName())
         , deck(deckId)
         , requestId(request)
@@ -33,6 +34,7 @@ public:
         , post(std::move(postFn))
         , loaderAlive(std::move(alive))
         , loader(owner)
+        , cacheDir(std::move(cacheFolder))
     {
     }
 
@@ -56,21 +58,57 @@ public:
                 });
         };
 
+        // The cached waveform first: it shows while the audio decodes (P2-17).
+        const auto hash = contentHash(file);
+        std::optional<analysis::Waveform> cached;
+        std::filesystem::path cacheFile;
+        if (cacheDir != juce::File() && hash.isNotEmpty())
+        {
+            cacheFile = analysis::waveformCachePath(cacheDir.getFullPathName().toWideCharPointer(), hash.toStdString());
+            cached = analysis::readWaveformCache(cacheFile);
+            if (cached && targetRate > 0.0 && !analysis::retimeWaveform(*cached, targetRate))
+                cached.reset();
+            if (cached)
+            {
+                auto preview = std::make_shared<const analysis::Waveform>(*cached);
+                const double seconds = cached->numPoints() / cached->pointsPerSecond();
+                postToLoader(
+                    [deck = deck, requestId = requestId, file = file, preview, seconds](TrackLoader& l)
+                    {
+                        if (l.requests[deck].id == requestId && l.callbacks.onWaveformPreview)
+                            l.callbacks.onWaveformPreview(deck, file, preview, seconds);
+                    });
+            }
+        }
+
         auto result = decodeTrack(file, options);
         std::shared_ptr<TrackBuffer> track;
         juce::String error;
         if (result)
         {
             track = std::move(result).value();
-            track->contentHash = contentHash(file);
+            track->contentHash = hash;
             const auto tags = library::readBasicTags(file.getFullPathName().toWideCharPointer());
             track->title = juce::String::fromUTF8(tags.title.c_str());
             track->artist = juce::String::fromUTF8(tags.artist.c_str());
             track->tagBpm = tags.bpm;
-            track->waveform =
-                analysis::buildWaveform(track->audio.getReadPointer(0),
-                                        track->audio.getReadPointer(std::min(1, track->audio.getNumChannels() - 1)),
-                                        track->numSamples(), track->sampleRate);
+            // The cache if it fits this buffer (same length to a point or two), else build it (and cache it).
+            const bool cacheFits = cached && analysis::retimeWaveform(*cached, track->sampleRate) &&
+                                   std::abs(cached->numPoints() - static_cast<double>(track->numSamples()) /
+                                                                      cached->samplesPerPoint) <= 2.0;
+            if (cacheFits)
+            {
+                track->waveform = std::move(*cached);
+            }
+            else
+            {
+                track->waveform = analysis::buildWaveform(
+                    track->audio.getReadPointer(0),
+                    track->audio.getReadPointer(std::min(1, track->audio.getNumChannels() - 1)), track->numSamples(),
+                    track->sampleRate);
+                if (!cacheFile.empty())
+                    analysis::writeWaveformCache(cacheFile, track->waveform);
+            }
             util::logInfo("Loader: {} decoded in {:.0f} ms ({}, {:.1f} s, {:.0f} -> {:.0f} Hz)",
                           file.getFileName().toStdString(), juce::Time::getMillisecondCounterHiRes() - started,
                           track->formatName.toStdString(), track->durationSeconds(), track->sourceSampleRate,
@@ -106,6 +144,7 @@ private:
     PostFunction post;
     std::weak_ptr<int> loaderAlive;
     TrackLoader* loader;
+    juce::File cacheDir;
 };
 
 TrackLoader::TrackLoader(AudioEngine& audioEngine, BufferRegistry& bufferRegistry, Options options)
@@ -113,6 +152,7 @@ TrackLoader::TrackLoader(AudioEngine& audioEngine, BufferRegistry& bufferRegistr
     , registry(bufferRegistry)
     , post(options.post ? std::move(options.post)
                         : PostFunction([](std::function<void()> f) { juce::MessageManager::callAsync(std::move(f)); }))
+    , waveformCache(options.waveformCache)
     , pool(juce::ThreadPoolOptions{}
                .withThreadName("Track loader")
                .withNumberOfThreads(std::max(1, options.threads))
@@ -140,7 +180,8 @@ std::uint64_t TrackLoader::load(DeckId deck, const juce::File& file, double targ
     auto& r = requests[deck];
     r.id = nextRequestId++;
     r.cancel = std::make_shared<std::atomic<bool>>(false);
-    pool.addJob(new LoadJob(deck, r.id, file, targetSampleRate, r.cancel, post, aliveToken, this), true);
+    pool.addJob(new LoadJob(deck, r.id, file, targetSampleRate, r.cancel, post, aliveToken, this, waveformCache),
+                true);
     util::logInfo("Loader: deck {} <- {}", deckLetter(deck), file.getFullPathName().toStdString());
     return r.id;
 }

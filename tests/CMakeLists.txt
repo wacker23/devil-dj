@@ -14,6 +14,7 @@ target_sources(DevilDJTests PRIVATE
     analysis/LoudnessTests.cpp
     analysis/TestSignalTests.cpp
     analysis/WaveformBuilderTests.cpp
+    analysis/WaveformCacheTests.cpp
     app/AppSmokeTests.cpp
     app/AudioSettingsTests.cpp
     app/LibraryBackupTests.cpp

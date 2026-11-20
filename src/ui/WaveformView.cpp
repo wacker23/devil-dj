@@ -91,18 +91,24 @@ void WaveformView::paint(juce::Graphics& g)
     const float mid = area.getCentreY();
     const float half = area.getHeight() * 0.5f - 3.0f;
 
-    if (track != nullptr && !track->waveform.empty())
+    if (preview != nullptr && s.bufferId != previewOver)
+        preview.reset(); // the loaded track is on the deck now
+    const analysis::Waveform* shown = preview != nullptr                              ? preview.get()
+                                      : track != nullptr && !track->waveform.empty() ? &track->waveform
+                                                                                     : nullptr;
+    if (shown != nullptr)
     {
-        const auto& w = track->waveform;
+        const auto& w = *shown;
         const double latencySeconds = cachedLatency + es.masterLatencySamples / rate;
-        const double pos = displayedPosition(s, rate, es.hostTimeSeconds, uiClockSeconds(), latencySeconds);
+        const double pos =
+            preview != nullptr ? 0.0 : displayedPosition(s, rate, es.hostTimeSeconds, uiClockSeconds(), latencySeconds);
         const double spp = samplesPerPixel();
         const double pointsPerPixel = spp / w.samplesPerPoint;
         const int width = getWidth();
 
         // Beat lines from the grid (P2-14; downbeats brighter, bar numbers on top), else second ticks.
         const double leftSample = pos - centreX * spp;
-        const auto grid = gridSource ? gridSource() : util::Beatgrid();
+        const auto grid = gridSource && preview == nullptr ? gridSource() : util::Beatgrid();
         if (!grid.empty())
         {
             const double rightSample = leftSample + width * spp;
@@ -148,9 +154,9 @@ void WaveformView::paint(juce::Graphics& g)
             drawBandColumn(g, static_cast<float>(x), 1.0f, mid, half, peaks, x < centreX ? 0.55f : 0.95f);
         }
 
-        // Cue point.
+        // Cue point (the loading track's comes with it).
         const auto cueX = static_cast<float>((s.cuePointSamples - leftSample) / spp);
-        if (cueX >= area.getX() - 6.0f && cueX <= area.getRight() + 6.0f)
+        if (preview == nullptr && cueX >= area.getX() - 6.0f && cueX <= area.getRight() + 6.0f)
         {
             g.setColour(kCueColour);
             g.fillRect(cueX - 0.5f, area.getY(), 1.5f, area.getHeight());
@@ -191,6 +197,13 @@ void WaveformView::paint(juce::Graphics& g)
         paintSum = paintMax = 0.0;
         paintCount = 0;
     }
+}
+
+void WaveformView::showPreview(std::shared_ptr<const analysis::Waveform> waveform)
+{
+    preview = std::move(waveform);
+    previewOver = engine.readState().decks[deck].bufferId;
+    repaint();
 }
 
 // ---- gestures ----

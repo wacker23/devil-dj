@@ -414,7 +414,9 @@ private:
         applyOutputLayout(currentLayout(), false);
         audio->setAudioCallback(engine.get());
         registry = std::make_unique<engine::BufferRegistry>();
-        loader = std::make_unique<engine::TrackLoader>(*engine, *registry);
+        engine::TrackLoader::Options loaderOptions;
+        loaderOptions.waveformCache = MainComponent::cacheFolder(); // P2-17
+        loader = std::make_unique<engine::TrackLoader>(*engine, *registry, loaderOptions);
         audio->onDeviceChanged = [this]
         {
             if (const auto state = audio->getStateXml(); state.isNotEmpty())

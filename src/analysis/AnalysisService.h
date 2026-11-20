@@ -86,6 +86,8 @@ public:
         std::size_t batchSize = 25;   // results per transaction
         double batchSeconds = 1.0;    // or after this long
         std::vector<Analyzer> analyzers; // empty = the built-in ones (basicsAnalyzer)
+        // P2-17: a folder for <content hash>.wfm waveforms, written for each track analyzed (if not there yet).
+        std::filesystem::path waveformCache;
     };
 
     struct Status

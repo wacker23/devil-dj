@@ -3,12 +3,14 @@
 #include "analysis/BeatTracker.h"
 #include "analysis/KeyDetector.h"
 #include "analysis/Loudness.h"
+#include "analysis/WaveformCache.h"
 #include "dsp/SincResampler.h"
 #include "library/Connection.h"
 #include "library/Database.h"
 #include "util/ThreadPriority.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 
 namespace devildj::analysis
@@ -242,15 +244,16 @@ void AnalysisService::analyze(std::int64_t id)
         pendingFailed.push_back(id);
     };
 
-    std::string path;
+    std::string path, hash;
     {
         auto reader = db.openReader();
         if (!reader)
             return fail();
-        auto* s = reader.value()->prepare("SELECT path FROM tracks WHERE id = ?");
+        auto* s = reader.value()->prepare("SELECT path, content_hash FROM tracks WHERE id = ?");
         if (s == nullptr || !s->bind(1, id).step())
             return; // deleted meanwhile: nothing to do
         path = s->getText(0);
+        hash = s->getText(1);
         s->reset();
     }
     auto decoded = decode(fromUtf8(path), stopping);
@@ -268,6 +271,20 @@ void AnalysisService::analyze(std::int64_t id)
             return;
         options.analyzers[i](input, result);
         progress(0.5 + 0.5 * static_cast<double>(i + 1) / static_cast<double>(options.analyzers.size()));
+    }
+    // The waveform for the decks (P2-17), at the file's rate; a deck at another rate re-labels it on load.
+    const bool plainHash = !hash.empty() && std::all_of(hash.begin(), hash.end(), [](char c)
+                                                         { return std::isalnum(static_cast<unsigned char>(c)) != 0; });
+    if (!options.waveformCache.empty() && plainHash)
+    {
+        const auto file = waveformCachePath(options.waveformCache, hash);
+        std::error_code ec;
+        if (!std::filesystem::exists(file, ec) && !stopping)
+        {
+            const auto& a = input.full;
+            writeWaveformCache(file, buildWaveform(a.left, a.right != nullptr ? a.right : a.left, a.numSamples,
+                                                   a.sampleRate));
+        }
     }
     {
         std::lock_guard lock(mutex);

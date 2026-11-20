@@ -91,6 +91,7 @@ public:
     void toggleBrowserSize();
     bool isBrowserBig() const noexcept { return browserBig; }
     static juce::File artworkFolder(); // %LOCALAPPDATA%\Devil-DJ\cache\artwork
+    static juce::File cacheFolder();   // %LOCALAPPDATA%\Devil-DJ\cache: <content hash>.wfm waveforms (P2-17)
     void unloadDeck(engine::DeckId deck);
 
 private:

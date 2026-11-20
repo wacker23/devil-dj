@@ -5,6 +5,7 @@
 #include "engine/AudioEngine.h"
 #include "engine/BufferRegistry.h"
 #include "engine/TrackLoader.h"
+#include "analysis/WaveformCache.h"
 #include "util/RealtimeGuard.h"
 
 #include "FakeAudioDevice.h"
@@ -74,10 +75,11 @@ private:
 // Engine + registry + loader wired like the app, but driven by the test.
 struct Rig
 {
-    explicit Rig(int threads = 2)
+    explicit Rig(int threads = 2, juce::File waveformCache = {})
     {
         engine.prepare(48000.0, 256);
         TrackLoader::Options options;
+        options.waveformCache = waveformCache;
         options.threads = threads;
         options.startHousekeepingTimer = false;
         options.post = messages.poster();
@@ -90,6 +92,14 @@ struct Rig
         loader->callbacks.onError = [this](DeckId deck, const juce::File& f, const juce::String& e)
         { errors.push_back({deck, f.getFileName() + ": " + e}); };
         loader->callbacks.onProgress = [this](DeckId, const juce::File&, double p) { progress.push_back(p); };
+        loader->callbacks.onWaveformPreview =
+            [this](DeckId, const juce::File&, std::shared_ptr<const devildj::analysis::Waveform> w, double seconds)
+        {
+            previewAt = std::chrono::steady_clock::now();
+            preview = std::move(w);
+            previewSeconds = seconds;
+            previewBeforeLoaded = loaded.empty();
+        };
     }
 
     // One engine block, like the audio callback (commands are applied here).
@@ -108,6 +118,10 @@ struct Rig
     std::vector<std::pair<DeckId, juce::String>> errors;
     std::vector<double> progress;
     juce::String lastHash;
+    std::shared_ptr<const devildj::analysis::Waveform> preview;
+    double previewSeconds = 0.0;
+    bool previewBeforeLoaded = false;
+    std::chrono::steady_clock::time_point previewAt;
 };
 
 juce::File formatFile(const juce::String& name)
@@ -148,6 +162,53 @@ TEST_CASE("TrackLoader loads a track in the background and hands it to the engin
     CHECK(deck.bufferId != 0);
     CHECK(deck.lengthSamples == 240000); // 5 s at 48 kHz (converted from 44.1 kHz)
     CHECK(rig.lastHash.length() == 16);
+}
+
+TEST_CASE("TrackLoader: a track with a cached waveform shows it in under 100 ms, before it is decoded (P2-17)",
+          "[engine][loader][wfm]")
+{
+    if (!haveSignals())
+        SKIP("Test signals not generated; run: python tools/gen_test_signals.py");
+#if JUCE_DEBUG
+    const auto file = formatFile("ref.mp3"); // Debug decodes ~10x slower (ctest's limit); Release: 10 minutes
+#else
+    const auto file = formatFile("long_10min.mp3");
+#endif
+    const auto cache = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                           .getChildFile("devildj-loader-wfm-" + juce::String(juce::Time::getHighResolutionTicks()));
+    // First load: no cache yet - no preview; the loader builds the waveform and writes the cache.
+    {
+        Rig rig(2, cache);
+        rig.loader->load(0, file, 48000.0);
+        REQUIRE(rig.messages.pumpUntil([&] { return !rig.loaded.empty() || !rig.errors.empty(); }, 120.0));
+        REQUIRE(rig.errors.empty());
+        CHECK(rig.preview == nullptr);
+        CHECK(cache.getChildFile(rig.lastHash + ".wfm").existsAsFile());
+    }
+    // Next load: the cached waveform comes as the load starts, long before the audio.
+    Rig rig(2, cache);
+    bool sameAsPreview = false; // the deck's waveform is the cached one (not built again)
+    rig.loader->callbacks.onLoaded = [&](DeckId, const TrackBuffer& t)
+    {
+        rig.loaded.push_back({0, t.file.getFileName()});
+        sameAsPreview = rig.preview != nullptr && t.waveform.peak[0] == rig.preview->peak[0];
+    };
+    const auto started = std::chrono::steady_clock::now();
+    rig.loader->load(0, file, 48000.0);
+    REQUIRE(rig.messages.pumpUntil([&] { return rig.preview != nullptr || !rig.loaded.empty(); }, 60.0));
+    REQUIRE(rig.preview != nullptr);
+    const double ms = std::chrono::duration<double, std::milli>(rig.previewAt - started).count();
+    REQUIRE(rig.messages.pumpUntil([&] { return !rig.loaded.empty() || !rig.errors.empty(); }, 120.0));
+    const double loadedMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+    WARN(file.getFileName() << ": cached waveform shown after " << ms << " ms, the track decoded after " << loadedMs
+                            << " ms");
+    CHECK(ms < 100.0);
+    CHECK(rig.previewBeforeLoaded);
+    CHECK(sameAsPreview);
+    CHECK(rig.preview->samplesPerPoint == 320); // at the deck's 48 kHz
+    CHECK(rig.preview->numPoints() > 0);
+    CHECK(std::abs(rig.previewSeconds - rig.preview->numPoints() / 150.0) < 1e-9);
+    cache.deleteRecursively();
 }
 
 TEST_CASE("TrackLoader frees the old buffer after a track is replaced (counter)", "[engine][loader]")

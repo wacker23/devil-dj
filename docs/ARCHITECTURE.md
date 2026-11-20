@@ -327,7 +327,7 @@ Schema v2 (Phase 2, task P2-24, and later Track Matcher tasks) adds `track_featu
 | Logs + crash dumps | `%LOCALAPPDATA%\Devil-DJ\logs\` |
 | User content | `Documents\Devil-DJ\{Samples,Beats,Code,Recordings,Keymaps}` |
 
-Waveform cache format `.wfm`: header (magic `DDJW`, version u16, sample rate u32, points/s u16, count u32) + 6 × u8 arrays (low/mid/high × peak/RMS) + overview block.
+Waveform cache format `.wfm` (P2-17, `analysis/WaveformCache`): header (magic `DDJW`, version u16, sample rate u32, points/s u16, count u32, samples per point u32, overview points u16) + 6 × u8 arrays (low/mid/high × peak/RMS) + overview block (8 × u8: low/mid/high × peak/RMS, full-band peak/RMS). Levels are stored as sqrt(level) × 255. Written through a temporary file and a rename. The analysis service writes one per analyzed track at the file's rate; the track loader reads it as a load starts (`onWaveformPreview`: the decks draw it until the new buffer is on the deck), re-labels it for the deck's rate (same 150 points/s) and uses it for the loaded track; with no cache (or one that doesn't fit the decoded length) it builds the waveform and writes the cache.
 
 ## 9. UI architecture
 

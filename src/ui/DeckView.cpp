@@ -143,6 +143,8 @@ void DeckView::refresh()
         shownBuffer = state.bufferId;
         track = state.loaded && lookup ? lookup(shownBuffer) : nullptr;
     }
+    if (preview != nullptr && state.bufferId != previewOver)
+        clearPreview(); // the loaded track is on the deck now
 
     play.setButtonText(state.playing && !state.cuePreview ? "PAUSE" : "PLAY");
     play.setToggleState(state.playing && !state.cuePreview, juce::dontSendNotification);
@@ -235,8 +237,10 @@ void DeckView::paint(juce::Graphics& g)
     // Title / artist.
     g.setColour(kText);
     g.setFont(juce::FontOptions(18.0f, juce::Font::bold));
-    g.drawText(track ? displayTitle(*track) : juce::String("No track - Decks menu to load"), header.removeFromTop(26),
-               juce::Justification::centredLeft, true);
+    g.drawText(preview ? previewTitle + "  (loading)"
+               : track ? displayTitle(*track)
+                       : juce::String("No track - Decks menu to load"),
+               header.removeFromTop(26), juce::Justification::centredLeft, true);
     g.setColour(kDim);
     g.setFont(juce::FontOptions(14.0f));
     g.drawText(track ? track->artist : juce::String(), header, juce::Justification::centredLeft, true);
@@ -272,6 +276,23 @@ void DeckView::paint(juce::Graphics& g)
     }
 }
 
+void DeckView::showPreview(std::shared_ptr<const analysis::Waveform> waveform, const juce::String& title)
+{
+    preview = std::move(waveform);
+    previewTitle = title;
+    previewOver = engine.readState().decks[deck].bufferId;
+    repaint();
+    overviewView->repaint();
+}
+
+void DeckView::clearPreview()
+{
+    preview.reset();
+    previewTitle.clear();
+    repaint();
+    overviewView->repaint();
+}
+
 void DeckView::setKeyText(const juce::String& text)
 {
     if (text == key)
@@ -295,14 +316,17 @@ void DeckView::Overview::paint(juce::Graphics& g)
     g.fillRoundedRectangle(area, 4.0f);
     const auto& t = deckView.track;
     const auto& s = deckView.state;
-    if (t == nullptr || t->waveform.overviewPeak[0].empty() || s.lengthSamples <= 0)
+    const bool loading = deckView.preview != nullptr;
+    if (!loading && (t == nullptr || t->waveform.overviewPeak[0].empty() || s.lengthSamples <= 0))
         return;
-
-    const auto& w = t->waveform;
+    const auto& w = loading ? *deckView.preview : t->waveform;
+    if (w.overviewPeak[0].empty())
+        return;
     const int points = static_cast<int>(w.overviewPeak[0].size());
     const float mid = area.getCentreY();
     const float half = area.getHeight() * 0.5f - 2.0f;
-    const float playedX = area.getX() + area.getWidth() * static_cast<float>(s.positionSamples / s.lengthSamples);
+    const float playedX =
+        loading ? area.getX() : area.getX() + area.getWidth() * static_cast<float>(s.positionSamples / s.lengthSamples);
     const int columns = std::max(1, static_cast<int>(area.getWidth()));
     for (int c = 0; c < columns; ++c)
     {
@@ -316,6 +340,8 @@ void DeckView::Overview::paint(juce::Graphics& g)
         drawBandColumn(g, x, 1.0f, mid, half, peaks, x < playedX ? 0.35f : 0.95f);
     }
 
+    if (loading)
+        return; // no cue or playhead until the track is on the deck
     // Cue marker and playhead.
     const float cueX = area.getX() + area.getWidth() * static_cast<float>(s.cuePointSamples / s.lengthSamples);
     g.setColour(kCueColour);

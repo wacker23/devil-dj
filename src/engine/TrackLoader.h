@@ -17,7 +17,8 @@ namespace devildj::engine
 
 // Loads tracks onto decks in the background (P1-05; ARCHITECTURE §1 "Track loader pool (2)").
 //
-//   load(deck, file) --> pool thread (low priority): decode + resample + content hash
+//   load(deck, file) --> pool thread (low priority): content hash, cached waveform (P2-17) --> onWaveformPreview
+//                    --> decode + resample (+ waveform, written to the cache, if there was none)
 //                    --> message thread: BufferRegistry::add, AudioEngine::send(LoadTrack)
 //   engine replaces/unloads a buffer --> AudioEngine::popReleasedBuffer --> housekeeping (10 Hz) releases it
 //
@@ -33,6 +34,7 @@ public:
         int threads = 2;
         bool startHousekeepingTimer = true; // tests call collectReleasedBuffers() themselves
         PostFunction post;
+        juce::File waveformCache; // folder of <content hash>.wfm files (P2-17); none = always build
     };
 
     struct Callbacks
@@ -40,6 +42,10 @@ public:
         std::function<void(DeckId, const juce::File&, double fraction)> onProgress;
         std::function<void(DeckId, const TrackBuffer&)> onLoaded;
         std::function<void(DeckId, const juce::File&, const juce::String& error)> onError;
+        // The cached waveform, as soon as the load starts (before decoding; P2-17), already at the target rate.
+        // Not called when the track has no cache yet.
+        std::function<void(DeckId, const juce::File&, std::shared_ptr<const analysis::Waveform>, double seconds)>
+            onWaveformPreview;
     };
 
     TrackLoader(AudioEngine& engine, BufferRegistry& registry, Options options = {});
@@ -77,6 +83,7 @@ private:
     AudioEngine& engine;
     BufferRegistry& registry;
     PostFunction post;
+    juce::File waveformCache;
     juce::ThreadPool pool;
     std::array<DeckRequest, kMaxDecks> requests{};
     std::uint64_t nextRequestId = 1;

@@ -34,6 +34,11 @@ public:
     using GridSource = std::function<util::Beatgrid()>;
     void setGridSource(GridSource source) { gridSource = std::move(source); }
 
+    // A track being loaded (P2-17): its cached waveform, drawn from its start until the deck has the new buffer.
+    void showPreview(std::shared_ptr<const analysis::Waveform> waveform);
+    void clearPreview() { preview.reset(); }
+    bool hasPreview() const noexcept { return preview != nullptr; }
+
     static constexpr std::array<double, 7> kZoomLevels{2.0, 4.0, 6.0, 8.0, 12.0, 16.0, 32.0}; // seconds visible
     static constexpr int kDefaultZoom = 2;                                                    // 6 s
     static constexpr double kNudgeSecondsPerNotch = 0.005;
@@ -77,6 +82,8 @@ private:
     LatencySource latency;
     engine::BufferId shownBuffer = 0;
     std::shared_ptr<const engine::TrackBuffer> track;
+    std::shared_ptr<const analysis::Waveform> preview;
+    engine::BufferId previewOver = 0; // the buffer on the deck when the preview came; a new one ends it
     int zoom = kDefaultZoom;
     float lastDragX = 0.0f;
     bool dragging = false;

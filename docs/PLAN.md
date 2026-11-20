@@ -273,7 +273,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   ITU-R BS.1770 integrated loudness (K-weighting, gating) per track; Auto Gain sets trim so tracks play at a target loudness (setting, default chosen by listening tests).
   Done when: test vectors (generated sine at known level) within 0.1 LU.
 
-- [ ] **P2-17 Analysis cache**
+- [x] **P2-17 Analysis cache**
   Waveform/peaks stored in a compact binary file per track (`%LOCALAPPDATA%\Devil-DJ\cache\<hash>.wfm`); deck load reads cache instead of recomputing.
   Done when: loading an analyzed track shows its waveform in < 100 ms.
 

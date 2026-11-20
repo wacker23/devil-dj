@@ -2,6 +2,7 @@
 
 #include "TestData.h"
 #include "analysis/AnalysisService.h"
+#include "analysis/WaveformCache.h"
 #include "engine/AudioDeviceService.h"
 #include "engine/AudioEngine.h"
 #include "engine/TrackDecoder.h"
@@ -186,6 +187,46 @@ TEST_CASE("Analysis service: queue, workers, results with the analysis version",
         CHECK(p == util::lowestThreadPriority());
     // Results are written in batches, not one transaction per track.
     CHECK(notifications < 19);
+}
+
+TEST_CASE("Analysis service: writes each track's waveform cache (P2-17)", "[analysis][service][wfm]")
+{
+    Lib lib;
+    const auto ids = lib.addFake(3, 4.0);
+    lib.db->writeAndWait(
+        [&](library::Connection& c)
+        {
+            for (std::size_t i = 0; i < ids.size(); ++i)
+                CHECK(c.exec("UPDATE tracks SET content_hash = 'feed00000000000" + std::to_string(i) + "' WHERE id = " +
+                             std::to_string(ids[i])));
+        });
+    const auto cache = lib.dir / "cache";
+    FakeDecoder decoder;
+    AnalysisService::Options options;
+    options.workers = 2;
+    options.waveformCache = cache;
+    {
+        AnalysisService service(*lib.db, decoder.make(), options);
+        CHECK(service.queueOutdated() == 3);
+        REQUIRE(service.waitUntilIdle(60.0));
+    }
+    for (std::size_t i = 0; i < ids.size(); ++i)
+    {
+        const auto w = analysis::readWaveformCache(analysis::waveformCachePath(cache, "feed00000000000" + std::to_string(i)));
+        REQUIRE(w.has_value());
+        CHECK(w->sampleRate == 44100.0); // the file's rate
+        CHECK(std::abs(w->numPoints() - 4.0 * 150.0) <= 1.0);
+        // The fake decoder's tone is 440 Hz at 0.25: mid band.
+        CHECK(std::abs(w->peak[analysis::Waveform::Mid][300] - 0.25f) < 0.03f);
+    }
+    // Hashes that aren't plain hex-like names (the fake library's paths) don't become files.
+    lib.addFake(1, 2.0);
+    {
+        AnalysisService service(*lib.db, decoder.make(), options);
+        service.queueOutdated();
+        REQUIRE(service.waitUntilIdle(60.0));
+    }
+    CHECK(std::distance(fs::directory_iterator(cache), fs::directory_iterator()) == 3);
 }
 
 TEST_CASE("Analysis service: locked BPM and grids are left alone; prioritize goes first", "[analysis][service]")

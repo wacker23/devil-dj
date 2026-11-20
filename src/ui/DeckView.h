@@ -48,6 +48,11 @@ public:
     juce::TextButton& gridButton() noexcept { return grid; }
     juce::TextButton& tapButton() noexcept { return tap; }
     std::function<void()> onGridMenu; // GRID: the beatgrid tools (P2-14)
+    // A track being loaded (P2-17): its title and cached waveform in the overview until the deck has it.
+    void showPreview(std::shared_ptr<const analysis::Waveform> waveform, const juce::String& title);
+    void clearPreview();
+    bool hasPreview() const noexcept { return preview != nullptr; }
+
     // The loaded track's key as the app shows it (library key, in the user's notation; P2-15). Empty = none.
     void setKeyText(const juce::String& text);
     const juce::String& keyText() const noexcept { return key; }
@@ -61,6 +66,9 @@ private:
     TrackLookup lookup;
     engine::BufferId shownBuffer = 0;
     std::shared_ptr<const engine::TrackBuffer> track;
+    std::shared_ptr<const analysis::Waveform> preview;
+    juce::String previewTitle;
+    engine::BufferId previewOver = 0;
     engine::DeckState state;
     double sampleRate = 48000.0;
     juce::String key;

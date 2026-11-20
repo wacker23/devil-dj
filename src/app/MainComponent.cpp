@@ -281,7 +281,9 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     }
     if (libraryDb != nullptr)
     {
-        analysisService = std::make_unique<analysis::AnalysisService>(*libraryDb, &decodeForAnalysis);
+        analysis::AnalysisService::Options analysisOptions;
+        analysisOptions.waveformCache = cacheFolder().getFullPathName().toWideCharPointer();
+        analysisService = std::make_unique<analysis::AnalysisService>(*libraryDb, &decodeForAnalysis, analysisOptions);
         analysisTotal = analysisService->queueOutdated();
         if (analysisTotal > 0)
             util::logInfo("Analysis: {} tracks to analyze", analysisTotal);
@@ -315,8 +317,21 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
             deckStatus[deck] =
                 t.file.getFileName() + " (" + juce::String(t.durationSeconds(), 1) + " s, " + t.formatName + ")";
     };
+    loader.callbacks.onWaveformPreview = [this](engine::DeckId deck, const juce::File& file,
+                                                std::shared_ptr<const analysis::Waveform> waveform, double)
+    {
+        if (deck > 1)
+            return;
+        (deck == 0 ? waveA : waveB).showPreview(waveform);
+        (deck == 0 ? deckA : deckB).showPreview(waveform, file.getFileNameWithoutExtension());
+    };
     loader.callbacks.onError = [this](engine::DeckId deck, const juce::File& file, const juce::String& error)
     {
+        if (deck <= 1)
+        {
+            (deck == 0 ? waveA : waveB).clearPreview();
+            (deck == 0 ? deckA : deckB).clearPreview();
+        }
         if (deck < deckStatus.size())
             deckStatus[deck] = "failed: " + file.getFileName() + " - " + error;
     };
@@ -643,6 +658,11 @@ MainComponent::~MainComponent()
 juce::File MainComponent::artworkFolder()
 {
     return juce::File::getSpecialLocation(juce::File::windowsLocalAppData).getChildFile("Devil-DJ/cache/artwork");
+}
+
+juce::File MainComponent::cacheFolder()
+{
+    return juce::File::getSpecialLocation(juce::File::windowsLocalAppData).getChildFile("Devil-DJ/cache");
 }
 
 void MainComponent::showAnalysisProgress()
