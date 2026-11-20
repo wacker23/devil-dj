@@ -96,6 +96,14 @@ struct EngineState
     float headphoneLevelDb = 0.0f;
     float cuePeakL = 0.0f, cuePeakR = 0.0f;   // headphone signal after its limiter, linear
     std::uint32_t buffersAwaitingRelease = 0; // replaced buffers not yet handed back (queue was full)
+
+    // Master clock (P2-18), at the end of the last block.
+    std::int64_t sampleClock = 0; // samples rendered since prepare (the scheduler's time base)
+    double masterBpm = 120.0;
+    double masterBeat = 0.0;
+    std::int8_t masterSource = -1; // the leading deck, -1 = the internal tempo
+    std::uint8_t clockMode = 0;    // MasterClock::Mode
+    double internalBpm = 120.0;
 };
 
 static_assert(std::is_trivially_copyable_v<EngineState>, "EngineState must stay trivially copyable");

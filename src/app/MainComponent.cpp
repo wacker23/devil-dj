@@ -882,6 +882,17 @@ juce::StringArray MainComponent::statusLines()
 {
     juce::StringArray lines;
     const auto& state = engine.readState();
+    // Master clock (P2-18): who leads, tempo, bar.beat.
+    {
+        const double beat = state.masterBeat;
+        const auto bar = static_cast<long long>(std::floor(beat / 4.0)) + 1;
+        const double inBar = beat - 4.0 * static_cast<double>(bar - 1) + 1.0;
+        lines.add("Master clock: " + juce::String(state.masterBpm, 2) + " BPM, " +
+                  (state.masterSource >= 0 ? juce::String("deck ") + engine::deckLetter(
+                                                 static_cast<engine::DeckId>(state.masterSource))
+                                           : juce::String("internal")) +
+                  ", bar " + juce::String(bar) + " beat " + juce::String(inBar, 2));
+    }
     for (engine::DeckId d = 0; d < deckStatus.size(); ++d)
     {
         lines.add(juce::String("Deck ") + engine::deckLetter(d) + ": " + deckStatus[d]);

@@ -4,6 +4,7 @@
 #include "dsp/Limiter.h"
 #include "engine/ChannelStrip.h"
 #include "engine/Crossfader.h"
+#include "engine/MasterClock.h"
 #include "engine/Deck.h"
 #include "engine/EngineCommand.h"
 #include "engine/EngineState.h"
@@ -56,6 +57,9 @@ public:
     // Latest published state. One reader thread only (the UI); the reference stays valid until the next call.
     const EngineState& readState() noexcept { return state.read(); }
 
+    // The master clock (P2-18), for code on the audio thread (sync, quantize, the scheduler).
+    const MasterClock& masterClock() const noexcept { return clock; }
+
     // ---- not on the audio thread: allocates the bus buffers ----
 
     // The device callback calls this from audioDeviceAboutToStart. Call it yourself for offline processing.
@@ -103,6 +107,9 @@ private:
     void apply(const SetParam& command) noexcept;
     void apply(const SetBeatgrid& command) noexcept;
     void apply(const SetMetronome& command) noexcept;
+    void apply(const SetClockSource& command) noexcept;
+    void apply(const SetInternalTempo& command) noexcept;
+    void advanceClock(int numSamples) noexcept;
     // Metronome clicks for the beats the deck crossed in this chunk, into the cue bus (P2-14).
     void renderMetronome(std::size_t deck, double before, double after, int numSamples) noexcept;
     void requestTrack(DeckId deck, const TrackBuffer* buffer, BufferId id) noexcept;
@@ -171,6 +178,7 @@ private:
     dsp::LinearRamp cueMixCue, cueMixMaster, headphoneGain;
     dsp::Limiter cueLimiter; // the headphones can't clip either, and stay aligned with the limited master
     dsp::LevelMeter cueMeter;
+    MasterClock clock;
     void updateCueMix() noexcept;
     void mixHeadphones(int numSamples) noexcept;
     void finishBuses(int numSamples) noexcept;

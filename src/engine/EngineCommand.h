@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/EngineIds.h"
+#include "engine/MasterClock.h"
 #include "engine/OutputRouter.h"
 #include "util/Beatgrid.h"
 
@@ -194,10 +195,25 @@ struct SetMetronome
     float levelDb = -6.0f;
 };
 
+// Master clock (P2-18): who leads - Auto (the first playing synced deck with a grid), one deck, or the
+// internal tempo.
+struct SetClockSource
+{
+    MasterClock::Mode mode = MasterClock::Mode::Auto;
+    std::int8_t deck = MasterClock::kInternal; // for Mode::Deck
+};
+
+// The internal tempo: the clock's tempo while no deck leads (20..300 BPM).
+struct SetInternalTempo
+{
+    double bpm = 120.0;
+};
+
 using EngineCommand =
     std::variant<SetTestTone, SetOutputLayout, LoadTrack, UnloadTrack, Play, Pause, TogglePlay, CuePress, CueRelease,
                  Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo, PitchBend, SetInterpolationQuality, SetKeyLock,
-                 SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge, SetParam, SetBeatgrid, SetMetronome>;
+                 SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge, SetParam, SetBeatgrid, SetMetronome,
+                 SetClockSource, SetInternalTempo>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

@@ -20,6 +20,8 @@ target_sources(devildj_engine INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/EngineCommand.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/EngineIds.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/EngineState.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/MasterClock.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/MasterClock.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/Mp3Gapless.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Mp3Gapless.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/OutputRouter.cpp"

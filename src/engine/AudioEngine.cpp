@@ -33,6 +33,7 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
     deckScratch.setSize(2, capacity, false, true, false);
     for (auto& slot : decks)
         slot.deck.prepare(sampleRate, capacity);
+    clock.prepare(sampleRate);
     for (auto& strip : strips)
         strip.prepare(sampleRate, capacity);
     for (std::size_t i = 0; i < mixer.size(); ++i)
@@ -133,6 +134,7 @@ void AudioEngine::renderChunk(float* const* outputs, int numChannels, int offset
     masterBus.clear(0, numSamples);
     cueBus.clear(0, numSamples);
 
+    advanceClock(numSamples); // before the decks render: the clock reads their playheads at the block start
     renderDecks(numSamples);
     renderMaster(numSamples);   // master gain
     mixHeadphones(numSamples);  // cue bus + master -> headphone level
@@ -151,6 +153,35 @@ void AudioEngine::renderChunk(float* const* outputs, int numChannels, int offset
 
     routeOutputs(layout, masterBus.getReadPointer(0), masterBus.getReadPointer(1), cueBus.getReadPointer(0),
                  cueBus.getReadPointer(1), chunk, channels, numSamples);
+}
+
+void AudioEngine::advanceClock(int numSamples) noexcept
+{
+    std::array<ClockDeckInput, kMaxDecks> inputs{};
+    for (std::size_t i = 0; i < decks.size(); ++i)
+    {
+        const auto& slot = decks[i];
+        auto& in = inputs[i];
+        in.playing = slot.deck.track() != nullptr && slot.deck.isPlaying();
+        in.hasGrid = !slot.grid.empty();
+        if (in.hasGrid)
+        {
+            const double position = slot.deck.position();
+            in.beat = slot.grid.beatAt(position);
+            in.bpm = slot.grid.bpmAt(position) * slot.deck.rate();
+        }
+    }
+    clock.beginBlock(numSamples, inputs);
+}
+
+void AudioEngine::apply(const SetClockSource& command) noexcept
+{
+    clock.setMode(command.mode, command.deck);
+}
+
+void AudioEngine::apply(const SetInternalTempo& command) noexcept
+{
+    clock.setInternalBpm(command.bpm);
 }
 
 void AudioEngine::drainCommands() noexcept
@@ -717,6 +748,12 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
     current.headphoneLevelDb = static_cast<float>(headphoneLevelDb);
     current.cuePeakL = cueMeter.peakLeft();
     current.cuePeakR = cueMeter.peakRight();
+    current.sampleClock = clock.blockEnd();
+    current.masterBpm = clock.bpm();
+    current.masterBeat = clock.beatAtBlockEnd();
+    current.masterSource = static_cast<std::int8_t>(clock.sourceDeck());
+    current.clockMode = static_cast<std::uint8_t>(clock.mode());
+    current.internalBpm = clock.internalBpm();
 
     state.write(current);
 }

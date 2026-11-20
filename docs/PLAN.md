@@ -279,7 +279,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
 
 ### Beat-aware deck features
 
-- [ ] **P2-18 MasterClock**
+- [x] **P2-18 MasterClock**
   `engine/MasterClock`: master BPM and beat phase (double beats) advanced per sample block; master source = a chosen deck (auto: the first playing synced deck) or internal tempo. Provides `beatAt(sampleTime)` / `sampleAt(beat)` for the scheduler.
   Done when: unit tests for phase continuity across tempo changes.
 
