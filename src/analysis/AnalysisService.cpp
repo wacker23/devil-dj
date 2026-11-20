@@ -2,6 +2,7 @@
 
 #include "analysis/BeatTracker.h"
 #include "analysis/KeyDetector.h"
+#include "analysis/Loudness.h"
 #include "dsp/SincResampler.h"
 #include "library/Connection.h"
 #include "library/Database.h"
@@ -60,6 +61,14 @@ void AnalysisService::keyAnalyzer(const AnalysisInput& input, AnalysisResult& re
     result.keyConfidence = key.confidence;
 }
 
+void AnalysisService::loudnessAnalyzer(const AnalysisInput& input, AnalysisResult& result)
+{
+    // A mono file comes duplicated on both channels: measured as it plays, on two speakers.
+    const auto& a = input.full;
+    if (const auto lufs = integratedLoudness(a.left, a.right, a.numSamples, a.sampleRate))
+        result.loudnessLufs = *lufs;
+}
+
 void AnalysisService::basicsAnalyzer(const AnalysisInput& input, AnalysisResult& result)
 {
     // The exact length and rate from the decoded audio (tags and file headers can be off, VBR MP3s especially).
@@ -82,6 +91,7 @@ AnalysisService::AnalysisService(library::Database& database, Decoder decoder, O
         options.analyzers.push_back(&AnalysisService::basicsAnalyzer);
         options.analyzers.push_back(&AnalysisService::beatAnalyzer);
         options.analyzers.push_back(&AnalysisService::keyAnalyzer);
+        options.analyzers.push_back(&AnalysisService::loudnessAnalyzer);
     }
     int n = options.workers;
     if (n <= 0)

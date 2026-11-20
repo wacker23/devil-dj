@@ -269,7 +269,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   Chromagram (FFT 8192, hop 2048, 36 bins/octave folded to 12, tuning estimation), averaged over the track with energy weighting, correlated against 24 key profiles; output key + confidence. Display as musical key and Camelot code (user setting).
   Done when: all 24 generated chord loops detected correctly; eval-set accuracy reported (target ≥ 75 % exact, ≥ 90 % including relative/fifth).
 
-- [ ] **P2-16 Loudness**
+- [x] **P2-16 Loudness**
   ITU-R BS.1770 integrated loudness (K-weighting, gating) per track; Auto Gain sets trim so tracks play at a target loudness (setting, default chosen by listening tests).
   Done when: test vectors (generated sine at known level) within 0.1 LU.
 

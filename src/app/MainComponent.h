@@ -140,7 +140,14 @@ private:
         util::TapTempo taps;
         bool metronome = false;
         int musicalKey = -1; // the library's key for the loaded track
+        std::optional<double> loudnessLufs;
+        bool autoGainPending = false; // loaded before its loudness was known: set the trim when it is
+        bool autoGainAtLoad = false;  // the first time, right after the load
+        float autoGainTrim = 0.0f;    // the trim Auto Gain set (a later analysis result only replaces that)
     };
+    bool autoGain = true;
+    double autoGainTarget = -10.0;
+    void applyAutoGain(engine::DeckId deck, bool atLoad);
     util::KeyNotation keyNotation = util::KeyNotation::Musical;
     void showDeckKey(engine::DeckId deck);
     std::array<DeckGrid, 2> deckGrids;
@@ -169,6 +176,7 @@ public:
     void setTempoRange(double rangePercent);
     void setHighQualityResampling(bool on);
     void setKeyNotation(util::KeyNotation notation); // library Key column and the decks (P2-15)
+    void setAutoGain(bool on, double targetLufs);    // P2-16: applies to the next loads
     void toggleKeyLock(engine::DeckId deck);
     void setIsolator(bool on);
     void setCrossfaderCurve(int curve);

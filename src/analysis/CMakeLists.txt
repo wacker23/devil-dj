@@ -4,6 +4,7 @@ add_library(devildj_analysis STATIC
     AnalysisService.cpp
     BeatTracker.cpp
     KeyDetector.cpp
+    Loudness.cpp
     WaveformBuilder.cpp)
 add_library(devildj::analysis ALIAS devildj_analysis)
 
@@ -15,6 +16,7 @@ target_sources(devildj_analysis PUBLIC
         BeatTracker.h
         Fft.h
         KeyDetector.h
+        Loudness.h
         WaveformBuilder.h)
 
 target_include_directories(devildj_analysis PUBLIC "${PROJECT_SOURCE_DIR}/src")

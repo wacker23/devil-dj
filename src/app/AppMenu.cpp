@@ -100,6 +100,13 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
         keyMenu.addItem(KeyMusical, "Musical (Am, F#)", true, keyNotation == 0);
         keyMenu.addItem(KeyCamelot, "Camelot (8A, 2B)", true, keyNotation == 1);
         menu.addSubMenu("Show keys as", keyMenu);
+        juce::PopupMenu gainMenu;
+        gainMenu.addItem(AutoGainToggle, "Auto Gain: set the trim when a track loads", true, autoGain);
+        gainMenu.addSeparator();
+        for (int i = 0; i < 4; ++i)
+            gainMenu.addItem(AutoGainTargetFirst + i, "Target " + juce::String(kAutoGainTargets[i]) + " LUFS", true,
+                             autoGainTarget == kAutoGainTargets[i]);
+        menu.addSubMenu("Auto Gain", gainMenu);
         menu.addSeparator();
         menu.addItem(OpenKeymapFolder, "Open keymap folder (keymap.json)");
         menu.addItem(ReloadKeymap, "Reload keymap");
@@ -126,6 +133,13 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
 
 void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
 {
+    if (menuItemID >= AutoGainTargetFirst && menuItemID <= AutoGainTargetLast)
+    {
+        autoGainTarget = kAutoGainTargets[menuItemID - AutoGainTargetFirst];
+        if (onAutoGain)
+            onAutoGain(autoGain, autoGainTarget);
+        return;
+    }
     switch (menuItemID)
     {
         case AudioSettings:
@@ -161,6 +175,12 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
         case OpenBackups:
             if (onOpenBackups)
                 onOpenBackups();
+            break;
+
+        case AutoGainToggle:
+            autoGain = !autoGain;
+            if (onAutoGain)
+                onAutoGain(autoGain, autoGainTarget);
             break;
 
         case KeyMusical:

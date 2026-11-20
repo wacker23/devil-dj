@@ -29,6 +29,13 @@ public:
     std::function<void()> onOpenBackups;    // P2-11
     std::function<void(int notation)> onKeyNotation; // 0 musical, 1 Camelot (P2-15)
     void setKeyNotation(int notation) noexcept { keyNotation = notation; }
+    std::function<void(bool on, int targetLufs)> onAutoGain; // P2-16
+    void setAutoGain(bool on, int targetLufs) noexcept
+    {
+        autoGain = on;
+        autoGainTarget = targetLufs;
+    }
+    static constexpr int kAutoGainTargets[] = {-8, -10, -12, -14};
     std::function<void()> onToggleDebugOverlay;
     std::function<void()> onToggleTestTone;
     std::function<void(int deck)> onLoadTrack;
@@ -64,6 +71,9 @@ private:
         OpenBackups,
         KeyMusical,
         KeyCamelot,
+        AutoGainToggle,
+        AutoGainTargetFirst, // one per kAutoGainTargets
+        AutoGainTargetLast = AutoGainTargetFirst + 3,
         DebugOverlay,
         TestTone,
         LoadDeckA,
@@ -104,6 +114,8 @@ private:
     double tempoRange = 10.0;
     bool highQuality = false;
     int keyNotation = 0;
+    bool autoGain = true;
+    int autoGainTarget = -10;
     bool isolator = false;
     int crossfaderCurve = 0;
     int assign[2] = {0, 2};

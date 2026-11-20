@@ -98,6 +98,14 @@ public:
         const bool camelot = settings->get(keys::keyNotation) == 1;
         menu->setKeyNotation(camelot ? 1 : 0);
         mainComponent->setKeyNotation(camelot ? util::KeyNotation::Camelot : util::KeyNotation::Musical);
+        menu->setAutoGain(settings->get(keys::autoGain), settings->get(keys::autoGainTarget));
+        mainComponent->setAutoGain(settings->get(keys::autoGain), settings->get(keys::autoGainTarget));
+        menu->onAutoGain = [this](bool on, int target)
+        {
+            settings->set(keys::autoGain, on);
+            settings->set(keys::autoGainTarget, target);
+            mainComponent->setAutoGain(on, target);
+        };
         menu->onKeyNotation = [this](int notation)
         {
             settings->set(keys::keyNotation, notation);

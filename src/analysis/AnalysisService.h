@@ -69,8 +69,8 @@ using Analyzer = std::function<void(const AnalysisInput& input, AnalysisResult& 
 
 // The version this build's analyzers write to tracks.analysis_version. 1 = P2-12 (duration, sample rate);
 // 2 = P2-13 beat tracker v1 (BPM, beatgrid); 3 = P2-15 key detection (key, confidence); 4 = beat tracker v2
-// (variable-tempo grids, steady grids refitted).
-constexpr int kAnalysisVersion = 4;
+// (variable-tempo grids, steady grids refitted); 5 = P2-16 loudness (BS.1770 integrated LUFS).
+constexpr int kAnalysisVersion = 5;
 
 // The analysis service (P2-12): a queue of track ids and a pool of workers (cores - 1, at most 4) at the
 // lowest thread priority, so playing decks never wait for it. Per track: read its path from the library,
@@ -115,6 +115,9 @@ public:
     static void basicsAnalyzer(const AnalysisInput& input, AnalysisResult& result);
     static void beatAnalyzer(const AnalysisInput& input, AnalysisResult& result); // P2-13
     static void keyAnalyzer(const AnalysisInput& input, AnalysisResult& result);  // P2-15
+    // P2-16: integrated loudness of the full-rate stereo. Only tracks.loudness_lufs; the app turns it into a trim
+    // for the user's target when a deck loads (Auto Gain), so changing the target needs no new analysis.
+    static void loudnessAnalyzer(const AnalysisInput& input, AnalysisResult& result);
 
     // The analyzers' mono signal: 0.5 (L + R) resampled to AnalysisInput::kMonoRate.
     static std::vector<float> monoSignal(const DecodedAudio& audio);

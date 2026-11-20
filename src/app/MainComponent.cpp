@@ -1,5 +1,7 @@
 #include "MainComponent.h"
 
+#include "analysis/Loudness.h"
+
 #include "engine/TrackDecoder.h"
 #include "library/Database.h"
 #include "library/ForeignLibrary.h"
@@ -1101,6 +1103,8 @@ void MainComponent::loadGridFor(engine::DeckId deck, const juce::File& file, dou
     d = {};
     d.bufferRate = bufferRate;
     showDeckKey(deck); // none until the library says
+    d.autoGainPending = autoGain;
+    d.autoGainAtLoad = autoGain;
     if (gridReader != nullptr)
         if (auto* s = gridReader->prepare("SELECT id, sample_rate FROM tracks WHERE path = ? COLLATE NOCASE"))
         {
@@ -1132,6 +1136,30 @@ void MainComponent::setKeyNotation(util::KeyNotation notation)
         showDeckKey(d);
 }
 
+void MainComponent::setAutoGain(bool on, double targetLufs)
+{
+    autoGain = on;
+    autoGainTarget = targetLufs;
+}
+
+void MainComponent::applyAutoGain(engine::DeckId deck, bool atLoad)
+{
+    auto& d = deckGrids[deck];
+    const auto& state = engine.readState();
+    const float trimNow = state.channels[deck].trimDb;
+    // After the load: only while the deck is stopped and nobody moved the trim since Auto Gain set it.
+    if (!atLoad && (state.decks[deck].playing || std::abs(trimNow - d.autoGainTrim) > 0.01f))
+    {
+        d.autoGainPending = false;
+        return;
+    }
+    const float trim =
+        d.loudnessLufs ? static_cast<float>(analysis::autoGainDb(*d.loudnessLufs, autoGainTarget)) : 0.0f;
+    engine.send(engine::SetParam{engine::channelParam(deck, engine::ChannelParam::Trim), trim});
+    d.autoGainTrim = trim;
+    d.autoGainPending = !d.loudnessLufs.has_value(); // not analyzed yet: again when the result comes
+}
+
 void MainComponent::reloadGrid(engine::DeckId deck)
 {
     if (deck >= deckGrids.size() || gridReader == nullptr)
@@ -1140,11 +1168,18 @@ void MainComponent::reloadGrid(engine::DeckId deck)
     if (d.trackId == 0 || d.bufferRate <= 0.0)
         return;
     // The key too (analysis results arrive here, P2-15).
-    if (auto* k = gridReader->prepare("SELECT musical_key FROM tracks WHERE id = ?"))
+    if (auto* k = gridReader->prepare("SELECT musical_key, loudness_lufs FROM tracks WHERE id = ?"))
     {
-        d.musicalKey = k->bind(1, d.trackId).step() ? static_cast<int>(k->getOptionalInt(0).value_or(-1)) : -1;
+        const bool found = k->bind(1, d.trackId).step();
+        d.musicalKey = found ? static_cast<int>(k->getOptionalInt(0).value_or(-1)) : -1;
+        d.loudnessLufs = found ? k->getOptionalDouble(1) : std::nullopt;
         k->reset();
         showDeckKey(deck);
+        if (d.autoGainPending)
+        {
+            applyAutoGain(deck, d.autoGainAtLoad);
+            d.autoGainAtLoad = false;
+        }
     }
     util::Beatgrid grid;
     if (const auto stored = library::BeatgridRepository(*gridReader).get(d.trackId))

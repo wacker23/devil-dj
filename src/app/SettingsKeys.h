@@ -29,4 +29,8 @@ inline const SettingKey<juce::String> libraryColumns{"libraryColumns", {}};
 // How keys are shown (P2-15): 0 = musical ("F#m"), 1 = Camelot ("11A").
 inline const SettingKey<int> keyNotation{"keyNotation", 0};
 
+// Auto Gain (P2-16): a deck's trim is set when a track loads so it plays at the target loudness (LUFS).
+inline const SettingKey<bool> autoGain{"autoGain", true};
+inline const SettingKey<int> autoGainTarget{"autoGainTarget", -10};
+
 } // namespace devildj::app::keys

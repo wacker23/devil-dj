@@ -60,6 +60,8 @@ TEST_CASE("Settings app keys have the documented defaults", "[app][Settings]")
     CHECK(settings.get(keys::showDebugMenu) == false);
     CHECK(settings.get(keys::outputLayout) == 0);          // stereo master only
     CHECK(settings.get(keys::keyNotation) == 0);           // musical keys (P2-15)
+    CHECK(settings.get(keys::autoGain));                   // Auto Gain on (P2-16)
+    CHECK(settings.get(keys::autoGainTarget) == -10);      // LUFS
     CHECK(settings.get(keys::audioDeviceState).isEmpty()); // system default device
 }
 

@@ -11,6 +11,7 @@ target_sources(DevilDJTests PRIVATE
     analysis/AnalysisSmokeTests.cpp
     analysis/BeatTrackerTests.cpp
     analysis/KeyDetectorTests.cpp
+    analysis/LoudnessTests.cpp
     analysis/TestSignalTests.cpp
     analysis/WaveformBuilderTests.cpp
     app/AppSmokeTests.cpp
