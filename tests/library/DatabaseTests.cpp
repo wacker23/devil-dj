@@ -79,12 +79,12 @@ TEST_CASE("Migrations: an empty database gets schema v1", "[library][db]")
     auto db = Database::open(tmp.file());
     REQUIRE(db.isOk());
     CHECK(db.value()->schemaVersion() == latestSchemaVersion());
-    CHECK(latestSchemaVersion() == 1);
+    CHECK(latestSchemaVersion() == 2); // v2: the Track Matcher's tables (P2-24)
 
     auto reader = db.value()->openReader();
     REQUIRE(reader.isOk());
     auto& r = *reader.value();
-    CHECK(schemaVersion(r) == 1);
+    CHECK(schemaVersion(r) == latestSchemaVersion());
     CHECK(r.queryText("PRAGMA journal_mode").value_or("") == "wal");
 
     const auto names = tableNames(r);
@@ -108,7 +108,7 @@ TEST_CASE("Migrations: re-running is a no-op and the version survives reopening"
     }
     auto again = Database::open(tmp.file());
     REQUIRE(again.isOk());
-    CHECK(again.value()->schemaVersion() == 1);
+    CHECK(again.value()->schemaVersion() == latestSchemaVersion());
     auto reader = again.value()->openReader();
     REQUIRE(reader.isOk());
     CHECK(count(*reader.value(), "tracks") == 1); // nothing dropped or re-created
@@ -117,7 +117,7 @@ TEST_CASE("Migrations: re-running is a no-op and the version survives reopening"
     REQUIRE(raw.isOk());
     auto result = migrate(*raw.value());
     REQUIRE(result.isOk());
-    CHECK(result.value() == 1);
+    CHECK(result.value() == latestSchemaVersion());
 }
 
 TEST_CASE("Migrations: a database from a newer Devil-DJ is refused, not touched", "[library][db]")

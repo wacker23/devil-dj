@@ -250,6 +250,7 @@ CREATE TABLE track_features (
   version INTEGER NOT NULL,
   energy REAL, energy_intro REAL, energy_outro REAL,
   energy_curve BLOB,              -- float16 per 16-bar window
+  energy_features BLOB,           -- per window: start, length, loudness dB, onset rate, low ratio, centroid (6 x float32; P2-24)
   sound_v1 BLOB,                  -- 32 × float32
   groove BLOB,                    -- 48 × float32
   vocal_intro REAL, vocal_outro REAL,   -- Phase 6
@@ -282,6 +283,10 @@ CREATE TABLE matcher_models (
 CREATE TABLE track_neighbors (      -- kNN graph for Bridge / Automix
   track_id INTEGER, neighbor_id INTEGER, score REAL,
   PRIMARY KEY (track_id, neighbor_id)
+);
+
+CREATE TABLE feature_stats (        -- library statistics (P2-24): 'energy' (z means / sds), 'sound_mean', 'sound_sd'
+  name TEXT PRIMARY KEY, data BLOB
 );
 ```
 

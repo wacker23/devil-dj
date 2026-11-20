@@ -5,6 +5,7 @@
 #include "library/Connection.h"
 #include "library/CueRepository.h"
 #include "library/Database.h"
+#include "library/Migrations.h"
 #include "library/PlaylistRepository.h"
 #include "library/TrackRepository.h"
 
@@ -120,7 +121,8 @@ TEST_CASE("Backup: a zip that restores the library and the settings", "[app][bac
         CHECK(z.getEntry("settings.xml") != nullptr);
         REQUIRE(z.getEntry("manifest.txt") != nullptr);
         std::unique_ptr<juce::InputStream> m(z.createStreamForEntry(*z.getEntry("manifest.txt")));
-        CHECK(m->readEntireStreamAsString().contains("library version: 1"));
+        CHECK(m->readEntireStreamAsString().contains("library version: " +
+                                                     juce::String(devildj::library::latestSchemaVersion())));
     }
 
     // Afterwards the library and the settings change.

@@ -2,11 +2,14 @@
 
 #include "analysis/BeatTracker.h"
 #include "analysis/KeyDetector.h"
+#include "analysis/FeatureNormalizer.h"
 #include "analysis/Loudness.h"
+#include "analysis/TrackFeatures.h"
 #include "analysis/WaveformCache.h"
 #include "dsp/SincResampler.h"
 #include "library/Connection.h"
 #include "library/Database.h"
+#include "util/Log.h"
 #include "util/ThreadPriority.h"
 
 #include <algorithm>
@@ -71,6 +74,24 @@ void AnalysisService::loudnessAnalyzer(const AnalysisInput& input, AnalysisResul
         result.loudnessLufs = *lufs;
 }
 
+void AnalysisService::featureAnalyzer(const AnalysisInput& input, AnalysisResult& result)
+{
+    // The grid the beat analyzer found (in the file's samples), moved to the mono signal's rate.
+    util::Beatgrid grid;
+    if (result.beatgridJson && input.full.sampleRate > 0.0)
+        if (const auto g = util::Beatgrid::fromJson(*result.beatgridJson, input.full.sampleRate))
+            grid = g->rescaled(AnalysisInput::kMonoRate);
+    const auto f = computeTrackFeatures(input.mono.data(), static_cast<int>(input.mono.size()), AnalysisInput::kMonoRate,
+                                        grid);
+    if (f.windows.empty())
+        return;
+    result.energyFeatures = packWindows(f.windows);
+    if (f.sound)
+        result.soundVector = packFloats(*f.sound);
+    if (f.groove)
+        result.groove = packFloats(*f.groove);
+}
+
 void AnalysisService::basicsAnalyzer(const AnalysisInput& input, AnalysisResult& result)
 {
     // The exact length and rate from the decoded audio (tags and file headers can be off, VBR MP3s especially).
@@ -94,6 +115,7 @@ AnalysisService::AnalysisService(library::Database& database, Decoder decoder, O
         options.analyzers.push_back(&AnalysisService::beatAnalyzer);
         options.analyzers.push_back(&AnalysisService::keyAnalyzer);
         options.analyzers.push_back(&AnalysisService::loudnessAnalyzer);
+        options.analyzers.push_back(&AnalysisService::featureAnalyzer);
     }
     int n = options.workers;
     if (n <= 0)
@@ -109,6 +131,30 @@ AnalysisService::~AnalysisService()
     for (auto& w : workers)
         w.join();
     flushResults(true); // what finished is kept
+    normalizeIfIdle();
+}
+
+void AnalysisService::normalizeIfIdle()
+{
+    {
+        std::lock_guard lock(mutex);
+        if (!queue.empty() || !active.empty())
+            return;
+    }
+    {
+        std::lock_guard lock(resultsMutex);
+        if (!pending.empty())
+            return;
+    }
+    if (!featuresDirty.exchange(false))
+        return;
+    db.writeAndWait(
+        [](library::Connection& c)
+        {
+            std::string error;
+            if (normalizeLibraryFeatures(c, &error) < 0)
+                util::logWarning("Analysis: feature normalization failed: {}", error);
+        });
 }
 
 void AnalysisService::enqueue(std::int64_t trackId)
@@ -178,6 +224,7 @@ bool AnalysisService::waitUntilIdle(double timeoutSeconds)
                                           [this] { return (queue.empty() || paused) && active.empty(); });
     lock.unlock();
     flushResults(true);
+    normalizeIfIdle();
     db.flush();
     return idle && status().idle();
 }
@@ -207,6 +254,7 @@ void AnalysisService::workerLoop()
             {
                 lock.unlock();
                 flushResults(false); // results waiting for the batch timer
+                normalizeIfIdle();   // P2-24: the queue is done - the library's energy percentiles again
                 continue;
             }
             id = queue.front();
@@ -335,6 +383,22 @@ void AnalysisService::flushResults(bool force)
                         s->bind(8, kAnalysisVersion).bind(9, id);
                         if (!s->run())
                             return false;
+                        if (r.energyFeatures)
+                        {
+                            auto* f = c.prepare(
+                                "INSERT INTO track_features (track_id, version, energy_features, sound_v1, groove) "
+                                "VALUES (?, ?, ?, ?, ?) ON CONFLICT(track_id) DO UPDATE SET version = excluded.version, "
+                                "energy_features = excluded.energy_features, sound_v1 = excluded.sound_v1, "
+                                "groove = excluded.groove");
+                            if (f == nullptr)
+                                return false;
+                            f->bind(1, id).bind(2, kFeatureVersion).bind(3, std::span<const std::uint8_t>(*r.energyFeatures));
+                            r.soundVector ? f->bind(4, std::span<const std::uint8_t>(*r.soundVector)) : f->bindNull(4);
+                            r.groove ? f->bind(5, std::span<const std::uint8_t>(*r.groove)) : f->bindNull(5);
+                            if (!f->run())
+                                return false;
+                            featuresDirty = true;
+                        }
                         if (r.beatgridJson)
                         {
                             auto* g = c.prepare("INSERT INTO beatgrids (track_id, anchors_json) VALUES (?, ?) "

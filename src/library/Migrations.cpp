@@ -99,7 +99,56 @@ CREATE TRIGGER tracks_fts_update AFTER UPDATE OF title, artist, album, comment O
 END;
 )sql";
 
-constexpr std::array<std::string_view, 1> kMigrations{kSchemaV1};
+// Schema v2 (P2-24): the Track Matcher's tables (MATCHER_SPEC §11). track_features.energy_features keeps each
+// 16-bar window's raw inputs (6 x float32: start, length, loudness dB, onset rate, low ratio, centroid Hz) so the
+// library-percentile energy can be recomputed after imports; feature_stats holds the library statistics.
+constexpr std::string_view kSchemaV2 = R"sql(
+CREATE TABLE track_features (
+  track_id INTEGER PRIMARY KEY REFERENCES tracks(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL,
+  energy REAL, energy_intro REAL, energy_outro REAL,
+  energy_curve BLOB,
+  energy_features BLOB,
+  sound_v1 BLOB,
+  groove BLOB,
+  vocal_intro REAL, vocal_outro REAL,
+  intro_beats INTEGER, outro_beats INTEGER
+);
+
+CREATE TABLE track_embeddings (
+  track_id INTEGER REFERENCES tracks(id) ON DELETE CASCADE,
+  model TEXT NOT NULL, segment TEXT NOT NULL,
+  dim INTEGER NOT NULL, vec BLOB NOT NULL,
+  PRIMARY KEY (track_id, model, segment)
+);
+
+CREATE TABLE choice_log (
+  id INTEGER PRIMARY KEY,
+  session_id INTEGER NOT NULL, created_at INTEGER NOT NULL,
+  context_track INTEGER, chosen_track INTEGER,
+  intent INTEGER, preset TEXT, scope TEXT,
+  shown_json TEXT NOT NULL,
+  chosen_rank INTEGER,
+  outcome INTEGER,
+  model_version TEXT
+);
+
+CREATE TABLE matcher_models (
+  name TEXT PRIMARY KEY, version INTEGER NOT NULL,
+  weights_json TEXT NOT NULL, trained_at INTEGER, n_impressions INTEGER
+);
+
+CREATE TABLE track_neighbors (
+  track_id INTEGER, neighbor_id INTEGER, score REAL,
+  PRIMARY KEY (track_id, neighbor_id)
+);
+
+CREATE TABLE feature_stats (name TEXT PRIMARY KEY, data BLOB);
+
+CREATE INDEX history_previous ON history(previous_track_id, track_id);
+)sql";
+
+constexpr std::array<std::string_view, 2> kMigrations{kSchemaV1, kSchemaV2};
 } // namespace
 
 std::span<const std::string_view> migrations() noexcept

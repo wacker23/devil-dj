@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <span>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
@@ -55,6 +56,7 @@ public:
     Statement& bind(int index, double value);
     Statement& bind(int index, std::string_view utf8);
     Statement& bind(int index, const char* utf8) { return bind(index, std::string_view(utf8)); }
+    Statement& bind(int index, std::span<const std::uint8_t> blob); // P2-24 (an empty span binds an empty blob)
     Statement& bindNull(int index);
     template <typename T>
     Statement& bind(int index, const std::optional<T>& value)
@@ -77,6 +79,7 @@ public:
     std::int64_t getInt(int column) const;
     double getDouble(int column) const;
     std::string getText(int column) const;
+    std::vector<std::uint8_t> getBlob(int column) const; // empty for NULL
     std::optional<std::int64_t> getOptionalInt(int column) const;
     std::optional<double> getOptionalDouble(int column) const;
 

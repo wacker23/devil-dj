@@ -61,6 +61,8 @@ struct AnalysisResult
     std::optional<int> musicalKey;
     std::optional<double> keyConfidence;
     std::optional<double> loudnessLufs, autoGainDb;
+    // P2-24: track_features (raw; the library normalization turns the energy windows into 0..1 energies).
+    std::optional<std::vector<std::uint8_t>> energyFeatures, soundVector, groove;
 };
 
 // An analyzer is a pure function of the input (unit-testable with generated signals). Bump kAnalysisVersion
@@ -69,8 +71,9 @@ using Analyzer = std::function<void(const AnalysisInput& input, AnalysisResult& 
 
 // The version this build's analyzers write to tracks.analysis_version. 1 = P2-12 (duration, sample rate);
 // 2 = P2-13 beat tracker v1 (BPM, beatgrid); 3 = P2-15 key detection (key, confidence); 4 = beat tracker v2
-// (variable-tempo grids, steady grids refitted); 5 = P2-16 loudness (BS.1770 integrated LUFS).
-constexpr int kAnalysisVersion = 5;
+// (variable-tempo grids, steady grids refitted); 5 = P2-16 loudness (BS.1770 integrated LUFS); 6 = P2-24 Track
+// Matcher features (energy windows, sound vector, groove).
+constexpr int kAnalysisVersion = 6;
 
 // The analysis service (P2-12): a queue of track ids and a pool of workers (cores - 1, at most 4) at the
 // lowest thread priority, so playing decks never wait for it. Per track: read its path from the library,
@@ -120,6 +123,9 @@ public:
     // P2-16: integrated loudness of the full-rate stereo. Only tracks.loudness_lufs; the app turns it into a trim
     // for the user's target when a deck loads (Auto Gain), so changing the target needs no new analysis.
     static void loudnessAnalyzer(const AnalysisInput& input, AnalysisResult& result);
+    // P2-24: the Track Matcher features (after beatAnalyzer: the groove uses the grid it found). When the queue is
+    // done, the library's energy percentiles are recomputed (FeatureNormalizer).
+    static void featureAnalyzer(const AnalysisInput& input, AnalysisResult& result);
 
     // The analyzers' mono signal: 0.5 (L + R) resampled to AnalysisInput::kMonoRate.
     static std::vector<float> monoSignal(const DecodedAudio& audio);
@@ -135,6 +141,8 @@ private:
     std::atomic<bool> stopping{false};
 
     mutable std::mutex mutex;
+    std::atomic<bool> featuresDirty{false}; // features written since the last library normalization
+    void normalizeIfIdle();
     std::condition_variable wake, idleSignal;
     std::deque<std::int64_t> queue;
     std::set<std::int64_t> queuedOrRunning;

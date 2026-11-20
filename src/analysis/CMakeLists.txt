@@ -3,10 +3,12 @@
 add_library(devildj_analysis STATIC
     AnalysisService.cpp
     BeatTracker.cpp
+    FeatureNormalizer.cpp
     KeyDetector.cpp
     Loudness.cpp
     WaveformBuilder.cpp
-    WaveformCache.cpp)
+    WaveformCache.cpp
+    TrackFeatures.cpp)
 add_library(devildj::analysis ALIAS devildj_analysis)
 
 target_sources(devildj_analysis PUBLIC
@@ -15,11 +17,13 @@ target_sources(devildj_analysis PUBLIC
     FILES
         AnalysisService.h
         BeatTracker.h
+        FeatureNormalizer.h
         Fft.h
         KeyDetector.h
         Loudness.h
         WaveformBuilder.h
-        WaveformCache.h)
+        WaveformCache.h
+        TrackFeatures.h)
 
 target_include_directories(devildj_analysis PUBLIC "${PROJECT_SOURCE_DIR}/src")
 target_compile_features(devildj_analysis PUBLIC cxx_std_20)

@@ -234,6 +234,8 @@ Beat tracker v2 (after the owner's eval set, analysis version 4): the tempogram 
 
 `analysis::integratedLoudness` (P2-16, `analysis/Loudness`): BS.1770-4 on the full-rate stereo (a mono file is measured as it plays, duplicated on both channels). K-weighting = high shelf + high pass, derived for any rate by the bilinear transform from the analog design (equal to the standard's 48 kHz coefficients); mean squares per 100 ms step, 400 ms blocks every 100 ms, absolute gate -70 LUFS, relative gate -10 LU. `loudnessAnalyzer` writes tracks.loudness_lufs (analysis version 5); auto_gain_db stays empty: the app turns the loudness into a trim for the user's target when a deck loads (Auto Gain: trim = target - LUFS within the trim's +-12 dB; settings `autoGain`, `autoGainTarget`). A track loaded before its analysis gets the trim when the result arrives, if the deck is stopped and the trim wasn't touched.
 
+Track Matcher features v1 (P2-24, `analysis/TrackFeatures`, `analysis/FeatureNormalizer`): one pass over the mono 22.05 kHz signal (1024-point FFT every 256 samples) gives the energy inputs per 16-bar window of the grid (30 s without one) - loudness dB, onset rate, low ratio < 150 Hz, centroid -, the 32-d sound vector (MFCC 1-13 mean / sd, centroid, roll-off, flatness, onset rate, low / high ratios) and the 48-d groove (accents on the 16 sixteenths of a bar in 3 bands, from the grid the beat analyzer just found). `featureAnalyzer` stores them raw in `track_features` (schema v2; analysis version 6). When the analysis queue empties after writing features, `normalizeLibraryFeatures` recomputes every track's 0..1 energy (window percentiles of the weighted z-score over all of the library's windows; whole = mean, intro = first, outro = last, curve as float16) and the library statistics in `feature_stats`.
+
 ## 6. Library
 
 - SQLite in WAL mode at `%APPDATA%\Devil-DJ\library.db`. One writer thread; UI reads through a read-only connection.
@@ -320,7 +322,7 @@ History (P2-23, `library::HistoryRepository`): one session per app run, created 
 
 Migrations live in `library/Migrations.cpp` as an ordered list of SQL strings; `PRAGMA user_version` stores the applied version.
 
-Schema v2 (Phase 2, task P2-24, and later Track Matcher tasks) adds `track_features`, `track_embeddings`, `choice_log`, `matcher_models` and `track_neighbors` — defined in `docs/MATCHER_SPEC.md` §11. History rows also record the previous track so transitions can be counted.
+Schema v2 (P2-24, in `library/Migrations.cpp`; also `feature_stats` and an index on history transitions) adds `track_features`, `track_embeddings`, `choice_log`, `matcher_models` and `track_neighbors` — defined in `docs/MATCHER_SPEC.md` §11. History rows also record the previous track so transitions can be counted.
 
 ## 8. Files and folders
 

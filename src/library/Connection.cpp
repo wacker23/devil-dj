@@ -60,6 +60,13 @@ Statement& Statement::bind(int index, std::string_view utf8)
     return *this;
 }
 
+Statement& Statement::bind(int index, std::span<const std::uint8_t> blob)
+{
+    static const std::uint8_t empty = 0;
+    noteBindError(sqlite3_bind_blob64(stmt, index, blob.empty() ? &empty : blob.data(), blob.size(), SQLITE_TRANSIENT));
+    return *this;
+}
+
 Statement& Statement::bindNull(int index)
 {
     noteBindError(sqlite3_bind_null(stmt, index));
@@ -122,6 +129,13 @@ std::string Statement::getText(int column) const
     if (text == nullptr)
         return {};
     return std::string(text, static_cast<std::size_t>(sqlite3_column_bytes(stmt, column)));
+}
+
+std::vector<std::uint8_t> Statement::getBlob(int column) const
+{
+    const auto* data = static_cast<const std::uint8_t*>(sqlite3_column_blob(stmt, column));
+    const auto size = static_cast<std::size_t>(sqlite3_column_bytes(stmt, column));
+    return data != nullptr ? std::vector<std::uint8_t>(data, data + size) : std::vector<std::uint8_t>();
 }
 
 std::optional<std::int64_t> Statement::getOptionalInt(int column) const

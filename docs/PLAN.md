@@ -303,7 +303,7 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   Every track played > 60 s goes into the session history (date-stamped playlist); export as text tracklist. Also store each transition (previous track → next track, time) for the Track Matcher's history feature.
   Done when: history survives restart; transitions queryable.
 
-- [ ] **P2-24 Matcher features v1** (spec: `docs/MATCHER_SPEC.md` §4.3–4.5)
+- [x] **P2-24 Matcher features v1** (spec: `docs/MATCHER_SPEC.md` §4.3–4.5)
   New analyzers: `EnergyAnalyzer` (energy per 16-bar window + intro/outro/whole, library-percentile normalized), `SoundVector` (32-d MFCC/spectral fingerprint), `GrooveProfile` (48-d accent profile). Stored in `track_features` (schema v2 migration).
   Done when: unit tests on generated signals (e.g. denser clicks → higher energy; four-on-the-floor vs broken-beat clicks give clearly different groove vectors); library-percentile normalization recomputed after imports.
 
