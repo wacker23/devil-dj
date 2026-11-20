@@ -68,8 +68,9 @@ struct AnalysisResult
 using Analyzer = std::function<void(const AnalysisInput& input, AnalysisResult& result)>;
 
 // The version this build's analyzers write to tracks.analysis_version. 1 = P2-12 (duration, sample rate);
-// 2 = P2-13 beat tracker v1 (BPM, beatgrid); 3 = P2-15 key detection (key, confidence).
-constexpr int kAnalysisVersion = 3;
+// 2 = P2-13 beat tracker v1 (BPM, beatgrid); 3 = P2-15 key detection (key, confidence); 4 = beat tracker v2
+// (variable-tempo grids, steady grids refitted).
+constexpr int kAnalysisVersion = 4;
 
 // The analysis service (P2-12): a queue of track ids and a pool of workers (cores - 1, at most 4) at the
 // lowest thread priority, so playing decks never wait for it. Per track: read its path from the library,
