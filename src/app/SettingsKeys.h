@@ -13,8 +13,12 @@ inline const SettingKey<juce::String> mainWindowState{"mainWindowState", {}};
 // Empty = use the system default device.
 inline const SettingKey<juce::String> audioDeviceState{"audioDeviceState", {}};
 
-// Output layout (engine::OutputLayout): 0 = stereo master only, 1 = 4-channel (cue on 3/4), 2 = split mono.
+// Output layout (engine::OutputLayout): 0 = stereo master only, 1 = 4-channel (cue on 3/4), 2 = split mono,
+// 3 = the cue on a separate headphone device (P2-25).
 inline const SettingKey<int> outputLayout{"outputLayout", 0};
+
+// P2-25: the headphone device for layout 3 (a device name of the main driver). Empty = the first other one.
+inline const SettingKey<juce::String> cueDevice{"cueDevice", {}};
 
 // Show the Debug menu (crash tests, log folder) in Release builds too. Debug builds always show it.
 inline const SettingKey<bool> showDebugMenu{"showDebugMenu", false};

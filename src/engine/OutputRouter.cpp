@@ -38,6 +38,8 @@ const char* outputLayoutName(OutputLayout layout) noexcept
             return "4-channel (master 1/2, cue 3/4)";
         case OutputLayout::SplitMono:
             return "Split (master left, cue right)";
+        case OutputLayout::SeparateCueDevice:
+            return "Separate headphone device (master here, cue there)";
     }
     return "?";
 }
@@ -60,6 +62,7 @@ void routeOutputs(OutputLayout layout, const float* masterL, const float* master
     switch (layout)
     {
         case OutputLayout::StereoMaster:
+        case OutputLayout::SeparateCueDevice: // the cue goes to the other device (AudioEngine::separateCueOutput)
             copy(outputs[0], masterL, numSamples);
             copy(outputs[1], masterR, numSamples);
             break;

@@ -9,8 +9,8 @@ namespace devildj::app
 namespace
 {
 constexpr float kToneGainDb = -18.0f;
-constexpr int kWidth = 680;
-constexpr int kHeight = 580;
+constexpr int kWidth = 860;
+constexpr int kHeight = 610;
 const juce::Colour kBackground(0xff16161b);
 const juce::Colour kPanel(0xff1f1f26);
 const juce::Colour kText(0xffe8e8ee);
@@ -28,6 +28,7 @@ const LayoutInfo kLayouts[engine::kNumOutputLayouts] = {
     {"Speakers only", "Master on outputs 1/2. No headphone cue."},
     {"4-channel interface", "Master on outputs 1/2 (speakers), cue on outputs 3/4 (headphones)."},
     {"Split cable", "One stereo output (laptop jack): left ear = master, right ear = cue."},
+    {"Separate headphones", "Speakers = the output device above; headphones = this device:"},
 };
 
 void styleBox(juce::ComboBox& b)
@@ -57,7 +58,10 @@ juce::String AudioSettingsComponent::layoutTooltip()
            "4-channel interface: master on outputs 1/2 (speakers), cue on outputs 3/4 (headphones). Needs an "
            "audio interface with at least 4 outputs.\n\n"
            "Split cable: for a single stereo output such as a laptop headphone jack, with a splitter cable or "
-           "headphones only. Left ear = the master (in mono), right ear = the cue (in mono).";
+           "headphones only. Left ear = the master (in mono), right ear = the cue (in mono).\n\n"
+           "Separate headphones: the master on the output device chosen above (e.g. the laptop speakers), the cue in "
+           "stereo on a second device (e.g. the headphone jack when Windows lists it as its own device, or a USB "
+           "headset).";
 }
 
 AudioSettingsComponent::AudioSettingsComponent(engine::AudioDeviceService& audioService,
@@ -102,6 +106,17 @@ AudioSettingsComponent::AudioSettingsComponent(engine::AudioDeviceService& audio
             showError(audio.setBufferSize(id));
         refreshFromDevice();
     };
+
+    styleBox(cueDeviceList);
+    cueDeviceList.setTooltip("The device your headphones are on (not the one the speakers play through)");
+    cueDeviceList.onChange = [this]
+    {
+        if (callbacks.setCueDevice && cueDeviceList.getText().isNotEmpty() && callbacks.cueDevice != nullptr &&
+            cueDeviceList.getText() != callbacks.cueDevice->status().deviceName)
+            showError(callbacks.setCueDevice(cueDeviceList.getText()));
+        refreshFromDevice();
+    };
+    addChildComponent(cueDeviceList);
 
     bufferHint.setText("Start with 256. Crackles? Pick a bigger buffer.", juce::dontSendNotification);
     bufferHint.setColour(juce::Label::textColourId, kDim);
@@ -191,6 +206,17 @@ void AudioSettingsComponent::refreshFromDevice()
     for (int i = 0; i < engine::kNumOutputLayouts; ++i)
         layoutButtons[static_cast<std::size_t>(i)].setToggleState(static_cast<int>(layout) == i,
                                                                   juce::dontSendNotification);
+    // The headphone device list (P2-25): the main driver's other outputs.
+    cueDeviceList.clear(juce::dontSendNotification);
+    if (callbacks.cueDevice != nullptr)
+    {
+        const auto names = callbacks.cueDevice->availableDevices();
+        for (int i = 0; i < names.size(); ++i)
+            cueDeviceList.addItem(names[i], i + 1);
+        cueDeviceList.setText(callbacks.cueDevice->status().deviceName, juce::dontSendNotification);
+    }
+    cueDeviceList.setVisible(callbacks.cueDevice != nullptr);
+    cueDeviceList.setEnabled(layout == engine::OutputLayout::SeparateCueDevice);
     shownSetup = typeName + "|" + status.deviceName + "|" + juce::String(status.sampleRate) + "|" +
                  juce::String(status.bufferSize);
     repaint();
@@ -254,15 +280,17 @@ void AudioSettingsComponent::resized()
     }
     area.removeFromTop(10);
 
-    section2 = area.removeFromTop(28 + 92);
+    section2 = area.removeFromTop(28 + 118);
     {
         auto s = section2.withTrimmedTop(28);
-        const int w = (s.getWidth() - 2 * 8) / 3;
+        const int w = (s.getWidth() - (engine::kNumOutputLayouts - 1) * 8) / engine::kNumOutputLayouts;
         for (int i = 0; i < engine::kNumOutputLayouts; ++i)
         {
             auto card = s.removeFromLeft(w);
             s.removeFromLeft(8);
             layoutButtons[static_cast<std::size_t>(i)].setBounds(card.removeFromTop(30));
+            if (i == static_cast<int>(engine::OutputLayout::SeparateCueDevice))
+                cueDeviceList.setBounds(card.withTrimmedTop(4 + 34).removeFromTop(24).reduced(8, 0));
         }
     }
     area.removeFromTop(10);
@@ -330,6 +358,20 @@ void AudioSettingsComponent::paint(juce::Graphics& g)
             g.drawText(text, r, juce::Justification::centred);
             inner.removeFromLeft(6);
         };
+        if (i == static_cast<int>(engine::OutputLayout::SeparateCueDevice))
+        {
+            // The headphone device's state under its list.
+            inner.removeFromTop(30); // the list
+            const auto st = callbacks.cueDevice != nullptr ? callbacks.cueDevice->status() : engine::CueDevice::Status{};
+            if (e.outputLayout != engine::OutputLayout::SeparateCueDevice)
+                chip("speakers + headphones", kDim);
+            else if (!st.open)
+                chip("no headphone device", kAccent);
+            else
+                chip(st.playing ? "cue +" + juce::String(juce::roundToInt(st.delayMs)) + " ms" : "starting",
+                     st.dropouts == 0 ? kCue : kAccent);
+            continue;
+        }
         if (i == static_cast<int>(engine::OutputLayout::StereoMaster))
             chip("1/2: master", kGood);
         else if (i == static_cast<int>(engine::OutputLayout::FourChannel))

@@ -9,6 +9,7 @@
 #include "engine/AudioDeviceService.h"
 #include "engine/AudioEngine.h"
 #include "engine/BufferRegistry.h"
+#include "engine/CueDevice.h"
 #include "engine/TrackLoader.h"
 #include "library/Database.h"
 #include "util/CrashHandler.h"
@@ -142,6 +143,12 @@ public:
             AudioSettingsComponent::Callbacks callbacks;
             callbacks.getLayout = [this] { return currentLayout(); };
             callbacks.setLayout = [this](engine::OutputLayout layout) { applyOutputLayout(layout, true); };
+            callbacks.cueDevice = cueDevice.get();
+            callbacks.setCueDevice = [this](const juce::String& name)
+            {
+                settings->set(keys::cueDevice, name);
+                return openCueDevice();
+            };
             showAudioSettingsWindow(*audio, *engine, std::move(callbacks), mainWindow.get());
         };
         menu->onToggleDebugOverlay = [this] { mainComponent->toggleDebugOverlay(); };
@@ -307,6 +314,7 @@ public:
         loader = nullptr; // cancels and waits for running loads
         if (audio != nullptr)
             audio->setAudioCallback(nullptr); // stop calling the engine before it goes away
+        cueDevice = nullptr; // its callback reads the engine's buffer
         audio = nullptr;
         engine = nullptr;
         registry = nullptr; // frees all track buffers (nothing uses them any more)
@@ -433,6 +441,7 @@ private:
         engine = std::make_unique<engine::AudioEngine>();
         audio = std::make_unique<engine::AudioDeviceService>();
         audio->initialise(settings->get(keys::audioDeviceState));
+        cueDevice = std::make_unique<engine::CueDevice>(*audio, engine->separateCueOutput());
         applyOutputLayout(currentLayout(), false);
         audio->setAudioCallback(engine.get());
         registry = std::make_unique<engine::BufferRegistry>();
@@ -443,6 +452,9 @@ private:
         {
             if (const auto state = audio->getStateXml(); state.isNotEmpty())
                 settings->set(keys::audioDeviceState, state);
+            // Another master device (or driver): the headphone device follows.
+            if (currentLayout() == engine::OutputLayout::SeparateCueDevice)
+                openCueDevice();
         };
     }
 
@@ -463,12 +475,32 @@ private:
         if (const auto error = audio->setOutputChannelCount(engine::outputChannelsFor(layout)); error.isNotEmpty())
             util::logWarning("Audio: {}", error.toStdString());
         util::logInfo("Audio: output layout {}", engine::outputLayoutName(layout));
+        if (layout == engine::OutputLayout::SeparateCueDevice)
+            openCueDevice();
+        else if (cueDevice != nullptr)
+            cueDevice->close();
+    }
+
+    // P2-25: the saved headphone device, or the first other output of the driver. Error, or empty.
+    juce::String openCueDevice()
+    {
+        if (cueDevice == nullptr)
+            return "no audio";
+        auto name = settings->get(keys::cueDevice);
+        const auto available = cueDevice->availableDevices();
+        if (!available.contains(name))
+            name = available.isEmpty() ? juce::String() : available[0];
+        const auto error = cueDevice->open(name);
+        if (error.isNotEmpty())
+            util::logWarning("Audio: headphone device: {}", error.toStdString());
+        return error;
     }
 
     juce::LookAndFeel_V4 lookAndFeel;
     std::unique_ptr<Settings> settings;
     std::unique_ptr<engine::AudioEngine> engine;
     std::unique_ptr<engine::AudioDeviceService> audio;
+    std::unique_ptr<engine::CueDevice> cueDevice; // P2-25; before the engine goes (it reads the engine's buffer)
     std::unique_ptr<engine::BufferRegistry> registry;
     std::unique_ptr<engine::TrackLoader> loader;
     std::unique_ptr<library::Database> database;

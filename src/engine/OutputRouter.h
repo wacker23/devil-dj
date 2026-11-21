@@ -11,9 +11,10 @@ enum class OutputLayout : std::uint8_t
     StereoMaster = 0, // outputs 1/2 = master L/R; no cue
     FourChannel = 1,  // outputs 1/2 = master L/R, outputs 3/4 = cue L/R (needs >= 4 device outputs)
     SplitMono = 2,    // one stereo output: left = master summed to mono, right = cue summed to mono
+    SeparateCueDevice = 3, // P2-25: master on this device's 1/2; the cue on another device (engine/CueDevice)
 };
 
-constexpr int kNumOutputLayouts = 3;
+constexpr int kNumOutputLayouts = 4;
 
 // Number of device output channels a layout needs.
 constexpr int outputChannelsFor(OutputLayout layout) noexcept
@@ -32,6 +33,8 @@ constexpr bool cueIsRouted(OutputLayout layout, int numOutputs) noexcept
             return numOutputs >= 4;
         case OutputLayout::SplitMono:
             return numOutputs >= 2;
+        case OutputLayout::SeparateCueDevice:
+            return true; // on the other device (whether it is open, CueDevice says)
     }
     return false;
 }

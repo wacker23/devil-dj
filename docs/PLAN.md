@@ -307,6 +307,10 @@ Goal: a real music library with BPM, beatgrid and key analysis, plus Sync, Quant
   New analyzers: `EnergyAnalyzer` (energy per 16-bar window + intro/outro/whole, library-percentile normalized), `SoundVector` (32-d MFCC/spectral fingerprint), `GrooveProfile` (48-d accent profile). Stored in `track_features` (schema v2 migration).
   Done when: unit tests on generated signals (e.g. denser clicks → higher energy; four-on-the-floor vs broken-beat clicks give clearly different groove vectors); library-percentile normalization recomputed after imports.
 
+- [x] **P2-25 Separate headphone device** (added by the owner, 2026-11-21)
+  Master on one output device (e.g. the laptop speakers), the headphone cue on a second device (the headphone jack when Windows lists it separately, a USB headset): a second audio callback reads the cue from a lock-free buffer that follows both clocks (adaptive resampling, at most ±0.5 %). Audio settings: a fourth headphone layout with the device list.
+  Done when: unit tests with drifting clocks (no dropouts, the pitch kept); two fake sound cards play master and cue at once; the owner hears master in the speakers and cue in the headphones.
+
 **Phase 2 gate:** import the owner's music folder, analyze it in the background, sync two tracks and beat-jump/quantize cleanly.
 
 ---

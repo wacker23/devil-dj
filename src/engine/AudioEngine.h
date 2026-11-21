@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dsp/DriftBuffer.h"
 #include "dsp/LevelMeter.h"
 #include "dsp/Limiter.h"
 #include "engine/ChannelStrip.h"
@@ -59,6 +60,10 @@ public:
 
     // The master clock (P2-18), for code on the audio thread (sync, quantize, the scheduler).
     const MasterClock& masterClock() const noexcept { return clock; }
+
+    // P2-25: with the SeparateCueDevice layout the cue bus goes here, for the headphone device's callback
+    // (engine/CueDevice) to read on its own thread.
+    dsp::DriftBuffer& separateCueOutput() noexcept { return cueOutput; }
 
     // ---- not on the audio thread: allocates the bus buffers ----
 
@@ -201,6 +206,7 @@ private:
     dsp::LinearRamp cueMixCue, cueMixMaster, headphoneGain;
     dsp::Limiter cueLimiter; // the headphones can't clip either, and stay aligned with the limited master
     dsp::LevelMeter cueMeter;
+    dsp::DriftBuffer cueOutput; // P2-25
     MasterClock clock;
     bool quantizeOn = false;
     double quantizeBeats = 1.0;

@@ -34,6 +34,7 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
     for (auto& slot : decks)
         slot.deck.prepare(sampleRate, capacity);
     clock.prepare(sampleRate);
+    cueOutput.setWriter(sampleRate, capacity);
     for (auto& strip : strips)
         strip.prepare(sampleRate, capacity);
     for (std::size_t i = 0; i < mixer.size(); ++i)
@@ -141,6 +142,8 @@ void AudioEngine::renderChunk(float* const* outputs, int numChannels, int offset
     renderTestTone(numSamples); // straight onto its bus (not into the headphone mix)
     finishBuses(numSamples);    // limiters and meters
     swapPendingTracks();        // decks that finished fading out can take their new track now
+    if (layout == OutputLayout::SeparateCueDevice) // P2-25: the headphones are on another device
+        cueOutput.write(cueBus.getReadPointer(0), cueBus.getReadPointer(1), numSamples);
 
     // Point at this chunk of each device output channel.
     float* chunk[kMaxOutputChannels] = {};

@@ -23,6 +23,7 @@ target_sources(DevilDJTests PRIVATE
     app/SoakTestTests.cpp
     beatmaker/BeatMakerSmokeTests.cpp
     codebeat/CodeBeatSmokeTests.cpp
+    dsp/DriftBufferTests.cpp
     dsp/DspSmokeTests.cpp
     dsp/ResamplerTests.cpp
     dsp/SincResamplerTests.cpp
@@ -34,6 +35,7 @@ target_sources(DevilDJTests PRIVATE
     engine/DeckKeyLockTests.cpp
     engine/DeckScratchTests.cpp
     engine/ChannelStripTests.cpp
+    engine/CueDeviceTests.cpp
     engine/MetronomeTests.cpp
     engine/MixerMasterTests.cpp
     engine/HeadphoneCueTests.cpp
