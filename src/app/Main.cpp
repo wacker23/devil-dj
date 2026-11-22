@@ -151,6 +151,15 @@ public:
             menu->setTransition(beats, style);
             mainComponent->setTransitionSettings(beats, style);
         }
+        mainComponent->setAutomixSettings({settings->get(keys::automixRepeat), settings->get(keys::automixRandom),
+                                           settings->get(keys::automixBeats), std::clamp(settings->get(keys::automixStyle), 0, 2)});
+        mainComponent->onAutomixSettingsChanged = [this](const ui::AutomixPanel::Settings& s)
+        {
+            settings->set(keys::automixRepeat, s.repeat);
+            settings->set(keys::automixRandom, s.random);
+            settings->set(keys::automixBeats, s.beats);
+            settings->set(keys::automixStyle, s.style);
+        };
         menu->onTransition = [this](int beats, int style)
         {
             settings->set(keys::transitionBeats, beats);

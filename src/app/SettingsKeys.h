@@ -69,6 +69,11 @@ inline const SettingKey<bool> recordAutoSplit{"recordAutoSplit", false};
 // P3-17: the auto-transition's length in beats (8 / 16 / 32) and style (0 blend, 1 filter sweep, 2 echo out).
 inline const SettingKey<int> transitionBeats{"transitionBeats", 16};
 inline const SettingKey<int> transitionStyle{"transitionStyle", 0};
+// P3-18: Automix's options.
+inline const SettingKey<bool> automixRepeat{"automixRepeat", false};
+inline const SettingKey<bool> automixRandom{"automixRandom", false};
+inline const SettingKey<int> automixBeats{"automixBeats", 16};
+inline const SettingKey<int> automixStyle{"automixStyle", 0};
 inline const SettingKey<double> brakeSeconds{"brakeSeconds", 1.0};
 inline const SettingKey<double> spinBackSeconds{"spinBackSeconds", 1.0};
 

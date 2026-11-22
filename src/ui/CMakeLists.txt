@@ -6,6 +6,8 @@ target_sources(devildj_ui INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/Actions.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Actions.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/DebugOverlay.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/AutomixPanel.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/AutomixPanel.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/DeckView.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/FxPanel.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/FxPanel.h"

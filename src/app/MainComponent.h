@@ -20,7 +20,9 @@
 #include "ui/RecorderPanel.h"
 #include "ui/SamplerPanel.h"
 #include "engine/Recorder.h"
+#include "Automix.h"
 #include "PadFxPresets.h"
+#include "ui/AutomixPanel.h"
 #include "SequenceStore.h"
 #include "ui/LibraryBrowser.h"
 #include "ui/MemoryCuePanel.h"
@@ -137,8 +139,18 @@ private:
     ui::FxPanel fxPanel{engine}; // P3-09, between the waveforms and the browser
     // The sampler (P3-13) in the same place: FX / SAMPLER tabs.
     ui::SamplerPanel samplerPanel{engine};
-    juce::TextButton fxTab{"FX"}, samplerTab{"SAMPLER"}, recordTab{"REC"};
-    int shownPanel = 0; // 0 FX, 1 sampler, 2 recorder
+    juce::TextButton fxTab{"FX"}, samplerTab{"SAMPLER"}, recordTab{"REC"}, automixTab{"AUTOMIX"};
+    int shownPanel = 0; // 0 FX, 1 sampler, 2 recorder, 3 automix
+    // Automix (P3-18): the controller, its panel (the fourth tab), its queue of files, F10.
+    app::Automix automix;
+    ui::AutomixPanel automixPanel;
+    std::vector<juce::File> automixFiles;
+    std::vector<juce::String> automixNames;
+    std::array<int, 2> automixLoading{-1, -1}; // the queue item being loaded on each deck
+    std::unique_ptr<juce::TimedCallback> automixTimer;
+    void toggleAutomix();
+    void queueAutomix();
+    void applyAutomixSettings();
     void showPanel(int which);
     // Mix recording (P3-16): the recorder, its panel (the third tab), F9; a tracklist and a cue sheet per file.
     engine::Recorder recorder{engine.recordTap()};
@@ -305,6 +317,13 @@ public:
     // P3-16: the recorder's options (from the settings), and their changes.
     void setRecorderSettings(const ui::RecorderPanel::Settings& s) { recorderPanel.setSettings(s); }
     std::function<void(const ui::RecorderPanel::Settings&)> onRecorderSettingsChanged;
+    // P3-18: Automix's options (from the settings), and their changes.
+    void setAutomixSettings(const ui::AutomixPanel::Settings& s)
+    {
+        automixPanel.setSettings(s);
+        applyAutomixSettings();
+    }
+    std::function<void(const ui::AutomixPanel::Settings&)> onAutomixSettingsChanged;
     std::function<void(const juce::String& json)> onPadFxPresetsChanged;
     void setIsolator(bool on);
     void setCrossfaderCurve(int curve);

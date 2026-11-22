@@ -397,7 +397,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
   Action "T": plans a transition from the playing deck to the other: chooses length (8/16/32 beats; setting), starts at the next phrase boundary (or next 16-beat boundary before phrase detection exists), syncs, then runs automation lanes on the audio thread: crossfader ramp, low-EQ swap at the midpoint, optional filter sweep or echo out. Cancel with T again.
   Done when: engine test renders a transition offline and checks crossfader/EQ positions per beat; manual listening test.
 
-- [ ] **P3-18 Automix**
+- [x] **P3-18 Automix**
   Automix panel: queue a playlist; repeat/random; transition style; uses mix-out = last 32 beats before track end (or outro phrase later) and mix-in = first downbeat; runs auto-transitions continuously.
   Done when: 10-track automix plays unattended, all transitions on beat.
 

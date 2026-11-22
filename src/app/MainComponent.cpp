@@ -262,7 +262,41 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     {
         juce::MessageManager::callAsync([safe, f] { if (safe != nullptr) safe->writeRecordingSheets(f); });
     };
-    for (auto* tab : {&fxTab, &samplerTab, &recordTab})
+    // Automix (P3-18).
+    addChildComponent(automixPanel);
+    automixPanel.onToggle = [this] { toggleAutomix(); };
+    automixPanel.onQueue = [this] { queueAutomix(); };
+    automixPanel.onSettingsChanged = [this](const ui::AutomixPanel::Settings& s)
+    {
+        applyAutomixSettings();
+        if (onAutomixSettingsChanged)
+            onAutomixSettingsChanged(s);
+    };
+    automix.load = [this](engine::DeckId deck, int index)
+    {
+        if (deck > 1 || index < 0 || index >= static_cast<int>(automixFiles.size()))
+            return;
+        automixLoading[deck] = index;
+        loadFile(deck, automixFiles[static_cast<std::size_t>(index)]);
+    };
+    automix.gridOf = [this](engine::DeckId deck) { return deckGrid(deck); };
+    automixTimer = std::make_unique<juce::TimedCallback>(
+        [this]
+        {
+            for (const auto& c : automix.tick(engine.readState()))
+                engine.send(c);
+            const int now = automix.running() ? automix.playingIndex() : -1;
+            const int next = automix.running() ? automix.nextIndex() : -1;
+            const auto name = [this](int i)
+            { return i >= 0 && i < static_cast<int>(automixNames.size()) ? automixNames[static_cast<std::size_t>(i)] : juce::String("-"); };
+            juce::String text = automixFiles.empty() ? juce::String("Queue some tracks: select them in the browser, then QUEUE.")
+                                                     : juce::String(automixFiles.size()) + " tracks queued";
+            if (automix.running())
+                text << "   Now: " << name(now) << "   Next: " << name(next);
+            automixPanel.setStatus(automix.running(), text);
+        });
+    automixTimer->startTimerHz(10);
+    for (auto* tab : {&fxTab, &samplerTab, &recordTab, &automixTab})
     {
         tab->setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1f1f26));
         tab->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff3a3a46));
@@ -272,6 +306,7 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     fxTab.onClick = [this] { showPanel(0); };
     samplerTab.onClick = [this] { showPanel(1); };
     recordTab.onClick = [this] { showPanel(2); };
+    automixTab.onClick = [this] { showPanel(3); };
     showPanel(0);
     samplerPanel.onLoadFile = [this](int slot) { chooseSampleFile(slot); };
     samplerPanel.onLoadSelected = [this](int slot)
@@ -418,6 +453,11 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     loader.callbacks.onLoaded = [this](engine::DeckId deck, const engine::TrackBuffer& t)
     {
         loadGridFor(deck, t.file, t.sampleRate); // P2-14
+        if (deck < 2 && automixLoading[deck] >= 0) // Automix's next track is on the deck (with its grid)
+        {
+            automix.loaded(deck, automixLoading[deck]);
+            automixLoading[deck] = -1;
+        }
         if (deck < deckStatus.size())
             deckStatus[deck] =
                 t.file.getFileName() + " (" + juce::String(t.durationSeconds(), 1) + " s, " + t.formatName + ")";
@@ -654,6 +694,7 @@ void MainComponent::registerActions()
                 });
     onPress(ui::globalCommand(GA::DebugOverlay), [this] { toggleDebugOverlay(); });
     onPress(ui::globalCommand(GA::Record), [this] { toggleRecording(); }); // F9 (P3-16)
+    onPress(ui::globalCommand(GA::Automix), [this] { toggleAutomix(); });   // F10 (P3-18)
     onPress(ui::globalCommand(GA::AutoTransition), [this] { autoTransition(); }); // T (P3-17)
     onPress(ui::globalCommand(GA::AutoTransitionCancel), [this] { engine.send(engine::CancelTransition{}); });
     // FX (P3-09): F5 / F7 the unit on / off, F6 / F8 slot 1's next effect, Shift+F5 / Shift+F7 the target.
@@ -1408,10 +1449,11 @@ void MainComponent::showSequenceLooks()
 
 void MainComponent::showPanel(int which)
 {
-    shownPanel = std::clamp(which, 0, 2);
+    shownPanel = std::clamp(which, 0, 3);
     fxTab.setToggleState(shownPanel == 0, juce::dontSendNotification);
     samplerTab.setToggleState(shownPanel == 1, juce::dontSendNotification);
     recordTab.setToggleState(shownPanel == 2, juce::dontSendNotification);
+    automixTab.setToggleState(shownPanel == 3, juce::dontSendNotification);
     resized();
 }
 
@@ -1434,6 +1476,58 @@ void MainComponent::autoTransition()
                                               : engine::TransitionStyle::Blend;
     engine.send(engine::StartTransition{static_cast<engine::DeckId>(from), static_cast<engine::DeckId>(1 - from),
                                         static_cast<float>(transitionBeats), style, -1.0});
+}
+
+void MainComponent::applyAutomixSettings()
+{
+    const auto& p = automixPanel.settings();
+    app::Automix::Settings s;
+    s.repeat = p.repeat;
+    s.random = p.random;
+    s.transitionBeats = p.beats;
+    s.style = p.style == 1 ? engine::TransitionStyle::FilterSweep
+              : p.style == 2 ? engine::TransitionStyle::EchoOut
+                             : engine::TransitionStyle::Blend;
+    automix.setSettings(s);
+}
+
+void MainComponent::queueAutomix()
+{
+    automixFiles.clear();
+    automixNames.clear();
+    if (gridReader != nullptr)
+    {
+        library::TrackRepository tracks(*gridReader);
+        for (const auto id : libraryBrowser->selectedTrackIds())
+            if (const auto t = tracks.get(id))
+            {
+                automixFiles.push_back(juce::File(juce::String::fromUTF8(t->path.c_str())));
+                automixNames.push_back(t->title.empty() ? automixFiles.back().getFileNameWithoutExtension()
+                                                        : juce::String::fromUTF8(t->title.c_str()));
+            }
+    }
+    applyAutomixSettings();
+    automix.setQueue(static_cast<int>(automixFiles.size()));
+    showPanel(3);
+}
+
+void MainComponent::toggleAutomix()
+{
+    if (automix.running())
+    {
+        automix.stop(); // what plays plays on; no more transitions
+        engine.send(engine::CancelTransition{});
+        return;
+    }
+    if (automixFiles.empty())
+        queueAutomix();
+    if (automixFiles.empty())
+        return;
+    // Both decks free for it: they stop, the crossfader goes to deck A's side.
+    engine.send(engine::Pause{0});
+    engine.send(engine::Pause{1});
+    automix.start();
+    showPanel(3);
 }
 
 juce::File MainComponent::recordingsFolder()
@@ -2257,6 +2351,8 @@ void MainComponent::resized()
     fxPanel.setVisible(!browserBig && shownPanel == 0);
     samplerPanel.setVisible(!browserBig && shownPanel == 1);
     recorderPanel.setVisible(!browserBig && shownPanel == 2);
+    automixPanel.setVisible(!browserBig && shownPanel == 3);
+    automixTab.setVisible(!browserBig);
     fxTab.setVisible(!browserBig);
     samplerTab.setVisible(!browserBig);
     recordTab.setVisible(!browserBig);
@@ -2274,14 +2370,17 @@ void MainComponent::resized()
     {
         auto panel = area.removeFromBottom(ui::FxPanel::kPreferredHeight); // P3-09 / P3-13
         auto tabs = panel.removeFromLeft(64);
-        const int th = tabs.getHeight() / 3;
+        const int th = tabs.getHeight() / 4;
         fxTab.setBounds(tabs.removeFromTop(th).reduced(0, 1));
         samplerTab.setBounds(tabs.removeFromTop(th).reduced(0, 1));
-        recordTab.setBounds(tabs.reduced(0, 1));
+        recordTab.setBounds(tabs.removeFromTop(th).reduced(0, 1));
+        automixTab.setBounds(tabs.reduced(0, 1));
         panel.removeFromLeft(4);
         fxPanel.setBounds(panel);
         samplerPanel.setBounds(panel);
         recorderPanel.setBounds(panel);
+        automixPanel.setBounds(panel);
+        automixPanel.setVisible(!browserBig && shownPanel == 3);
         fxPanel.setVisible(!browserBig && shownPanel == 0);
         samplerPanel.setVisible(!browserBig && shownPanel == 1);
         recorderPanel.setVisible(!browserBig && shownPanel == 2);

@@ -66,7 +66,7 @@ Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / r
 | FX2 on/off / next effect | F7 / F8 |
 | Cycle FX1 / FX2 target (deck A, deck B, master; the sampler, Beat Maker and code deck join when they exist) | Shift+F5 / Shift+F7 |
 | Record start/stop (the REC tab beside FX / SAMPLER) | F9 |
-| Automix on/off | F10 |
+| Automix on/off (the AUTOMIX tab: QUEUE the browser's selected tracks first) | F10 |
 | Full screen | F11 |
 | Debug overlay (CPU, xruns, late events) | F12 |
 | Panic: release all loops, rolls, holds and FX | Esc |

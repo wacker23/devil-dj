@@ -6,6 +6,8 @@ target_sources(devildj_app_core INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/AudioSettingsWindow.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/AudioSettingsWindow.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/LibraryBackup.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Automix.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Automix.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/HotCueStore.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/PadFxPresets.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/RecordingSheets.cpp"
