@@ -79,6 +79,7 @@ target_sources(DevilDJTests PRIVATE
     library/RepositoryTests.cpp
     library/TagReaderTests.cpp
     matcher/MatcherSmokeTests.cpp
+    matcher/MatcherTests.cpp
     ui/UiSmokeTests.cpp
     ui/DeckViewTests.cpp
     ui/PadModeTests.cpp
@@ -121,6 +122,7 @@ target_link_libraries(DevilDJTests PRIVATE
     devildj::ui
     devildj::analysis
     devildj::library
+    devildj::matcher
     TagLib::tag
     juce::juce_core
     juce::juce_data_structures

@@ -21,6 +21,7 @@
 #include "ui/SamplerPanel.h"
 #include "engine/Recorder.h"
 #include "Automix.h"
+#include "matcher/MatcherService.h"
 #include "PadFxPresets.h"
 #include "ui/AutomixPanel.h"
 #include "SequenceStore.h"
@@ -149,6 +150,18 @@ private:
     std::array<int, 2> automixLoading{-1, -1}; // the queue item being loaded on each deck
     std::unique_ptr<juce::TimedCallback> automixTimer;
     void toggleAutomix();
+    // Track Matcher (P3-19): the service on its worker thread, asked again on its triggers (MATCHER_SPEC §2); the
+    // latest suggestions for the idle deck - N loads the highlighted one, Shift+N moves the highlight (the Next Track
+    // panel showing them is P3-24).
+    std::unique_ptr<matcher::MatcherService> matcherService;
+    matcher::MatcherTriggers matcherTriggers;
+    std::vector<matcher::Suggestion> suggestions;
+    std::int64_t suggestionsFor = 0;
+    int suggestionHighlight = 0;
+    int analysisRuns = 0;
+    std::unique_ptr<juce::TimedCallback> matcherTimer;
+    void askMatcher();
+    void loadSuggestion();
     void queueAutomix();
     void applyAutomixSettings();
     void showPanel(int which);

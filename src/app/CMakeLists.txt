@@ -30,7 +30,7 @@ target_sources(devildj_app_core INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/SettingsKeys.h")
 target_include_directories(devildj_app_core INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(devildj_app_core INTERFACE juce::juce_data_structures juce::juce_gui_basics devildj::engine
-                                                devildj::library)
+                                                devildj::library devildj::matcher)
 
 juce_add_gui_app(DevilDJ
     PRODUCT_NAME "Devil-DJ"

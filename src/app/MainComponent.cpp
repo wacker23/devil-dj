@@ -296,6 +296,27 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
             automixPanel.setStatus(automix.running(), text);
         });
     automixTimer->startTimerHz(10);
+    // Track Matcher (P3-19).
+    if (libraryDb != nullptr)
+    {
+        matcherService = std::make_unique<matcher::MatcherService>(*libraryDb);
+        matcherService->onResult = [safe = juce::Component::SafePointer<MainComponent>(this)](const matcher::MatchResult& r)
+        {
+            juce::MessageManager::callAsync(
+                [safe, r]
+                {
+                    if (safe == nullptr)
+                        return;
+                    safe->suggestions = r.suggestions;
+                    safe->suggestionsFor = r.contextTrackId;
+                    safe->suggestionHighlight = 0;
+                    util::logInfo("Matcher: {} suggestions from {} candidates in {:.1f} ms", r.suggestions.size(),
+                                  r.candidates, r.milliseconds);
+                });
+        };
+        matcherTimer = std::make_unique<juce::TimedCallback>([this] { askMatcher(); });
+        matcherTimer->startTimerHz(4);
+    }
     for (auto* tab : {&fxTab, &samplerTab, &recordTab, &automixTab})
     {
         tab->setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1f1f26));
@@ -695,6 +716,13 @@ void MainComponent::registerActions()
     onPress(ui::globalCommand(GA::DebugOverlay), [this] { toggleDebugOverlay(); });
     onPress(ui::globalCommand(GA::Record), [this] { toggleRecording(); }); // F9 (P3-16)
     onPress(ui::globalCommand(GA::Automix), [this] { toggleAutomix(); });   // F10 (P3-18)
+    onPress(ui::globalCommand(GA::LoadSuggestion), [this] { loadSuggestion(); }); // N (P3-19)
+    onPress(ui::globalCommand(GA::NextSuggestion),
+            [this]
+            {
+                if (!suggestions.empty())
+                    suggestionHighlight = (suggestionHighlight + 1) % static_cast<int>(suggestions.size());
+            });
     onPress(ui::globalCommand(GA::AutoTransition), [this] { autoTransition(); }); // T (P3-17)
     onPress(ui::globalCommand(GA::AutoTransitionCancel), [this] { engine.send(engine::CancelTransition{}); });
     // FX (P3-09): F5 / F7 the unit on / off, F6 / F8 slot 1's next effect, Shift+F5 / Shift+F7 the target.
@@ -1478,6 +1506,47 @@ void MainComponent::autoTransition()
                                         static_cast<float>(transitionBeats), style, -1.0});
 }
 
+void MainComponent::askMatcher()
+{
+    if (matcherService == nullptr)
+        return;
+    const auto& s = engine.readState();
+    int master = s.masterSource >= 0 && s.masterSource < 2 ? s.masterSource : -1;
+    if (master < 0)
+        master = s.decks[0].playing ? 0 : s.decks[1].playing ? 1 : -1;
+    matcher::MatcherTriggers::Snapshot snap;
+    snap.masterDeck = master;
+    snap.trackIds = {deckTrackId(0), deckTrackId(1)};
+    if (master >= 0 && s.decks[static_cast<std::size_t>(master)].lengthSamples > 0)
+        snap.masterFraction = s.decks[static_cast<std::size_t>(master)].positionSamples /
+                              s.decks[static_cast<std::size_t>(master)].lengthSamples;
+    snap.analysisVersion = analysisRuns;
+    if (!matcherTriggers.update(snap) || deckTrackId(static_cast<engine::DeckId>(master)) == 0)
+        return;
+    const auto& a = s.decks[static_cast<std::size_t>(master)];
+    matcher::MatchRequest r;
+    r.contextTrackId = deckTrackId(static_cast<engine::DeckId>(master));
+    r.aBpmNow = a.gridBpm > 0.0 ? a.gridBpm * (1.0 + a.tempoPercent / 100.0) : 0.0;
+    r.keyLockOff = !s.decks[static_cast<std::size_t>(1 - master)].keyLock;
+    r.nowUnixSeconds = juce::Time::currentTimeMillis() / 1000;
+    r.playedThisSession = {deckTrackId(0), deckTrackId(1)};
+    matcherService->request(std::move(r));
+}
+
+void MainComponent::loadSuggestion()
+{
+    const auto& s = engine.readState();
+    if (suggestions.empty() || gridReader == nullptr)
+        return;
+    // The idle deck: the one not playing (if both are, nothing).
+    const int idle = !s.decks[0].playing ? 0 : !s.decks[1].playing ? 1 : -1;
+    if (idle < 0)
+        return;
+    const auto& pick = suggestions[static_cast<std::size_t>(std::clamp(suggestionHighlight, 0, static_cast<int>(suggestions.size()) - 1))];
+    if (const auto t = library::TrackRepository(*gridReader).get(pick.trackId))
+        loadFile(static_cast<engine::DeckId>(idle), juce::File(juce::String::fromUTF8(t->path.c_str())));
+}
+
 void MainComponent::applyAutomixSettings()
 {
     const auto& p = automixPanel.settings();
@@ -1928,7 +1997,10 @@ void MainComponent::showAnalysisProgress()
     if (s.idle())
     {
         if (analysisTotal > 0)
+        {
             util::logInfo("Analysis: done ({} analyzed, {} failed)", s.done, s.failed);
+            ++analysisRuns; // the matcher looks again (P3-19)
+        }
         analysisTotal = 0;
         libraryBrowser->setActivity({});
         return;

@@ -54,7 +54,7 @@ Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / r
 | Crossfader snap fully left / right | Shift+G / Shift+H |
 | Crossfader to centre | B |
 | Auto-transition from playing deck to the other (T again also cancels; length and style: Mixer > Auto-transition) / cancel | T / Shift+T |
-| Load highlighted Next Track suggestion into the idle deck | N |
+| Load highlighted Next Track suggestion into the idle deck (P3-19: the top one until the panel shows them, P3-24) | N |
 | Move highlight down the suggestion list | Shift+N |
 | Preview highlighted suggestion in headphones (hold) | Ctrl+N |
 | Cycle intent: hold → up → down → switch | Ctrl+Shift+N |

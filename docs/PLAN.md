@@ -401,7 +401,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
   Automix panel: queue a playlist; repeat/random; transition style; uses mix-out = last 32 beats before track end (or outro phrase later) and mix-in = first downbeat; runs auto-transitions continuously.
   Done when: 10-track automix plays unattended, all transitions on beat.
 
-- [ ] **P3-19 Track Matcher v1 core** (spec: `docs/MATCHER_SPEC.md` §2–5)
+- [x] **P3-19 Track Matcher v1 core** (spec: `docs/MATCHER_SPEC.md` §2–5)
   `src/matcher/`: Camelot conversions + relationship table, hard filters as one SQL prefilter, features f_tempo, f_key, f_energy, f_sound (v1 vector), f_groove, f_tags, f_hist, f_rating, f_fresh with reason strings, weighted score with renormalization and penalties, presets JSON, MMR diversity re-rank, wildcard slot. `MatcherService` on a worker thread with the triggers in §2.
   Done when: all MATCHER_SPEC §13 tests for layer 1 pass; 5,000 candidates scored in ≤ 30 ms (Release).
 

@@ -1,0 +1,119 @@
+#include "matcher/MatcherService.h"
+
+#include "library/Database.h"
+
+#include <chrono>
+
+namespace devildj::matcher
+{
+
+MatcherService::MatcherService(library::Database& db, std::vector<Preset> p)
+    : database(db)
+    , presets(std::move(p))
+    , worker([this] { loop(); })
+{
+}
+
+MatcherService::~MatcherService()
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        quit = true;
+    }
+    wake.notify_all();
+    worker.join();
+}
+
+void MatcherService::request(MatchRequest r)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        pending = std::move(r); // replaces one still waiting
+    }
+    wake.notify_all();
+}
+
+void MatcherService::loop()
+{
+    std::unique_ptr<library::Connection> reader;
+    for (;;)
+    {
+        MatchRequest r;
+        {
+            std::unique_lock<std::mutex> lock(mutex);
+            wake.wait(lock, [this] { return quit || pending.has_value(); });
+            if (quit)
+                return;
+            r = std::move(*pending);
+            pending.reset();
+        }
+        if (reader == nullptr)
+            if (auto opened = database.openReader())
+                reader = std::move(opened).value();
+        if (reader == nullptr)
+            continue;
+        const auto result = run(*reader, r, presets);
+        if (onResult)
+            onResult(result);
+    }
+}
+
+MatchResult MatcherService::run(library::Connection& db, const MatchRequest& r, const std::vector<Preset>& presets)
+{
+    const auto t0 = std::chrono::steady_clock::now();
+    MatchResult result;
+    result.contextTrackId = r.contextTrackId;
+    const auto a = loadTrack(db, r.contextTrackId, r.nowUnixSeconds);
+    if (!a)
+        return result;
+    Context c;
+    c.a = *a;
+    c.aBpmNow = r.aBpmNow > 0.0 ? r.aBpmNow : a->bpm;
+    c.keyLockOff = r.keyLockOff;
+    c.allowKeyShift = r.allowKeyShift;
+    c.intent = r.intent;
+    c.maxStretch = r.maxStretch;
+    c.keyPolicy = r.keyPolicy;
+    c.playedPolicy = r.playedPolicy;
+    c.playedThisSession = r.playedThisSession;
+    c.lastArtists = r.lastArtists;
+    c.minRating = r.minRating;
+    loadHistory(db, c, r.nowUnixSeconds);
+    const auto candidates = loadCandidates(db, r.scope, r.contextTrackId, r.minRating, r.nowUnixSeconds);
+    result.candidates = static_cast<int>(candidates.size());
+    const auto [c10, c90] = soundPercentiles(candidates);
+    c.c10 = c10;
+    c.c90 = c90;
+    const auto* preset = findPreset(presets, r.preset);
+    const Weights weights = preset != nullptr ? preset->weights : defaultPresets().front().weights;
+    for (const auto& s : rank(c, candidates, weights, 10))
+    {
+        Suggestion out;
+        out.trackId = s.track->id;
+        out.score = s.score;
+        out.wildcard = s.wildcard;
+        out.reasons = s.reasons;
+        for (std::size_t i = 0; i < out.features.size(); ++i)
+            out.features[i] = s.features[i].value;
+        result.suggestions.push_back(std::move(out));
+    }
+    result.milliseconds = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    return result;
+}
+
+bool MatcherTriggers::update(const Snapshot& now)
+{
+    if (!last)
+    {
+        last = now;
+        return now.masterDeck >= 0;
+    }
+    const auto& was = *last;
+    const bool fire = now.masterDeck != was.masterDeck || now.trackIds != was.trackIds ||
+                      (was.masterFraction < 0.75 && now.masterFraction >= 0.75) ||
+                      now.settingsVersion != was.settingsVersion || now.analysisVersion != was.analysisVersion;
+    last = now;
+    return fire && now.masterDeck >= 0;
+}
+
+} // namespace devildj::matcher
