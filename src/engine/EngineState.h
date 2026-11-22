@@ -88,6 +88,7 @@ struct FxUnitState
 {
     FxTarget target = FxTarget::Master;
     std::uint8_t mode = 0; // 0 multi, 1 single
+    float manualBpm = 0.0f; // a tapped tempo (P3-09); 0 = the master clock's
     std::array<FxSlotState, kFxSlots> slots{};
 };
 

@@ -166,6 +166,7 @@ private:
     std::array<dsp::fx::FxUnit, kFxUnits> fxUnits;
     std::array<FxTarget, kFxUnits> fxTargets{FxTarget::Master, FxTarget::Master};
     std::array<std::array<float, kFxSlots>, kFxUnits> fxBeats{};
+    std::array<double, kFxUnits> fxManualBpm{}, fxManualBeat{}; // P3-09 tap tempo
     util::SpscQueue<dsp::fx::Effect*, 64> releasedEffects; // audio thread -> message thread
     static constexpr int kMaxPendingEffects = 16;
     std::array<dsp::fx::Effect*, kMaxPendingEffects> pendingEffects{};

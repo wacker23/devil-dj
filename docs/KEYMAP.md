@@ -60,9 +60,9 @@ Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / r
 | Quantize on/off (resolution: Options > Quantize) | ` (backquote) |
 | Pad mode: Hot Cue / Beat Loop / Beat Jump / Slicer (both decks; F1 again in Hot Cue: pads A-H / I-P; each deck's mode button picks its own) | F1 / F2 / F3 / F4 |
 | Pad mode: Key Shift / Keyboard / Pad FX / Sampler | Shift+F1 / Shift+F2 / Shift+F3 / Shift+F4 |
-| FX1 on/off / next effect | F5 / F6 |
+| FX1 on/off (the slots with an effect) / slot 1's next effect | F5 / F6 |
 | FX2 on/off / next effect | F7 / F8 |
-| Cycle FX1 / FX2 target (deck A, B, sampler, beats, code, master) | Shift+F5 / Shift+F7 |
+| Cycle FX1 / FX2 target (deck A, deck B, master; the sampler, Beat Maker and code deck join when they exist) | Shift+F5 / Shift+F7 |
 | Record start/stop | F9 |
 | Automix on/off | F10 |
 | Full screen | F11 |

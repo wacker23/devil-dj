@@ -372,6 +372,7 @@ enum class FxOp : std::uint8_t
     Param,  // slot parameter `index` (0..1)
     Target, // unit target (value = FxTarget)
     Mode,   // unit mode (0 multi, 1 single)
+    TapBpm, // unit tempo: a tapped BPM (P3-09), or 0 = the master clock's
 };
 
 struct FxCommand

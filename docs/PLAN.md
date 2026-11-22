@@ -357,7 +357,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
   `dsp/fx/Effect` interface (prepare, reset, process stereo block, beat-synced parameters from MasterClock, dry/wet, on/off with tail handling). Two FX units, each with up to 3 slots (multi mode) or 1 effect with full parameters (single mode); target selectable per unit: deck 1–4, sampler, code deck, master.
   Done when: unit tests for tail handling and bypass (bit-exact when off).
 
-- [ ] **P3-09 Beat FX set** (all our own DSP)
+- [x] **P3-09 Beat FX set** (all our own DSP)
   Echo (tempo-synced delay, feedback, LP in feedback), Ping-Pong delay, Reverb (FDN 8-line), Flanger, Phaser, Filter LFO, Roll (quantized buffer repeat), Trans (beat-synced gate), Spiral (feedback delay with shortening time), Bit Crush, Noise sweep, Pitch (via stretcher transpose), Vinyl brake (release FX), Helix/Freeze (hold buffer). Beat lengths 1/16…16 beats; manual tap BPM option.
   Done when: each effect has a parameter-sweep test (no NaN/Inf, no output > +6 dBFS on 0 dBFS input) and a manual listening note.
 

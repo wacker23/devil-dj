@@ -1023,6 +1023,9 @@ void AudioEngine::apply(const FxCommand& command) noexcept
         case FxOp::Mode:
             unit.setMode(command.value != 0.0f ? dsp::fx::FxUnit::Mode::Single : dsp::fx::FxUnit::Mode::Multi);
             break;
+        case FxOp::TapBpm:
+            fxManualBpm[command.unit] = command.value > 0.0f ? std::clamp<double>(command.value, 20.0, 300.0) : 0.0;
+            break;
     }
 }
 
@@ -1032,9 +1035,24 @@ void AudioEngine::processFx(FxTarget target, float* left, float* right, int numS
     beat.bpm = clock.bpm();
     beat.beatAtBlockStart = clock.beatAtBlockStart();
     beat.beatsPerSample = clock.beatsPerSample();
-    for (int u = 0; u < kFxUnits; ++u)
-        if (fxTargets[static_cast<std::size_t>(u)] == target)
-            fxUnits[static_cast<std::size_t>(u)].process(left, right, numSamples, beat);
+    for (std::size_t u = 0; u < static_cast<std::size_t>(kFxUnits); ++u)
+    {
+        if (fxTargets[u] != target)
+            continue;
+        if (fxManualBpm[u] > 0.0) // a tapped tempo: its own beat count
+        {
+            dsp::fx::BeatContext manual;
+            manual.bpm = fxManualBpm[u];
+            manual.beatsPerSample = fxManualBpm[u] / (60.0 * sampleRate);
+            manual.beatAtBlockStart = fxManualBeat[u];
+            fxManualBeat[u] += numSamples * manual.beatsPerSample;
+            fxUnits[u].process(left, right, numSamples, manual);
+        }
+        else
+        {
+            fxUnits[u].process(left, right, numSamples, beat);
+        }
+    }
 }
 
 void AudioEngine::apply(const JumpBy& command) noexcept
@@ -1518,6 +1536,7 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
             auto& fs = current.fx[static_cast<std::size_t>(u)];
             fs.target = fxTargets[static_cast<std::size_t>(u)];
             fs.mode = unit.mode() == dsp::fx::FxUnit::Mode::Single ? 1 : 0;
+            fs.manualBpm = static_cast<float>(fxManualBpm[static_cast<std::size_t>(u)]);
             for (int s = 0; s < kFxSlots; ++s)
             {
                 const auto& slot = unit.slot(s);

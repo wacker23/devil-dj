@@ -16,6 +16,7 @@
 #include "ui/Actions.h"
 #include "ui/DebugOverlay.h"
 #include "ui/DeckView.h"
+#include "ui/FxPanel.h"
 #include "ui/LibraryBrowser.h"
 #include "ui/MemoryCuePanel.h"
 #include "ui/KeyboardController.h"
@@ -128,6 +129,9 @@ private:
     ui::DeckView deckA{engine, 0, [this](engine::BufferId id) { return registry.get(id); }};
     ui::DeckView deckB{engine, 1, [this](engine::BufferId id) { return registry.get(id); }};
     ui::MixerView mixer{engine}; // P1-15, between the decks
+    ui::FxPanel fxPanel{engine}; // P3-09, between the waveforms and the browser
+    void chooseEffect(int unit, int slot, int type); // creates and installs it (-1: empty the slot)
+    std::unique_ptr<juce::TimedCallback> fxTimer;     // hands replaced effects back for deleting
     // Zoomed waveforms (P1-14): drag = scratch / scrub, wheel = nudge, Ctrl+wheel = zoom.
     double outputLatencySeconds() const;
     ui::WaveformView waveA{engine, 0, [this](engine::BufferId id) { return registry.get(id); },

@@ -243,6 +243,26 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     addAndMakeVisible(mixer);
     addAndMakeVisible(waveA);
     addAndMakeVisible(waveB);
+    // FX (P3-09): FX1 on deck A, FX2 on deck B, three effects each to start.
+    addAndMakeVisible(fxPanel);
+    fxPanel.onEffect = [this](int unit, int slot, int type) { chooseEffect(unit, slot, type); };
+    {
+        using T = dsp::fx::EffectType;
+        const std::array<std::array<T, 3>, 2> start{{{T::Echo, T::Reverb, T::Flanger}, {T::Roll, T::Trans, T::FilterLfo}}};
+        for (int u = 0; u < 2; ++u)
+        {
+            engine.send(engine::FxCommand{static_cast<std::uint8_t>(u), engine::FxOp::Target, 0, 0,
+                                          static_cast<float>(u == 0 ? engine::FxTarget::Deck0 : engine::FxTarget::Deck1)});
+            for (int s = 0; s < 3; ++s)
+            {
+                engine.send(engine::FxCommand{static_cast<std::uint8_t>(u), engine::FxOp::Wet,
+                                              static_cast<std::uint8_t>(s), 0, 0.5f});
+                chooseEffect(u, s, static_cast<int>(start[static_cast<std::size_t>(u)][static_cast<std::size_t>(s)]));
+            }
+        }
+    }
+    fxTimer = std::make_unique<juce::TimedCallback>([this] { engine.collectEffects(); });
+    fxTimer->startTimerHz(2);
     addAndMakeVisible(*libraryBrowser);
     libraryBrowser->onLoad = [this](int deck, const juce::File& file)
     { loadFile(static_cast<engine::DeckId>(deck), file); };
@@ -546,6 +566,13 @@ void MainComponent::registerActions()
                     sendCrossfader();
                 });
     onPress(ui::globalCommand(GA::DebugOverlay), [this] { toggleDebugOverlay(); });
+    // FX (P3-09): F5 / F7 the unit on / off, F6 / F8 slot 1's next effect, Shift+F5 / Shift+F7 the target.
+    onPress(ui::globalCommand(GA::Fx1Toggle), [this] { fxPanel.toggleUnit(0); });
+    onPress(ui::globalCommand(GA::Fx2Toggle), [this] { fxPanel.toggleUnit(1); });
+    onPress(ui::globalCommand(GA::Fx1Next), [this] { fxPanel.nextEffect(0); });
+    onPress(ui::globalCommand(GA::Fx2Next), [this] { fxPanel.nextEffect(1); });
+    onPress(ui::globalCommand(GA::Fx1Target), [this] { fxPanel.cycleTarget(0); });
+    onPress(ui::globalCommand(GA::Fx2Target), [this] { fxPanel.cycleTarget(1); });
     // Pad modes (P3-06), both decks: F1-F4, Shift+F1-F4. F1 in hot cue mode switches A-H / I-P.
     onPress(ui::globalCommand(GA::PadModeHotCue),
             [this]
@@ -1084,6 +1111,17 @@ void MainComponent::setHotCuePage(int page)
     hotCuePage = std::clamp(page, 0, 1);
     deckA.setHotCuePage(hotCuePage);
     deckB.setHotCuePage(hotCuePage);
+}
+
+void MainComponent::chooseEffect(int unit, int slot, int type)
+{
+    auto effect = type >= 0 ? dsp::fx::makeEffect(static_cast<dsp::fx::EffectType>(type)) : nullptr;
+    if (!engine.installEffect(unit, slot, std::move(effect)))
+        return;
+    fxPanel.setEffectType(unit, slot, type);
+    // The unit's beat length for the new effect too.
+    engine.send(engine::FxCommand{static_cast<std::uint8_t>(unit), engine::FxOp::Beats, static_cast<std::uint8_t>(slot),
+                                  0, engine.readState().fx[static_cast<std::size_t>(unit)].slots[static_cast<std::size_t>(slot)].beats});
 }
 
 void MainComponent::setPadMode(engine::DeckId deck, ui::PadMode mode)
@@ -1649,7 +1687,8 @@ void MainComponent::resized()
     // (laptops at 125-150 % scaling) the mixer gives up height first, down to its minimum, so the waveforms keep
     // at least ~80 px each and the browser ~4 rows.
     auto area = getLocalBounds().reduced(12).withTrimmedBottom(18); // bottom: the build-info line
-    const int topHeight = std::clamp(area.getHeight() - 2 * 80 - 6 - 130 - 14, ui::MixerView::kMinimumHeight,
+    const int topHeight = std::clamp(area.getHeight() - 2 * 80 - 6 - 130 - 14 - ui::FxPanel::kPreferredHeight - 6,
+                                     ui::MixerView::kMinimumHeight,
                                      ui::MixerView::kPreferredHeight);
     auto top = area.removeFromTop(topHeight);
     area.removeFromTop(8);
@@ -1663,6 +1702,7 @@ void MainComponent::resized()
 
     waveA.setVisible(!browserBig);
     waveB.setVisible(!browserBig);
+    fxPanel.setVisible(!browserBig);
     if (browserBig) // Ctrl+B: the browser gets the waveforms' room too
     {
         libraryBrowser->setBounds(area);
@@ -1671,8 +1711,10 @@ void MainComponent::resized()
                           ui::DebugOverlay::kWidth, ui::DebugOverlay::kHeight);
         return;
     }
-    const int browserHeight = std::max(160, area.getHeight() - 2 * 100 - 12); // waveforms up to ~100 px each
+    const int browserHeight = std::max(160, area.getHeight() - 2 * 100 - 12 - ui::FxPanel::kPreferredHeight - 6);
     libraryBrowser->setBounds(area.removeFromBottom(browserHeight));
+    area.removeFromBottom(6);
+    fxPanel.setBounds(area.removeFromBottom(ui::FxPanel::kPreferredHeight)); // P3-09
     area.removeFromBottom(6);
     const int waveHeight = (area.getHeight() - 6) / 2;
     waveA.setBounds(area.removeFromTop(waveHeight));
