@@ -393,7 +393,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
   Record master (or a chosen bus) to WAV 24-bit or FLAC via a writer thread; level meter; auto start on signal / auto split after 20 s of silence; writes a tracklist `.txt` and `.cue` with timestamps from history.
   Done when: 60-min recording has no gaps (compare sample count with wall clock); file opens in other software.
 
-- [ ] **P3-17 Auto-transition**
+- [x] **P3-17 Auto-transition**
   Action "T": plans a transition from the playing deck to the other: chooses length (8/16/32 beats; setting), starts at the next phrase boundary (or next 16-beat boundary before phrase detection exists), syncs, then runs automation lanes on the audio thread: crossfader ramp, low-EQ swap at the midpoint, optional filter sweep or echo out. Cancel with T again.
   Done when: engine test renders a transition offline and checks crossfader/EQ positions per beat; manual listening test.
 

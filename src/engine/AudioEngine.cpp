@@ -207,6 +207,7 @@ void AudioEngine::advanceClock(int numSamples) noexcept
         }
     }
     clock.beginBlock(numSamples, inputs);
+    runTransition(); // P3-17: before the decks follow the clock and render
     followMaster();
 }
 
@@ -1229,6 +1230,117 @@ void AudioEngine::renderSequencerClick(int numSamples) noexcept
         seqClickActive = false;
 }
 
+// ---- auto-transition (P3-17) ----
+
+void AudioEngine::setLowEq(DeckId deck, bool kill) noexcept
+{
+    apply(SetParam{channelParam(deck, ChannelParam::EqLow), kill ? -1000.0f : 0.0f});
+}
+
+void AudioEngine::apply(const StartTransition& command) noexcept
+{
+    if (transition.active)
+        endTransition(false);
+    if (command.from >= 2 || command.to >= 2 || command.from == command.to)
+        return;
+    auto& to = decks[command.to];
+    if (decks[command.from].deck.track() == nullptr || to.deck.track() == nullptr || to.hasPending)
+        return;
+    auto& t = transition;
+    t = {};
+    t.active = true;
+    t.from = command.from;
+    t.to = command.to;
+    t.beats = command.beats >= 24.0f ? 32.0 : command.beats >= 12.0f ? 16.0 : 8.0;
+    t.style = command.style;
+    t.startBeat = command.startBeat >= 0.0 ? command.startBeat
+                                           : std::ceil(clock.beatAtBlockEnd() / 16.0 - 1e-9) * 16.0;
+    // Which way the crossfader goes: from the outgoing deck's side to the incoming one's; without two sides, the
+    // outgoing deck's fader comes down instead.
+    const auto sideFrom = mixer[command.from].assign, sideTo = mixer[command.to].assign;
+    t.faderMode = sideFrom == CrossfaderAssign::Thru || sideTo == CrossfaderAssign::Thru || sideFrom == sideTo;
+    t.crossfaderTo = sideTo == CrossfaderAssign::A ? 0.0 : 1.0;
+    t.fromFader = strips[command.from].fader();
+    // The incoming deck: synced, its lows out, started on the start beat (from where it is cued).
+    to.synced = true;
+    setLowEq(command.to, true);
+    if (!to.deck.isPlaying())
+        queue(to, {DeckSlot::QueuedAction::Kind::Play, t.startBeat, 0.0});
+}
+
+void AudioEngine::apply(const CancelTransition&) noexcept
+{
+    if (transition.active)
+        endTransition(false);
+}
+
+void AudioEngine::endTransition(bool finished) noexcept
+{
+    auto& t = transition;
+    if (!t.active)
+        return;
+    t.active = false;
+    auto& to = decks[t.to];
+    if (!t.started) // cancelled before it began: the incoming deck doesn't start
+    {
+        int kept = 0;
+        for (int k = 0; k < to.queuedCount; ++k)
+            if (to.queued[static_cast<std::size_t>(k)].kind != DeckSlot::QueuedAction::Kind::Play)
+                to.queued[static_cast<std::size_t>(kept++)] = to.queued[static_cast<std::size_t>(k)];
+        to.queuedCount = kept;
+    }
+    if (finished && t.style != TransitionStyle::EchoOut)
+        decks[t.from].deck.pause(); // the echo out ends it itself
+    if (!finished && releaseFx[t.from].stage() == dsp::fx::ReleaseFx::Stage::Held)
+        releaseFx[t.from].reset();
+    setLowEq(t.from, false);
+    setLowEq(t.to, false);
+    if (t.style == TransitionStyle::FilterSweep)
+        apply(SetParam{channelParam(t.from, ChannelParam::Filter), 0.5f});
+    if (t.faderMode && finished)
+        apply(SetParam{channelParam(t.from, ChannelParam::Fader), static_cast<float>(t.fromFader)});
+}
+
+void AudioEngine::runTransition() noexcept
+{
+    auto& t = transition;
+    if (!t.active)
+        return;
+    const double p = (clock.beatAtBlockStart() - t.startBeat) / t.beats;
+    if (p < 0.0)
+        return; // waiting for its beat
+    if (!t.started)
+    {
+        t.started = true;
+        t.crossfaderFrom = crossfaderPosition;
+    }
+    const double x = std::min(1.0, p);
+    if (t.faderMode)
+        apply(SetParam{channelParam(t.from, ChannelParam::Fader), static_cast<float>(t.fromFader * (1.0 - x))});
+    else
+        apply(SetParam{ParamId::Crossfader, static_cast<float>(t.crossfaderFrom + (t.crossfaderTo - t.crossfaderFrom) * x)});
+    if (!t.swapped && x >= 0.5) // the low EQ swap at the middle
+    {
+        t.swapped = true;
+        setLowEq(t.from, true);
+        setLowEq(t.to, false);
+    }
+    if (t.style == TransitionStyle::FilterSweep) // the outgoing deck into a high-pass
+        apply(SetParam{channelParam(t.from, ChannelParam::Filter), static_cast<float>(0.5 + 0.45 * x)});
+    if (t.style == TransitionStyle::EchoOut)
+    {
+        if (!t.echoPressed && x >= 0.75)
+        {
+            t.echoPressed = true;
+            releaseFx[t.from].press(dsp::fx::ReleaseFx::Kind::EchoOut, 1.0);
+        }
+        if (x >= 1.0)
+            releaseFx[t.from].release(); // cut: it ends on the echo, then the deck pauses (P3-11)
+    }
+    if (p >= 1.0)
+        endTransition(true);
+}
+
 void AudioEngine::apply(const SamplerSet& command) noexcept
 {
     switch (command.op)
@@ -1983,6 +2095,16 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         st.bpm = static_cast<float>(slot.bpm);
         st.progress = static_cast<float>(sampler.progress(s));
     }
+    current.transition.active = transition.active; // P3-17
+    current.transition.waiting = transition.active && !transition.started;
+    current.transition.from = transition.from;
+    current.transition.to = transition.to;
+    current.transition.style = static_cast<std::uint8_t>(transition.style);
+    current.transition.beats = static_cast<float>(transition.beats);
+    current.transition.startBeat = transition.startBeat;
+    current.transition.progress = transition.active && transition.started
+                                      ? static_cast<float>(std::clamp((clock.beatAtBlockEnd() - transition.startBeat) / transition.beats, 0.0, 1.0))
+                                      : 0.0f;
     current.sequencer.playing = sequencer.playing(); // P3-15
     current.sequencer.recording = sequencer.recording();
     current.sequencer.metronome = sequencerMetronome;

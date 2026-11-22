@@ -146,6 +146,17 @@ public:
         mainComponent->onColorFxChanged = [this](int type) { settings->set(keys::colorFx, type); };
         mainComponent->setPadFxPresets(settings->get(keys::padFxPresets)); // P3-12
         mainComponent->setSequences(settings->get(keys::sequences));       // P3-15
+        {
+            const int beats = settings->get(keys::transitionBeats), style = std::clamp(settings->get(keys::transitionStyle), 0, 2);
+            menu->setTransition(beats, style);
+            mainComponent->setTransitionSettings(beats, style);
+        }
+        menu->onTransition = [this](int beats, int style)
+        {
+            settings->set(keys::transitionBeats, beats);
+            settings->set(keys::transitionStyle, style);
+            mainComponent->setTransitionSettings(beats, style);
+        };
         mainComponent->setRecorderSettings({settings->get(keys::recordFlac), settings->get(keys::recordHeadphones),
                                             settings->get(keys::recordAutoStart), settings->get(keys::recordAutoSplit)});
         mainComponent->onRecorderSettingsChanged = [this](const ui::RecorderPanel::Settings& s)

@@ -654,6 +654,8 @@ void MainComponent::registerActions()
                 });
     onPress(ui::globalCommand(GA::DebugOverlay), [this] { toggleDebugOverlay(); });
     onPress(ui::globalCommand(GA::Record), [this] { toggleRecording(); }); // F9 (P3-16)
+    onPress(ui::globalCommand(GA::AutoTransition), [this] { autoTransition(); }); // T (P3-17)
+    onPress(ui::globalCommand(GA::AutoTransitionCancel), [this] { engine.send(engine::CancelTransition{}); });
     // FX (P3-09): F5 / F7 the unit on / off, F6 / F8 slot 1's next effect, Shift+F5 / Shift+F7 the target.
     onPress(ui::globalCommand(GA::Fx1Toggle), [this] { fxPanel.toggleUnit(0); });
     onPress(ui::globalCommand(GA::Fx2Toggle), [this] { fxPanel.toggleUnit(1); });
@@ -1411,6 +1413,27 @@ void MainComponent::showPanel(int which)
     samplerTab.setToggleState(shownPanel == 1, juce::dontSendNotification);
     recordTab.setToggleState(shownPanel == 2, juce::dontSendNotification);
     resized();
+}
+
+void MainComponent::autoTransition()
+{
+    const auto& s = engine.readState();
+    if (s.transition.active)
+    {
+        engine.send(engine::CancelTransition{});
+        return;
+    }
+    // From the deck leading the clock (else the one playing) to the other.
+    int from = s.masterSource >= 0 && s.masterSource < 2 ? s.masterSource : -1;
+    if (from < 0)
+        from = s.decks[0].playing ? 0 : s.decks[1].playing ? 1 : -1;
+    if (from < 0 || !s.decks[1 - from].loaded)
+        return;
+    const auto style = transitionStyle == 1   ? engine::TransitionStyle::FilterSweep
+                       : transitionStyle == 2 ? engine::TransitionStyle::EchoOut
+                                              : engine::TransitionStyle::Blend;
+    engine.send(engine::StartTransition{static_cast<engine::DeckId>(from), static_cast<engine::DeckId>(1 - from),
+                                        static_cast<float>(transitionBeats), style, -1.0});
 }
 
 juce::File MainComponent::recordingsFolder()

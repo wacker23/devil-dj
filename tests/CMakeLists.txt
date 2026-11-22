@@ -55,6 +55,7 @@ target_sources(DevilDJTests PRIVATE
     engine/SamplerTests.cpp
     engine/SequencerTests.cpp
     engine/RecorderTests.cpp
+    engine/TransitionTests.cpp
     engine/KeyShiftTests.cpp
     engine/MasterClockTests.cpp
     engine/DeckTempoTests.cpp

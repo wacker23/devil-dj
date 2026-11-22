@@ -160,6 +160,11 @@ private:
     void apply(const SamplerSet& command) noexcept;
     void apply(const SequencerCommand& command) noexcept;
     void apply(const SequencerEvents& command) noexcept;
+    void apply(const StartTransition& command) noexcept;
+    void apply(const CancelTransition& command) noexcept;
+    void runTransition() noexcept; // the automation lanes, once a block (after the clock)
+    void endTransition(bool finished) noexcept;
+    void setLowEq(DeckId deck, bool kill) noexcept;
     void renderSequencerClick(int numSamples) noexcept;
     // One channel from its source's audio in l / r to the master and cue buses (strip, color FX, pad FX, release FX,
     // the FX units on it, meter, cue, fader, crossfader).
@@ -278,6 +283,16 @@ private:
     // The sequencer (P3-15) and its metronome click (into the headphones while recording).
     Sequencer sequencer;
     RecordTap tap; // P3-16
+    // The auto-transition (P3-17).
+    struct Transition
+    {
+        bool active = false, started = false, swapped = false, echoPressed = false, faderMode = false;
+        DeckId from = 0, to = 1;
+        double beats = 16.0, startBeat = 0.0;
+        TransitionStyle style = TransitionStyle::Blend;
+        double crossfaderFrom = 0.0, crossfaderTo = 1.0, fromFader = 1.0;
+    };
+    Transition transition;
     bool tapPrepared = false;
     bool sequencerMetronome = false;
     int seqClickPosition = 0, seqClickLength = 0, seqClickDelay = -1;

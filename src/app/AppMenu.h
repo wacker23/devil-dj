@@ -63,6 +63,13 @@ public:
         spinBackSeconds = spin;
     }
     static constexpr double kStopTimes[] = {0.25, 0.5, 1.0, 2.0, 4.0};
+    // P3-17: the auto-transition's length (8 / 16 / 32 beats) and style (0 blend, 1 filter sweep, 2 echo out).
+    std::function<void(int beats, int style)> onTransition;
+    void setTransition(int beats, int style) noexcept
+    {
+        transitionBeats = beats;
+        transitionStyle = style;
+    }
     std::function<void(bool on)> onKeySyncCompatible; // P2-22
     void setKeySyncCompatible(bool on) noexcept { keySyncCompatible = on; }
     std::function<void()> onToggleDebugOverlay;
@@ -146,6 +153,10 @@ private:
         BrakeTimeLast = BrakeTimeFirst + 4,
         SpinTimeFirst,
         SpinTimeLast = SpinTimeFirst + 4,
+        TransitionBeatsFirst, // 8, 16, 32
+        TransitionBeatsLast = TransitionBeatsFirst + 2,
+        TransitionStyleFirst, // blend, filter sweep, echo out
+        TransitionStyleLast = TransitionStyleFirst + 2,
     };
 
     juce::File logDirectory;
@@ -160,6 +171,7 @@ private:
     bool keySyncCompatible = false;
     int pauseStyle = 0;
     double brakeSeconds = 1.0, spinBackSeconds = 1.0;
+    int transitionBeats = 16, transitionStyle = 0;
     bool isolator = false;
     int crossfaderCurve = 0;
     int assign[2] = {0, 2};

@@ -91,6 +91,17 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
         for (int i = 0; i < 5; ++i)
             mix.addItem(CueMixFirst + i, mixNames[i], true, cueMixIndex == i);
         menu.addSubMenu("Headphone mix (cue / master)", mix);
+        // P3-17: the auto-transition (T).
+        juce::PopupMenu transition;
+        const int lengths[] = {8, 16, 32};
+        for (int i = 0; i < 3; ++i)
+            transition.addItem(TransitionBeatsFirst + i, juce::String(lengths[i]) + " beats", true,
+                               transitionBeats == lengths[i]);
+        transition.addSeparator();
+        const char* styles[] = {"Blend (crossfader, low EQ swap)", "With a filter sweep out", "Ending on an echo out"};
+        for (int i = 0; i < 3; ++i)
+            transition.addItem(TransitionStyleFirst + i, styles[i], true, transitionStyle == i);
+        menu.addSubMenu("Auto-transition (T)", transition);
         juce::PopupMenu level;
         for (int i = 0; i < 4; ++i)
             level.addItem(LevelFirst + i, i == 0 ? juce::String("0 dB") : juce::String(-6 * i) + " dB", true,
@@ -166,6 +177,16 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
             quantizeEighths = kQuantizeEighths[menuItemID - QuantizeFirst];
         if (onQuantize)
             onQuantize(quantize, quantizeEighths);
+        return;
+    }
+    if (menuItemID >= TransitionBeatsFirst && menuItemID <= TransitionStyleLast)
+    {
+        if (menuItemID <= TransitionBeatsLast)
+            transitionBeats = menuItemID == TransitionBeatsFirst ? 8 : menuItemID == TransitionBeatsFirst + 1 ? 16 : 32;
+        else
+            transitionStyle = menuItemID - TransitionStyleFirst;
+        if (onTransition)
+            onTransition(transitionBeats, transitionStyle);
         return;
     }
     if (menuItemID >= PauseStyleFirst && menuItemID <= SpinTimeLast)

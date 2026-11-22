@@ -479,6 +479,30 @@ struct SequencerEvents
     std::array<SequenceEvent, kChunk> events{};
 };
 
+// Auto-transition (P3-17): from the playing deck to another over `beats` (8 / 16 / 32), starting on the master
+// clock's beat `startBeat` (< 0: its next 16-beat boundary): the incoming deck starts there (synced, from where it
+// is cued), the crossfader moves across (or, without A / B sides, the outgoing fader comes down), the low EQs swap
+// at the middle; the style adds a high-pass sweep on the outgoing deck or ends it on an echo. The outgoing deck stops
+// at the end. CancelTransition stops it where it is (EQs back to normal).
+enum class TransitionStyle : std::uint8_t
+{
+    Blend,
+    FilterSweep,
+    EchoOut,
+};
+
+struct StartTransition
+{
+    DeckId from = 0, to = 1;
+    float beats = 16.0f;
+    TransitionStyle style = TransitionStyle::Blend;
+    double startBeat = -1.0;
+};
+
+struct CancelTransition
+{
+};
+
 // Beat sync (P2-19): the deck follows the master clock's tempo (half / double aware) and phase.
 struct SetSync
 {
@@ -492,7 +516,8 @@ using EngineCommand =
                  SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge, SetParam, SetBeatgrid, SetMetronome,
                  SetClockSource, SetInternalTempo, SetSync, SetQuantize, BeatJump, JumpBy, SetHotCues, HotCue,
                  SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle, SetSlicer, SlicerPad, FxSetEffect, FxCommand, SetColorFx, ReleaseFxCommand, PadFxSetEffect, PadFxCommand,
-                 SamplerLoad, SamplerPad, SamplerSet, SequencerCommand, SequencerEvents>;
+                 SamplerLoad, SamplerPad, SamplerSet, SequencerCommand, SequencerEvents,
+                 StartTransition, CancelTransition>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

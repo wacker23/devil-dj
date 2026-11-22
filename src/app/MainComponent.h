@@ -144,6 +144,18 @@ private:
     engine::Recorder recorder{engine.recordTap()};
     ui::RecorderPanel recorderPanel{engine, recorder};
     void toggleRecording();
+    // Auto-transition (P3-17): T plans one from the playing deck to the other (T again / Shift+T cancels).
+    void autoTransition();
+    int transitionBeats = 16, transitionStyle = 0;
+
+public:
+    void setTransitionSettings(int beats, int style)
+    {
+        transitionBeats = beats;
+        transitionStyle = style;
+    }
+
+private:
     void writeRecordingSheets(const engine::Recorder::FileInfo& file);
     static juce::File recordingsFolder();
     void loadSample(int slot, const juce::File& file, double bpm, const juce::String& name);

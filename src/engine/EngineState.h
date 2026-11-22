@@ -112,6 +112,18 @@ struct SamplerSlotState
     float progress = -1.0f; // 0..1 while playing, -1 = not
 };
 
+// An auto-transition (P3-17).
+struct TransitionState
+{
+    bool active = false;
+    bool waiting = false; // planned, its start beat not reached yet
+    std::uint8_t from = 0, to = 1;
+    std::uint8_t style = 0;
+    float beats = 16.0f;
+    double startBeat = 0.0;
+    float progress = 0.0f; // 0..1
+};
+
 // The sequencer (P3-15).
 struct SequencerState
 {
@@ -201,6 +213,7 @@ struct EngineState
     // Sampler (P3-13): its 4 banks x 8 slots (its mixer channel is channels[kSamplerChannel]).
     std::array<SamplerSlotState, 32> sampler{};
     SequencerState sequencer; // P3-15
+    TransitionState transition; // P3-17
 };
 
 static_assert(std::is_trivially_copyable_v<EngineState>, "EngineState must stay trivially copyable");
