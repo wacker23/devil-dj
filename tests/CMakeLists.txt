@@ -29,6 +29,7 @@ target_sources(DevilDJTests PRIVATE
     dsp/FxTests.cpp
     dsp/BeatFxTests.cpp
     dsp/ColorFxTests.cpp
+    dsp/ReleaseFxTests.cpp
     dsp/DspSmokeTests.cpp
     dsp/ResamplerTests.cpp
     dsp/SincResamplerTests.cpp

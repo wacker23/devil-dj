@@ -32,6 +32,7 @@ Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / r
 | Filter reset | Shift+5 | Shift+- |
 | Jump to track start | Shift+Z | Shift+M |
 | Reverse (hold; the REV button on the deck toggles it) | Shift+X | Shift+, |
+| Release FX (P3-11): echo out / brake / spin back / filter sweep, held (no default keys - keymap.json: `deckA.ReleaseEchoOut`, `ReleaseBrake`, `ReleaseSpinBack`, `ReleaseSweep`; the FX panel has buttons) | - | - |
 | Vinyl brake / spin-back (stop a playing deck; times and whether PAUSE brakes: Decks > Pause / stop) | Ctrl+Shift+D / Ctrl+Shift+F | Ctrl+Shift+L / Ctrl+Shift+; |
 | Key Sync (transpose to the master's key; turns key lock on) | Shift+C | Shift+. |
 | Key shift -1 / +1 semitone (turns key lock on) | Ctrl+1 / Ctrl+2 | Ctrl+7 / Ctrl+8 |

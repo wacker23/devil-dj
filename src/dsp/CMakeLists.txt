@@ -6,6 +6,7 @@ add_library(devildj_dsp STATIC
     fx/ColorFx.cpp
     fx/FxSlot.cpp
     fx/FxUnit.cpp
+    fx/ReleaseFx.cpp
     Resampler.cpp
     SignalsmithStretcher.cpp
     SincResampler.cpp)
@@ -22,6 +23,7 @@ target_sources(devildj_dsp PUBLIC
         fx/Effect.h
         fx/FxSlot.h
         fx/FxUnit.h
+        fx/ReleaseFx.h
         LevelMeter.h
         Limiter.h
         LinearRamp.h

@@ -505,6 +505,23 @@ void MainComponent::registerActions()
                            });
         onPress(cmd(DA::Brake), [this, d] { engine.send(engine::Stop{d, engine::StopKind::Brake}); });
         onPress(cmd(DA::SpinBack), [this, d] { engine.send(engine::Stop{d, engine::StopKind::SpinBack}); });
+        // Release FX (P3-11), held: no default keys (bind them in keymap.json); the FX panel has buttons.
+        for (const auto [action, kind] : {std::pair{DA::ReleaseEchoOut, 0}, std::pair{DA::ReleaseBrake, 1},
+                                          std::pair{DA::ReleaseSpinBack, 2}, std::pair{DA::ReleaseSweep, 3}})
+            actions.setHandler(cmd(action),
+                               [this, d, kind = kind](Phase p)
+                               {
+                                   if (p == Phase::Repeat)
+                                       return;
+                                   // The beat length of the FX unit on this deck (else 1 beat).
+                                   float beats = 1.0f;
+                                   const auto& s = engine.readState();
+                                   for (const auto& u : s.fx)
+                                       if (static_cast<int>(u.target) == static_cast<int>(d))
+                                           beats = u.slots[0].beats;
+                                   engine.send(engine::ReleaseFxCommand{d, static_cast<std::uint8_t>(kind),
+                                                                        p == Phase::Press, beats});
+                               });
         onPress(cmd(DA::LoopHalve), [this, d] { engine.send(engine::Loop{d, engine::LoopOp::Halve}); });
         onPress(cmd(DA::LoopDouble), [this, d] { engine.send(engine::Loop{d, engine::LoopOp::Double}); });
         onPress(cmd(DA::Reloop),

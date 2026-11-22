@@ -42,6 +42,8 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
     cueOutput.setWriter(sampleRate, capacity);
     for (auto& c : colorFx) // P3-10
         c.prepare(sampleRate, capacity);
+    for (auto& rf : releaseFx) // P3-11
+        rf.prepare(sampleRate, capacity);
     for (auto& strip : strips)
         strip.prepare(sampleRate, capacity);
     for (std::size_t i = 0; i < mixer.size(); ++i)
@@ -483,6 +485,8 @@ void AudioEngine::apply(const Play& command) noexcept
 
 void AudioEngine::startPlaying(DeckSlot& slot) noexcept
 {
+    if (auto& rf = releaseFx[static_cast<std::size_t>(&slot - decks.data())]; rf.finished())
+        rf.reset(); // a track that ended on a release FX plays normally again (P3-11)
     slot.deck.play();
     slot.snapPending = slot.synced; // into phase as it starts (P2-19)
 }
@@ -1040,6 +1044,17 @@ dsp::fx::BeatContext AudioEngine::beatContext() const noexcept
     return beat;
 }
 
+void AudioEngine::apply(const ReleaseFxCommand& command) noexcept
+{
+    if (command.deck >= kMaxChannels)
+        return;
+    auto& rf = releaseFx[command.deck];
+    if (command.press && command.kind < dsp::fx::ReleaseFx::kKindCount)
+        rf.press(static_cast<dsp::fx::ReleaseFx::Kind>(command.kind), command.beats > 0.0f ? command.beats : 1.0);
+    else if (!command.press)
+        rf.release();
+}
+
 void AudioEngine::apply(const SetColorFx& command) noexcept
 {
     if (command.type >= dsp::fx::ColorFx::kTypeCount)
@@ -1468,6 +1483,14 @@ void AudioEngine::renderDecks(int numSamples) noexcept
         renderMetronome(i, before, slot.deck.position(), numSamples);
         strips[i].processPreFader(l, r, numSamples);
         colorFx[i].process(l, r, numSamples, beatContext());      // Color FX (P3-10)
+        releaseFx[i].process(l, r, numSamples, beatContext());    // Release FX (P3-11)
+        if (releaseFx[i].finished()) // ended on the effect: the deck pauses; back to normal once it is silent
+        {
+            if (slot.deck.isPlaying())
+                slot.deck.pause();
+            else if (slot.deck.isSilent())
+                releaseFx[i].reset();
+        }
         processFx(static_cast<FxTarget>(i), l, r, numSamples); // FX units on this channel (P3-08)
         m.meter.process(l, r, numSamples);
         if (m.cueSend.isRamping() || m.cueSend.value() > 0.0)
@@ -1634,6 +1657,13 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         s.stopping = static_cast<std::uint8_t>(d.stopKindNow());
         s.slicerOn = slot.slicerOn && !slot.grid.empty() && slot.slicerStartBeat > -1e8;
         s.slicerBeats = slot.slicerBeats;
+        {
+            const auto stage = releaseFx[i].stage();
+            s.releaseFx = stage == dsp::fx::ReleaseFx::Stage::Idle   ? 0
+                          : stage == dsp::fx::ReleaseFx::Stage::Held ? 1
+                                                                     : 2;
+            s.releaseFxKind = static_cast<std::uint8_t>(releaseFx[i].kind());
+        }
         s.slicerRolling = slot.slicerRolling;
         s.slicerCurrent = -1;
         if (s.slicerOn)

@@ -5,6 +5,7 @@
 #include "dsp/Limiter.h"
 #include "dsp/fx/ColorFx.h"
 #include "dsp/fx/FxUnit.h"
+#include "dsp/fx/ReleaseFx.h"
 #include "engine/ChannelStrip.h"
 #include "engine/Crossfader.h"
 #include "engine/MasterClock.h"
@@ -143,6 +144,7 @@ private:
     void apply(const FxSetEffect& command) noexcept;
     void apply(const FxCommand& command) noexcept;
     void apply(const SetColorFx& command) noexcept;
+    void apply(const ReleaseFxCommand& command) noexcept;
     dsp::fx::BeatContext beatContext() const noexcept;
     void processFx(FxTarget target, float* left, float* right, int numSamples) noexcept;
     void retireEffect(dsp::fx::Effect* effect) noexcept;
@@ -250,6 +252,8 @@ private:
     std::array<dsp::fx::ColorFx, kMaxChannels> colorFx;
     std::array<double, kMaxChannels> filterKnob{0.5, 0.5, 0.5, 0.5};
     dsp::fx::ColorFx::Type colorType = dsp::fx::ColorFx::Type::Filter;
+    // Release FX (P3-11), one per channel after the color FX; when one has ended its deck pauses.
+    std::array<dsp::fx::ReleaseFx, kMaxChannels> releaseFx;
     struct MixerChannel
     {
         CrossfaderAssign assign = CrossfaderAssign::Thru;

@@ -46,6 +46,25 @@ public:
     void setBeats(int unit, double beats);
     void tap(int unit, double timeSeconds); // a TAP press at this time (seconds, any steady clock)
 
+    // A button that reports press and release (hold-to-apply).
+    class HoldButton final : public juce::TextButton
+    {
+    public:
+        std::function<void(bool down)> onHold;
+
+    private:
+        void buttonStateChanged() override
+        {
+            const bool down = isDown();
+            if (down != wasDown && onHold)
+                onHold(down);
+            wasDown = down;
+        }
+        bool wasDown = false;
+    };
+    // Release FX (P3-11) on the unit's deck: hold to apply, let go to end the track on it.
+    void releaseFx(int unit, int kind, bool down);
+
     struct Slot
     {
         juce::TextButton effect, on{"ON"};
@@ -56,6 +75,7 @@ public:
     {
         juce::TextButton target, mode{"MULTI"}, beatsDown, beatsUp, beats{"1"}, tapButton{"TAP"};
         std::array<Slot, engine::kFxSlots> slots;
+        std::array<HoldButton, 4> release; // ECHO OUT, BRAKE, SPIN, SWEEP
         std::vector<double> taps;
     };
     Unit& unit(int index) noexcept { return units[static_cast<std::size_t>(index)]; }

@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "dsp/fx/ReleaseFx.h"
+
 namespace devildj::ui
 {
 
@@ -69,6 +71,19 @@ FxPanel::FxPanel(engine::AudioEngine& e)
             setBeats(u, it == steps.end() ? steps.back() : *it);
         };
         unitView.beats.onClick = [this, u] { setBeats(u, 1.0); };
+        static constexpr const char* releaseNames[] = {"ECHO OUT", "BRAKE", "SPIN", "SWEEP"};
+        for (int k = 0; k < 4; ++k)
+        {
+            auto& b = unitView.release[static_cast<std::size_t>(k)];
+            styleButton(b);
+            b.setButtonText(releaseNames[k]);
+            b.setColour(juce::TextButton::buttonColourId, kPanel.interpolatedWith(juce::Colour(0xffe08a3c), 0.15f));
+            b.setTooltip(juce::String("Release FX: hold for ") +
+                         dsp::fx::ReleaseFx::kindName(static_cast<dsp::fx::ReleaseFx::Kind>(k)) +
+                         " on the unit's deck; let go and the track ends on it over the beat length (then pauses)");
+            b.onHold = [this, u, k](bool down) { releaseFx(u, k, down); };
+            addAndMakeVisible(b);
+        }
         unitView.tapButton.onClick = [this, u]
         {
             if (juce::ModifierKeys::getCurrentModifiers().isPopupMenu()) // right-click: the master clock again
@@ -168,6 +183,15 @@ void FxPanel::setEffectType(int unit, int slot, int type)
         knob.setValue(has ? (*info)[k].defaultValue : 0.5, false);
     }
     resized();
+}
+
+void FxPanel::releaseFx(int unit, int kind, bool down)
+{
+    const auto target = engine.readState().fx[static_cast<std::size_t>(unit)].target;
+    if (static_cast<int>(target) > static_cast<int>(engine::FxTarget::Deck3))
+        return; // on a deck's channel only
+    engine.send(engine::ReleaseFxCommand{static_cast<engine::DeckId>(target), static_cast<std::uint8_t>(kind), down,
+                                         static_cast<float>(beats[static_cast<std::size_t>(unit)])});
 }
 
 void FxPanel::toggleUnit(int unit)
@@ -279,6 +303,16 @@ void FxPanel::refresh()
             if (!slot.wet->isBeingChanged() && std::abs(slot.wet->getValue() - ss.wet) > 1e-4)
                 slot.wet->setValue(ss.wet, false);
         }
+        // Release FX buttons: lit while held / ending on the unit's deck.
+        const bool onDeck = static_cast<int>(st.target) <= static_cast<int>(engine::FxTarget::Deck3);
+        const auto& deckState = state.decks[static_cast<std::size_t>(onDeck ? static_cast<int>(st.target) : 0)];
+        for (int k = 0; k < 4; ++k)
+        {
+            auto& b = view.release[static_cast<std::size_t>(k)];
+            b.setEnabled(onDeck);
+            b.setToggleState(onDeck && deckState.releaseFx != 0 && deckState.releaseFxKind == k,
+                             juce::dontSendNotification);
+        }
     }
 }
 
@@ -290,6 +324,17 @@ void FxPanel::layoutUnit(Unit& u, juce::Rectangle<int> area, bool singleMode)
     u.mode.setBounds(top.removeFromLeft(58));
     top.removeFromLeft(4);
     u.tapButton.setBounds(top.removeFromRight(52));
+    top.removeFromRight(4);
+    {
+        // Release FX: as much room as is left, four buttons.
+        auto row = top.removeFromRight(std::min(4 * 62, std::max(0, top.getWidth() - 120 - 8)));
+        const int w = row.getWidth() / 4;
+        for (auto& b : u.release)
+        {
+            b.setBounds(row.removeFromLeft(w).reduced(1, 0));
+            b.setVisible(w >= 30);
+        }
+    }
     top.removeFromRight(4);
     u.beatsUp.setBounds(top.removeFromRight(22));
     u.beats.setBounds(top.removeFromRight(40));

@@ -365,7 +365,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
   Selector shared across channels: Filter (default), Space (reverb send), Dub Echo, Noise, Crush, Pitch. Knob centre = off, left/right = two characters.
   Done when: manual listening test; parameter smoothing verified.
 
-- [ ] **P3-11 Release FX**
+- [x] **P3-11 Release FX**
   Hold-to-apply effects that cut the dry signal on release (echo out, brake, spin-back, filter sweep) with beat length.
   Done when: manual test; works with Pad FX.
 

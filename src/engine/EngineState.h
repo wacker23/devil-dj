@@ -72,6 +72,10 @@ struct DeckState
     double slicerStart = 0.0, slicerEnd = 0.0;
     int slicerCurrent = -1; // the slice the track is in (where it would be, while a slice rolls)
     int slicerRolling = -1; // the slice being rolled
+
+    // Release FX (P3-11) on this deck's channel: 0 idle, 1 held, 2 released (ending); its kind.
+    std::uint8_t releaseFx = 0;
+    std::uint8_t releaseFxKind = 0;
 };
 
 // An FX unit as the audio thread has it (P3-08).

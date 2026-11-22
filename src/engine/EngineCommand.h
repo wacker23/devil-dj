@@ -390,6 +390,16 @@ struct SetColorFx
     std::uint8_t type = 0;
 };
 
+// Release FX (P3-11) on a deck's channel: press (hold) with a kind (dsp::fx::ReleaseFx::Kind) and a beat length;
+// release: the music is cut and the effect ends it; then the deck pauses.
+struct ReleaseFxCommand
+{
+    DeckId deck = 0;
+    std::uint8_t kind = 0;
+    bool press = true;
+    float beats = 1.0f;
+};
+
 // Beat sync (P2-19): the deck follows the master clock's tempo (half / double aware) and phase.
 struct SetSync
 {
@@ -402,7 +412,7 @@ using EngineCommand =
                  Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo, PitchBend, SetInterpolationQuality, SetKeyLock,
                  SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge, SetParam, SetBeatgrid, SetMetronome,
                  SetClockSource, SetInternalTempo, SetSync, SetQuantize, BeatJump, JumpBy, SetHotCues, HotCue,
-                 SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle, SetSlicer, SlicerPad, FxSetEffect, FxCommand, SetColorFx>;
+                 SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle, SetSlicer, SlicerPad, FxSetEffect, FxCommand, SetColorFx, ReleaseFxCommand>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 
