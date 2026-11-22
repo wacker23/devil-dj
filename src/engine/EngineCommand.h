@@ -418,6 +418,38 @@ struct PadFxCommand
     float value = 0.0f;
 };
 
+// Sampler (P3-13): a sample into a slot (0..31; nullptr = empty it; the old buffer comes back through the release
+// queue), a pad press / release (quantized to the master clock when quantize is on), the slot's settings.
+struct SamplerLoad
+{
+    std::uint8_t slot = 0;
+    const TrackBuffer* buffer = nullptr;
+    BufferId id = 0;
+    float bpm = 0.0f; // the sample's tempo (0 = unknown: no sync)
+};
+
+struct SamplerPad
+{
+    std::uint8_t slot = 0;
+    bool release = false;
+};
+
+enum class SamplerOp : std::uint8_t
+{
+    Mode,    // 0 one-shot, 1 loop, 2 gate
+    Gain,    // 0..2
+    Sync,    // 0 / 1
+    Stop,    // this slot
+    StopAll, // every slot
+};
+
+struct SamplerSet
+{
+    std::uint8_t slot = 0;
+    SamplerOp op = SamplerOp::Mode;
+    float value = 0.0f;
+};
+
 // Beat sync (P2-19): the deck follows the master clock's tempo (half / double aware) and phase.
 struct SetSync
 {
@@ -430,7 +462,8 @@ using EngineCommand =
                  Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo, PitchBend, SetInterpolationQuality, SetKeyLock,
                  SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge, SetParam, SetBeatgrid, SetMetronome,
                  SetClockSource, SetInternalTempo, SetSync, SetQuantize, BeatJump, JumpBy, SetHotCues, HotCue,
-                 SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle, SetSlicer, SlicerPad, FxSetEffect, FxCommand, SetColorFx, ReleaseFxCommand, PadFxSetEffect, PadFxCommand>;
+                 SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle, SetSlicer, SlicerPad, FxSetEffect, FxCommand, SetColorFx, ReleaseFxCommand, PadFxSetEffect, PadFxCommand,
+                 SamplerLoad, SamplerPad, SamplerSet>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

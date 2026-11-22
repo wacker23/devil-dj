@@ -22,7 +22,7 @@ namespace devildj::ui
 //   Slicer    - the 8 slices of the slicer domain (8 / 16 / 32 beats, P3-07): held, a slice rolls on the grid;
 //               let go, the deck is where the track would be. Shift + pad 1 / 2 / 3: domain 8 / 16 / 32 beats.
 //   Pad FX    - the app's presets (app/PadFxPresets, P3-12): this file only gives the mode; the app plays them
-//   Sampler comes with its task (P3-13): until then its pads do nothing.
+//   Sampler   - the sampler's current bank (P3-13): the app plays it; Shift + pad 1-4: bank 1-4
 enum class PadMode : std::uint8_t
 {
     HotCue,

@@ -65,7 +65,7 @@ TEST_CASE("Pads: the layouts", "[ui][pads]")
     CHECK(ui::padModeAvailable(PadMode::Slicer)); // P3-07
     CHECK(ui::padModeAvailable(PadMode::PadFx));  // P3-12 (the app plays its presets)
     CHECK(ui::padCommands(PadMode::PadFx, 0, 2, 0, false, false, {}).empty());
-    CHECK_FALSE(ui::padModeAvailable(PadMode::Sampler));
+    CHECK(ui::padModeAvailable(PadMode::Sampler)); // P3-13 (the app plays the bank)
     CHECK(ui::padCommands(PadMode::Sampler, 0, 2, 0, false, false, {}).empty());
     // F1-F4 and Shift+F1-F4 select the modes.
     ui::ActionDispatcher d;

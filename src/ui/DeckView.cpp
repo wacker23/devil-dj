@@ -546,6 +546,8 @@ void DeckView::setPadMode(PadMode mode)
         text << (padPage == 0 ? " A-H" : " I-P");
     if (mode == PadMode::PadFx)
         text << " " << (padFxBank + 1);
+    if (mode == PadMode::Sampler)
+        text << " " << (samplerBank + 1);
     modeButton.setButtonText(text);
     juce::String tip;
     switch (mode)
@@ -569,6 +571,10 @@ void DeckView::setPadMode(PadMode mode)
         case PadMode::PadFx:
             tip = "Pad FX: each pad an effect preset - on while held (or latched: press on, press off); release "
                   "effects end the track when let go. Right-click a pad to edit it; Shift + pad 1 / 2: bank 1 / 2.";
+            break;
+        case PadMode::Sampler:
+            tip = "Sampler: the pads play the sampler's bank (one-shot / loop: press; gate: hold); Shift + pad 1-4: "
+                  "bank 1-4. Load the slots in the SAMPLER panel.";
             break;
         case PadMode::Slicer:
             tip = "Slicer: the next 8 / 16 / 32 beats in 8 slices (shown on the waveform); hold a pad to roll its "
@@ -597,6 +603,14 @@ void DeckView::setPadFxLooks(const std::array<juce::String, 8>& names, const std
     refreshPads();
 }
 
+void DeckView::setSamplerBank(int bank)
+{
+    samplerBank = std::clamp(bank, 0, engine::Sampler::kBanks - 1);
+    if (padModeNow == PadMode::Sampler)
+        setPadMode(padModeNow);
+    refreshPads();
+}
+
 void DeckView::setPadHeld(int pad, bool held)
 {
     if (pad < 0 || pad > 7)
@@ -616,6 +630,15 @@ void DeckView::refreshPads()
             auto& p = *pads[static_cast<std::size_t>(i)];
             const bool held = p.isDown() || (padsHeldByKeys & (1u << i)) != 0;
             auto look = padLook(padModeNow, i, state, held);
+            if (padModeNow == PadMode::Sampler) // the sampler's bank
+            {
+                const auto& st = engine.readState().sampler[static_cast<std::size_t>(
+                    samplerBank * engine::Sampler::kSlotsPerBank + i)];
+                look.text = juce::String(i + 1) + (st.mode == 1 ? " LOOP" : st.mode == 2 ? " GATE" : "");
+                look.colour = 0x3CC4B4;
+                look.enabled = st.loaded;
+                look.lit = held || st.playing;
+            }
             if (padModeNow == PadMode::PadFx) // the app's presets
             {
                 look.text = padFxNames[static_cast<std::size_t>(i)];

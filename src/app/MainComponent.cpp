@@ -11,6 +11,7 @@
 #include "library/BeatgridRepository.h"
 #include "library/MissingFiles.h"
 #include "library/PlaylistFiles.h"
+#include "library/TrackRepository.h"
 #include "util/Log.h"
 #include "util/ProcessStats.h"
 
@@ -246,6 +247,45 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     // FX (P3-09): FX1 on deck A, FX2 on deck B, three effects each to start.
     addAndMakeVisible(fxPanel);
     fxPanel.onEffect = [this](int unit, int slot, int type) { chooseEffect(unit, slot, type); };
+    // Sampler (P3-13): its panel shares the FX panel's place.
+    addChildComponent(samplerPanel);
+    for (auto* tab : {&fxTab, &samplerTab})
+    {
+        tab->setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1f1f26));
+        tab->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff3a3a46));
+        tab->setWantsKeyboardFocus(false);
+        addAndMakeVisible(*tab);
+    }
+    fxTab.onClick = [this] { showPanel(false); };
+    samplerTab.onClick = [this] { showPanel(true); };
+    showPanel(false);
+    samplerPanel.onLoadFile = [this](int slot) { chooseSampleFile(slot); };
+    samplerPanel.onLoadSelected = [this](int slot)
+    {
+        const auto file = libraryBrowser->selectedTrackFile();
+        if (file == juce::File())
+            return;
+        double bpm = 0.0;
+        juce::String name = file.getFileNameWithoutExtension();
+        if (const auto id = libraryBrowser->selectedTrackId(); id != 0 && gridReader != nullptr)
+            if (const auto t = library::TrackRepository(*gridReader).get(id))
+            {
+                bpm = t->bpm.value_or(0.0);
+                if (!t->title.empty())
+                    name = juce::String::fromUTF8(t->title.c_str());
+            }
+        loadSample(slot, file, bpm, name);
+    };
+    samplerPanel.onClear = [this](int slot)
+    {
+        engine.send(engine::SamplerLoad{static_cast<std::uint8_t>(slot), nullptr, 0, 0.0f});
+        samplerPanel.setSlotName(slot, {});
+    };
+    samplerPanel.onBank = [this](int bank)
+    {
+        deckA.setSamplerBank(bank);
+        deckB.setSamplerBank(bank);
+    };
     mixer.onColorFx = [this](int type)
     {
         if (onColorFxChanged)
@@ -1168,6 +1208,18 @@ void MainComponent::padAction(engine::DeckId deck, int pad, bool alternate, bool
     if (deck >= 2)
         return;
     const auto& state = engine.readState().decks[deck];
+    if (padModes[deck] == ui::PadMode::Sampler) // P3-13: the sampler's bank
+    {
+        if (alternate)
+        {
+            if (!release && pad < engine::Sampler::kBanks) // Shift + pad 1-4: the bank
+                samplerPanel.setBank(pad);
+            return;
+        }
+        engine.send(engine::SamplerPad{
+            static_cast<std::uint8_t>(samplerPanel.bank() * engine::Sampler::kSlotsPerBank + pad), release});
+        return;
+    }
     if (padModes[deck] == ui::PadMode::PadFx) // P3-12: the presets
     {
         if (alternate)
@@ -1190,6 +1242,63 @@ void MainComponent::padAction(engine::DeckId deck, int pad, bool alternate, bool
             slicerBeats[deck] = slicer->beats;
         engine.send(c);
     }
+}
+
+void MainComponent::showPanel(bool sampler)
+{
+    showSampler = sampler;
+    fxTab.setToggleState(!sampler, juce::dontSendNotification);
+    samplerTab.setToggleState(sampler, juce::dontSendNotification);
+    resized();
+}
+
+void MainComponent::chooseSampleFile(int slot)
+{
+    sampleChooser = std::make_unique<juce::FileChooser>("Load a sample", juce::File(), "*.wav;*.aif;*.aiff;*.flac;*.mp3;*.ogg;*.m4a");
+    sampleChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                               [this, slot](const juce::FileChooser& chooser)
+                               {
+                                   const auto file = chooser.getResult();
+                                   if (file.existsAsFile())
+                                       loadSample(slot, file, 0.0, file.getFileNameWithoutExtension());
+                               });
+}
+
+void MainComponent::loadSample(int slot, const juce::File& file, double bpm, const juce::String& name)
+{
+    const double rate = engine.readState().sampleRate > 0.0 ? engine.readState().sampleRate : 48000.0;
+    const double master = engine.readState().masterBpm;
+    juce::Thread::launch(
+        [safe = juce::Component::SafePointer<MainComponent>(this), slot, file, bpm, name, rate, master]
+        {
+            engine::DecodeOptions options;
+            options.targetSampleRate = rate;
+            auto decoded = engine::decodeTrack(file, options);
+            juce::MessageManager::callAsync(
+                [safe, slot, bpm, name, master, result = std::make_shared<decltype(decoded)>(std::move(decoded))]
+                {
+                    if (safe == nullptr)
+                        return;
+                    auto& self = *safe;
+                    if (!result->isOk())
+                    {
+                        util::logWarning("Sampler: a sample did not load: {}", result->error());
+                        return;
+                    }
+                    std::shared_ptr<const engine::TrackBuffer> buffer = std::move(*result).value();
+                    const double seconds = buffer->numSamples() / std::max(1.0, buffer->sampleRate);
+                    const double tempo = bpm > 0.0 ? bpm : engine::Sampler::estimateLoopBpm(seconds, master);
+                    const auto* raw = buffer.get();
+                    const auto id = self.registry.add(std::move(buffer));
+                    if (!self.engine.send(engine::SamplerLoad{static_cast<std::uint8_t>(slot), raw, id,
+                                                              static_cast<float>(tempo)}))
+                    {
+                        self.registry.release(id);
+                        return;
+                    }
+                    self.samplerPanel.setSlotName(slot, name);
+                });
+        });
 }
 
 void MainComponent::setPadFxPresets(const juce::String& json)
@@ -1901,7 +2010,10 @@ void MainComponent::resized()
 
     waveA.setVisible(!browserBig);
     waveB.setVisible(!browserBig);
-    fxPanel.setVisible(!browserBig);
+    fxPanel.setVisible(!browserBig && !showSampler);
+    samplerPanel.setVisible(!browserBig && showSampler);
+    fxTab.setVisible(!browserBig);
+    samplerTab.setVisible(!browserBig);
     if (browserBig) // Ctrl+B: the browser gets the waveforms' room too
     {
         libraryBrowser->setBounds(area);
@@ -1913,7 +2025,17 @@ void MainComponent::resized()
     const int browserHeight = std::max(160, area.getHeight() - 2 * 100 - 12 - ui::FxPanel::kPreferredHeight - 6);
     libraryBrowser->setBounds(area.removeFromBottom(browserHeight));
     area.removeFromBottom(6);
-    fxPanel.setBounds(area.removeFromBottom(ui::FxPanel::kPreferredHeight)); // P3-09
+    {
+        auto panel = area.removeFromBottom(ui::FxPanel::kPreferredHeight); // P3-09 / P3-13
+        auto tabs = panel.removeFromLeft(64);
+        fxTab.setBounds(tabs.removeFromTop(tabs.getHeight() / 2).reduced(0, 2));
+        samplerTab.setBounds(tabs.reduced(0, 2));
+        panel.removeFromLeft(4);
+        fxPanel.setBounds(panel);
+        samplerPanel.setBounds(panel);
+        fxPanel.setVisible(!browserBig && !showSampler);
+        samplerPanel.setVisible(!browserBig && showSampler);
+    }
     area.removeFromBottom(6);
     const int waveHeight = (area.getHeight() - 6) / 2;
     waveA.setBounds(area.removeFromTop(waveHeight));

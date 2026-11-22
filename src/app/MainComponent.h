@@ -17,6 +17,7 @@
 #include "ui/DebugOverlay.h"
 #include "ui/DeckView.h"
 #include "ui/FxPanel.h"
+#include "ui/SamplerPanel.h"
 #include "PadFxPresets.h"
 #include "ui/LibraryBrowser.h"
 #include "ui/MemoryCuePanel.h"
@@ -131,6 +132,14 @@ private:
     ui::DeckView deckB{engine, 1, [this](engine::BufferId id) { return registry.get(id); }};
     ui::MixerView mixer{engine}; // P1-15, between the decks
     ui::FxPanel fxPanel{engine}; // P3-09, between the waveforms and the browser
+    // The sampler (P3-13) in the same place: FX / SAMPLER tabs.
+    ui::SamplerPanel samplerPanel{engine};
+    juce::TextButton fxTab{"FX"}, samplerTab{"SAMPLER"};
+    bool showSampler = false;
+    void showPanel(bool sampler);
+    void loadSample(int slot, const juce::File& file, double bpm, const juce::String& name);
+    void chooseSampleFile(int slot);
+    std::unique_ptr<juce::FileChooser> sampleChooser;
     void chooseEffect(int unit, int slot, int type); // creates and installs it (-1: empty the slot)
     std::unique_ptr<juce::TimedCallback> fxTimer;     // hands replaced effects back for deleting
     // Zoomed waveforms (P1-14): drag = scratch / scrub, wheel = nudge, Ctrl+wheel = zoom.

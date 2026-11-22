@@ -13,6 +13,7 @@
 #include "engine/EngineCommand.h"
 #include "engine/EngineState.h"
 #include "engine/OutputRouter.h"
+#include "engine/Sampler.h"
 #include "engine/TrackBuffer.h"
 #include "util/SpscQueue.h"
 #include "util/TripleBuffer.h"
@@ -149,6 +150,13 @@ private:
     void apply(const ReleaseFxCommand& command) noexcept;
     void apply(const PadFxSetEffect& command) noexcept;
     void apply(const PadFxCommand& command) noexcept;
+    void apply(const SamplerLoad& command) noexcept;
+    void apply(const SamplerPad& command) noexcept;
+    void apply(const SamplerSet& command) noexcept;
+    // One channel from its source's audio in l / r to the master and cue buses (strip, color FX, pad FX, release FX,
+    // the FX units on it, meter, cue, fader, crossfader).
+    void mixChannel(int channel, float* l, float* r, int numSamples) noexcept;
+    void renderSampler(int numSamples) noexcept;
     dsp::fx::BeatContext beatContext() const noexcept;
     void processFx(FxTarget target, float* left, float* right, int numSamples) noexcept;
     void retireEffect(dsp::fx::Effect* effect) noexcept;
@@ -254,7 +262,11 @@ private:
     // Color FX (P3-10): one per channel, after the strip's filter; the FILTER knob drives the strip's filter
     // or, with another character chosen, the color FX (the strip's filter then stays at its centre).
     std::array<dsp::fx::ColorFx, kMaxChannels> colorFx;
-    std::array<double, kMaxChannels> filterKnob{0.5, 0.5, 0.5, 0.5};
+    std::array<double, kMaxChannels> filterKnob{0.5, 0.5, 0.5, 0.5, 0.5};
+    // The sampler (P3-13) and its quantized presses waiting for their beat.
+    Sampler sampler;
+    std::array<double, Sampler::kSlots> samplerPendingBeat{}; // < 0 = none
+    bool samplerPending = false;
     dsp::fx::ColorFx::Type colorType = dsp::fx::ColorFx::Type::Filter;
     // Release FX (P3-11), one per channel after the color FX; when one has ended its deck pauses.
     std::array<dsp::fx::ReleaseFx, kMaxChannels> releaseFx;

@@ -49,6 +49,9 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
             slot.prepare(sampleRate, capacity);
     for (auto& strip : strips)
         strip.prepare(sampleRate, capacity);
+    sampler.prepare(sampleRate, capacity); // P3-13
+    samplerPendingBeat.fill(-1.0);
+    samplerPending = false;
     for (std::size_t i = 0; i < mixer.size(); ++i)
     {
         auto& m = mixer[i];
@@ -1099,6 +1102,66 @@ void AudioEngine::apply(const PadFxCommand& command) noexcept
     }
 }
 
+void AudioEngine::apply(const SamplerLoad& command) noexcept
+{
+    if (command.slot >= Sampler::kSlots)
+    {
+        if (command.id != 0)
+            releaseBuffer(command.id);
+        return;
+    }
+    samplerPendingBeat[command.slot] = -1.0;
+    const BufferId old = sampler.load(command.slot, command.buffer, command.id, command.bpm);
+    if (old != 0 && old != command.id)
+        releaseBuffer(old); // nothing plays it any more
+}
+
+void AudioEngine::apply(const SamplerPad& command) noexcept
+{
+    if (command.slot >= Sampler::kSlots)
+        return;
+    if (command.release)
+    {
+        samplerPendingBeat[command.slot] = -1.0; // a gate let go before its beat: never starts
+        sampler.releasePad(command.slot);
+        return;
+    }
+    const auto& slot = sampler.slot(command.slot);
+    const bool stopping = slot.mode == Sampler::Mode::Loop && sampler.isPlaying(command.slot);
+    if (quantizeOn && !stopping) // on the master clock's next grid point
+    {
+        samplerPendingBeat[command.slot] =
+            std::ceil(clock.beatAtBlockEnd() / quantizeBeats - 1e-9) * quantizeBeats;
+        samplerPending = true;
+        return;
+    }
+    sampler.press(command.slot, 0);
+}
+
+void AudioEngine::apply(const SamplerSet& command) noexcept
+{
+    switch (command.op)
+    {
+        case SamplerOp::Mode:
+            sampler.setMode(command.slot, static_cast<Sampler::Mode>(std::clamp(static_cast<int>(command.value), 0, 2)));
+            break;
+        case SamplerOp::Gain:
+            sampler.setGain(command.slot, command.value);
+            break;
+        case SamplerOp::Sync:
+            sampler.setSync(command.slot, command.value != 0.0f);
+            break;
+        case SamplerOp::Stop:
+            samplerPendingBeat[std::min<std::size_t>(command.slot, Sampler::kSlots - 1)] = -1.0;
+            sampler.stop(command.slot);
+            break;
+        case SamplerOp::StopAll:
+            samplerPendingBeat.fill(-1.0);
+            sampler.stopAll();
+            break;
+    }
+}
+
 void AudioEngine::apply(const ReleaseFxCommand& command) noexcept
 {
     if (command.deck >= kMaxChannels)
@@ -1536,11 +1599,7 @@ void AudioEngine::renderDecks(int numSamples) noexcept
         renderDeckWithActions(slot, l, r, numSamples);
         updateSlicer(slot);
         renderMetronome(i, before, slot.deck.position(), numSamples);
-        strips[i].processPreFader(l, r, numSamples);
-        colorFx[i].process(l, r, numSamples, beatContext());      // Color FX (P3-10)
-        for (auto& pad : padFx[i])                                 // Pad FX (P3-12)
-            pad.process(l, r, numSamples, beatContext());
-        releaseFx[i].process(l, r, numSamples, beatContext());    // Release FX (P3-11)
+        mixChannel(static_cast<int>(i), l, r, numSamples);
         if (releaseFx[i].finished()) // ended on the effect: the deck pauses; back to normal once it is silent
         {
             if (slot.deck.isPlaying())
@@ -1548,7 +1607,58 @@ void AudioEngine::renderDecks(int numSamples) noexcept
             else if (slot.deck.isSilent())
                 releaseFx[i].reset();
         }
-        processFx(static_cast<FxTarget>(i), l, r, numSamples); // FX units on this channel (P3-08)
+    }
+    renderSampler(numSamples); // its own channel (P3-13)
+}
+
+void AudioEngine::renderSampler(int numSamples) noexcept
+{
+    float* l = deckScratch.getWritePointer(0);
+    float* r = deckScratch.getWritePointer(1);
+    // Quantized presses whose beat comes in this block.
+    if (samplerPending)
+    {
+        samplerPending = false;
+        for (int s = 0; s < Sampler::kSlots; ++s)
+        {
+            auto& beat = samplerPendingBeat[static_cast<std::size_t>(s)];
+            if (beat < 0.0)
+                continue;
+            const double offset = clock.sampleAt(beat) - static_cast<double>(clock.blockStart());
+            if (offset < numSamples)
+            {
+                sampler.press(s, static_cast<int>(std::max(0.0, std::round(offset))));
+                beat = -1.0;
+            }
+            else
+            {
+                samplerPending = true;
+            }
+        }
+    }
+    juce::FloatVectorOperations::clear(l, numSamples);
+    juce::FloatVectorOperations::clear(r, numSamples);
+    sampler.render(l, r, numSamples, clock.bpm());
+    mixChannel(kSamplerChannel, l, r, numSamples);
+    if (releaseFx[kSamplerChannel].finished()) // a release FX ended the sampler: it stops
+    {
+        sampler.stopAll();
+        releaseFx[kSamplerChannel].reset();
+    }
+}
+
+void AudioEngine::mixChannel(int channel, float* l, float* r, int numSamples) noexcept
+{
+    const auto i = static_cast<std::size_t>(channel);
+    auto& m = mixer[i];
+    {
+        strips[i].processPreFader(l, r, numSamples);
+        colorFx[i].process(l, r, numSamples, beatContext());   // Color FX (P3-10)
+        for (auto& pad : padFx[i])                              // Pad FX (P3-12)
+            pad.process(l, r, numSamples, beatContext());
+        releaseFx[i].process(l, r, numSamples, beatContext()); // Release FX (P3-11)
+        processFx(channel < kMaxDecks ? static_cast<FxTarget>(channel) : FxTarget::Sampler, l, r,
+                  numSamples); // FX units on this channel (P3-08)
         m.meter.process(l, r, numSamples);
         if (m.cueSend.isRamping() || m.cueSend.value() > 0.0)
         {
@@ -1764,6 +1874,18 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         c.peakL = m.meter.peakLeft();
         c.peakR = m.meter.peakRight();
         c.rms = m.meter.rms();
+    }
+    for (int s = 0; s < Sampler::kSlots; ++s) // P3-13
+    {
+        const auto& slot = sampler.slot(s);
+        auto& st = current.sampler[static_cast<std::size_t>(s)];
+        st.loaded = slot.buffer != nullptr;
+        st.playing = sampler.isPlaying(s) || samplerPendingBeat[static_cast<std::size_t>(s)] >= 0.0;
+        st.mode = static_cast<std::uint8_t>(slot.mode);
+        st.sync = slot.sync;
+        st.gain = slot.gain;
+        st.bpm = static_cast<float>(slot.bpm);
+        st.progress = static_cast<float>(sampler.progress(s));
     }
     current.crossfader = static_cast<float>(crossfaderPosition);
     current.crossfaderCurve = static_cast<std::uint8_t>(crossfaderCurve);

@@ -100,6 +100,18 @@ struct FxUnitState
     std::array<FxSlotState, kFxSlots> slots{};
 };
 
+// A sampler slot as the audio thread has it (P3-13).
+struct SamplerSlotState
+{
+    bool loaded = false;
+    bool playing = false;
+    std::uint8_t mode = 0; // 0 one-shot, 1 loop, 2 gate
+    bool sync = false;
+    float gain = 1.0f;
+    float bpm = 0.0f;
+    float progress = -1.0f; // 0..1 while playing, -1 = not
+};
+
 // Mixer channel settings as the audio thread has them (targets; the sound follows within 20 ms).
 struct ChannelState
 {
@@ -176,6 +188,9 @@ struct EngineState
 
     // Color FX (P3-10): the character of every channel's FILTER knob (0 = the filter itself).
     std::uint8_t colorFx = 0;
+
+    // Sampler (P3-13): its 4 banks x 8 slots (its mixer channel is channels[kSamplerChannel]).
+    std::array<SamplerSlotState, 32> sampler{};
 };
 
 static_assert(std::is_trivially_copyable_v<EngineState>, "EngineState must stay trivially copyable");

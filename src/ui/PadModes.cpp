@@ -55,13 +55,8 @@ const char* padModeName(PadMode mode) noexcept
 
 const char* padModeComesWith(PadMode mode) noexcept
 {
-    switch (mode)
-    {
-        case PadMode::Sampler:
-            return "P3-13";
-        default:
-            return nullptr;
-    }
+    (void)mode; // every mode works since P3-13 (kept for modes still to come)
+    return nullptr;
 }
 
 double beatLoopBeats(int pad) noexcept
