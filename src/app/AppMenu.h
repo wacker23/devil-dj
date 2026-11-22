@@ -54,6 +54,15 @@ public:
         assign[0] = std::clamp(assignA, 0, 2);
         assign[1] = std::clamp(assignB, 0, 2);
     }
+    // P3-05: how PAUSE stops (0 instantly, 1 brake, 2 spin-back) and the stop times.
+    std::function<void(int style, double brakeSeconds, double spinBackSeconds)> onStopStyle;
+    void setStopStyle(int style, double brake, double spin) noexcept
+    {
+        pauseStyle = style;
+        brakeSeconds = brake;
+        spinBackSeconds = spin;
+    }
+    static constexpr double kStopTimes[] = {0.25, 0.5, 1.0, 2.0, 4.0};
     std::function<void(bool on)> onKeySyncCompatible; // P2-22
     void setKeySyncCompatible(bool on) noexcept { keySyncCompatible = on; }
     std::function<void()> onToggleDebugOverlay;
@@ -131,6 +140,12 @@ private:
         CueMixLast = CueMixFirst + 4,
         LevelFirst, // 0, -6, -12, -18 dB
         LevelLast = LevelFirst + 3,
+        PauseStyleFirst, // instantly, brake, spin-back
+        PauseStyleLast = PauseStyleFirst + 2,
+        BrakeTimeFirst, // one per kStopTimes
+        BrakeTimeLast = BrakeTimeFirst + 4,
+        SpinTimeFirst,
+        SpinTimeLast = SpinTimeFirst + 4,
     };
 
     juce::File logDirectory;
@@ -143,6 +158,8 @@ private:
     bool quantize = false;
     int quantizeEighths = 8;
     bool keySyncCompatible = false;
+    int pauseStyle = 0;
+    double brakeSeconds = 1.0, spinBackSeconds = 1.0;
     bool isolator = false;
     int crossfaderCurve = 0;
     int assign[2] = {0, 2};

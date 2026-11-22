@@ -307,6 +307,35 @@ struct SetSlip
     bool on = false;
 };
 
+// Reverse (P3-05): the deck plays backwards while on (a slip reason with slip on).
+struct SetReverse
+{
+    DeckId deck = 0;
+    bool on = false;
+};
+
+// Stopping like a turntable (P3-05): instant (= Pause), vinyl brake, or spin-back; the times come from SetStopStyle.
+enum class StopKind : std::uint8_t
+{
+    Instant,
+    Brake,
+    SpinBack,
+};
+
+struct Stop
+{
+    DeckId deck = 0;
+    StopKind kind = StopKind::Brake;
+};
+
+// How play / pause (TogglePlay) stops a playing deck, and the brake / spin-back times in seconds.
+struct SetStopStyle
+{
+    StopKind pause = StopKind::Instant;
+    float brakeSeconds = 1.0f;
+    float spinBackSeconds = 1.0f;
+};
+
 // Beat sync (P2-19): the deck follows the master clock's tempo (half / double aware) and phase.
 struct SetSync
 {
@@ -319,7 +348,7 @@ using EngineCommand =
                  Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo, PitchBend, SetInterpolationQuality, SetKeyLock,
                  SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge, SetParam, SetBeatgrid, SetMetronome,
                  SetClockSource, SetInternalTempo, SetSync, SetQuantize, BeatJump, JumpBy, SetHotCues, HotCue,
-                 SetCuePoint, Loop, SetSlip>;
+                 SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

@@ -123,6 +123,9 @@ private:
     void apply(const Loop& command) noexcept;
     void apply(const HotCue& command) noexcept;
     void apply(const SetSlip& command) noexcept;
+    void apply(const SetReverse& command) noexcept;
+    void apply(const Stop& command) noexcept;
+    void apply(const SetStopStyle& command) noexcept;
     void followMaster() noexcept;                              // P2-19: every synced deck that doesn't lead
     bool tempoToMaster(DeckId deck, double percent) noexcept; // sync lock: a follower's fader moves the master
     void advanceClock(int numSamples) noexcept;
@@ -200,6 +203,9 @@ private:
         bool clickActive = false;
     };
     std::array<DeckSlot, kMaxDecks> decks{};
+    // How TogglePlay stops a playing deck, and the brake / spin-back times (P3-05).
+    StopKind pauseStyle = StopKind::Instant;
+    double brakeSeconds = 1.0, spinBackSeconds = 1.0;
     juce::AudioBuffer<float> deckScratch;            // 2 x capacity, one deck at a time
     std::array<ChannelStrip, kMaxChannels> strips{}; // channel i = deck i
     struct MixerChannel

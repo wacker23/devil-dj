@@ -41,6 +41,12 @@ void Deck::scratchBegin(double timeSeconds) noexcept
 {
     if (buffer == nullptr || scratch == Scratch::Holding)
         return;
+    if (stopKind != StopKind::None) // the hand catches a braking record
+    {
+        stopKind = StopKind::None;
+        if ((slipReasons & kSlipPause) != 0) // the stop's slip pause becomes the scratch's
+            slipReasons = static_cast<std::uint8_t>((slipReasons & ~kSlipPause) | kSlipScratch);
+    }
     const bool sounding = state != Transport::Paused || scratch == Scratch::Releasing;
     if (state == Transport::Playing && scratch == Scratch::None)
         beginSlip(kSlipScratch);
@@ -244,6 +250,8 @@ void Deck::setTrack(const TrackBuffer* track) noexcept
     loopOn = false;
     loopIn = loopOut = 0.0;
     slipReasons = 0;
+    reverseOn = false;
+    stopKind = StopKind::None;
 }
 
 bool Deck::isSilent() const noexcept
@@ -265,7 +273,11 @@ void Deck::play() noexcept
         return;
     }
     if (state == Transport::Playing)
+    {
+        if (stopKind != StopKind::None)
+            cancelStop(); // play during a brake / spin-back: back to the normal rate
         return;
+    }
     if ((slipReasons & kSlipPause) != 0) // slip pause: on from where the track would be now
     {
         slipReasons = static_cast<std::uint8_t>(slipReasons & ~kSlipPause);
@@ -284,6 +296,7 @@ void Deck::pause() noexcept
         return;
     if (state == Transport::Playing)
         beginSlip(kSlipPause);
+    stopKind = StopKind::None;
     state = Transport::Paused;
     stopSounding();
 }
@@ -305,6 +318,7 @@ void Deck::cuePress() noexcept
     {
         case Transport::Playing: // back cue: return to the cue point and pause
             slipReasons = 0;
+            stopKind = StopKind::None;
             state = Transport::Paused;
             stopSounding();
             playhead = cue;
@@ -422,6 +436,84 @@ void Deck::wrapLoop() noexcept
         return;
     const double over = std::fmod(std::max(0.0, playhead - loopOut), length);
     jumpTo(loopIn + over); // the old head fades out past the end while the new one fades in from the start
+}
+
+// ---- reverse, brake, spin-back (P3-05) ----
+
+bool Deck::stretchedNow() const noexcept
+{
+    return keyLockOn && state != Transport::Paused && scratch == Scratch::None && !reverseOn &&
+           stopKind == StopKind::None && stretcher != nullptr;
+}
+
+void Deck::switchSource(bool wasStretched) noexcept
+{
+    if (state == Transport::Paused || wasStretched == stretchedNow())
+        return;
+    spawnTail(playhead, currentMainGain());
+    mainFadeRemaining = fadeSamples;
+    stretcherPrimed = false;
+}
+
+void Deck::setReverse(bool on) noexcept
+{
+    if (on == reverseOn || buffer == nullptr)
+        return;
+    const bool was = stretchedNow();
+    if (on)
+        beginSlip(kSlipReverse);
+    reverseOn = on;
+    switchSource(was);
+    if (!on)
+        endSlip(kSlipReverse); // slip: back to where the track would be
+}
+
+void Deck::startStop(StopKind kind, double seconds) noexcept
+{
+    if (buffer == nullptr || state != Transport::Playing || scratch != Scratch::None || kind == StopKind::None)
+        return;
+    const bool was = stretchedNow();
+    beginSlip(kSlipPause); // slip: the track goes on from the first sample of the stop
+    stopFrom = (reverseOn ? -1.0 : 1.0) * rate();
+    stopKind = kind;
+    stopTotal = std::max(1, static_cast<int>(std::lround(std::clamp(seconds, 0.01, 30.0) * sampleRate)));
+    stopElapsed = 0;
+    nudgeRemaining = 0.0;
+    switchSource(was);
+}
+
+void Deck::cancelStop() noexcept
+{
+    const bool was = stretchedNow();
+    stopKind = StopKind::None;
+    switchSource(was);
+    endSlip(kSlipPause);
+}
+
+double Deck::nextStopRate() noexcept
+{
+    const double elapsed = static_cast<double>(++stopElapsed);
+    const double total = static_cast<double>(stopTotal);
+    if (elapsed >= total)
+        return 0.0;
+    if (stopKind == StopKind::Brake)
+        return stopFrom * (1.0 - elapsed / total);
+    // Spin-back: a quick push backwards, then it slows (quadratically) to a stop.
+    const double spin = -stopFrom * kSpinBackRate;
+    const double attack = std::min(kSpinAttackSeconds * sampleRate, 0.3 * total);
+    if (elapsed <= attack)
+        return stopFrom + (spin - stopFrom) * (elapsed / attack);
+    const double v = 1.0 - (elapsed - attack) / (total - attack);
+    return spin * v * v;
+}
+
+void Deck::wrapLoopBack() noexcept
+{
+    const double length = loopOut - loopIn;
+    if (length <= 0.0)
+        return;
+    const double under = std::fmod(std::max(0.0, loopIn - playhead), length);
+    jumpTo(loopOut - under);
 }
 
 void Deck::seek(double samplePosition) noexcept
@@ -560,27 +652,45 @@ void Deck::render(float* left, float* right, int numSamples) noexcept
 
     // A loop (P3-03): split the block at the sample the playhead reaches its end, wrap, go on.
     int done = 0;
-    while (loopOn && state != Transport::Paused && scratch == Scratch::None && done < numSamples)
+    while (loopOn && state != Transport::Paused && scratch == Scratch::None && stopKind == StopKind::None &&
+           done < numSamples)
     {
         if (playhead >= loopOut)
         {
             wrapLoop();
             continue;
         }
+        if (reverseOn && playhead < loopIn) // reverse: went below the start at the end of the last part
+        {
+            wrapLoopBack();
+            continue;
+        }
         const double r = rate();
         if (r <= 0.0)
             break;
-        const double steps = std::ceil((loopOut - playhead) / r - 1e-9);
+        // Forward: wraps once at or past the end. Reverse (P3-05): once below the start, back to the end.
+        const double steps = reverseOn ? std::floor((playhead - loopIn) / r) + 1.0
+                                       : std::ceil((loopOut - playhead) / r - 1e-9);
         if (steps >= static_cast<double>(numSamples - done))
             break;
         const int n = std::max(1, static_cast<int>(steps));
         renderPart(left + done, right + done, n);
         done += n;
-        if (playhead >= loopOut)
+        if (!reverseOn && playhead >= loopOut)
             wrapLoop();
+        else if (reverseOn && playhead < loopIn)
+            wrapLoopBack();
     }
     if (done < numSamples)
         renderPart(left + done, right + done, numSamples - done);
+    // A brake / spin-back in a loop keeps it (to the block; the rate is changing anyway).
+    if (loopOn && stopKind != StopKind::None && state != Transport::Paused)
+    {
+        if (playhead >= loopOut)
+            wrapLoop();
+        else if (playhead < loopIn)
+            wrapLoopBack();
+    }
 }
 
 void Deck::renderPart(float* left, float* right, int numSamples) noexcept
@@ -593,6 +703,7 @@ void Deck::renderPart(float* left, float* right, int numSamples) noexcept
     double playheadEnd = playhead;
     double shadowEnd = shadow; // slip (P3-04): the normal rate, whatever the playhead does
     bool releaseFinished = false;
+    bool stopFinished = false;
     for (int i = 0; i < numSamples; ++i)
     {
         if (bend != bendTarget)
@@ -601,11 +712,21 @@ void Deck::renderPart(float* left, float* right, int numSamples) noexcept
         shadowEnd += r;
         if (scratch != Scratch::None && !releaseFinished)
         {
-            r = nextScratchRate(playheadEnd, r);
+            r = nextScratchRate(playheadEnd, reverseOn ? -r : r); // a release eases back to the deck's way
             if (scratch == Scratch::Releasing && releaseRemaining <= 0)
                 releaseFinished = true;
         }
-        else if (nudgeRemaining != 0.0)
+        else if (stopKind != StopKind::None && state == Transport::Playing)
+        {
+            r = stopFinished ? 0.0 : nextStopRate();
+            if (stopElapsed >= stopTotal)
+                stopFinished = true;
+        }
+        else if (reverseOn && state != Transport::Paused)
+        {
+            r = -r;
+        }
+        if (scratch == Scratch::None && stopKind == StopKind::None && nudgeRemaining != 0.0)
         {
             const double offset = std::clamp(nudgeRemaining, -kMaxNudgeRateOffset, kMaxNudgeRateOffset);
             nudgeRemaining -= offset;
@@ -618,8 +739,7 @@ void Deck::renderPart(float* left, float* right, int numSamples) noexcept
         shadow = std::min(shadowEnd, len);
 
     const bool sounding = state != Transport::Paused || scratch != Scratch::None;
-    const bool stretched =
-        keyLockOn && state != Transport::Paused && scratch == Scratch::None && !releaseFinished && stretcher != nullptr;
+    const bool stretched = stretchedNow() && !releaseFinished;
     if (stretched)
     {
         if (!stretcherPrimed)
@@ -656,6 +776,14 @@ void Deck::renderPart(float* left, float* right, int numSamples) noexcept
                 playhead = len;
                 atEnd = true;
                 state = Transport::Paused;
+                stopKind = StopKind::None;
+                mainFadeRemaining = 0;
+            }
+            else if (playhead < 0.0) // reverse / spin-back reached the start: stop there
+            {
+                playhead = 0.0;
+                state = Transport::Paused;
+                stopKind = StopKind::None;
                 mainFadeRemaining = 0;
             }
         }
@@ -680,6 +808,15 @@ void Deck::renderPart(float* left, float* right, int numSamples) noexcept
     lastRate = blockRates[static_cast<std::size_t>(numSamples - 1)];
     if (releaseFinished)
         finishScratchRelease();
+    if (stopFinished && stopKind != StopKind::None) // the brake / spin-back has come to a stop
+    {
+        stopKind = StopKind::None;
+        if (state == Transport::Playing)
+        {
+            state = Transport::Paused;
+            stopSounding();
+        }
+    }
 }
 
 } // namespace devildj::engine

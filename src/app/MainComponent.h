@@ -235,6 +235,8 @@ public:
     double jumpSize(engine::DeckId deck) const noexcept;
     std::function<void(bool on, double beats)> onQuantizeChanged;
     void toggleKeyLock(engine::DeckId deck);
+    // P3-05: how PAUSE stops (0 instantly, 1 vinyl brake, 2 spin-back) and the stop times in seconds.
+    void setStopStyle(int style, double brakeSeconds, double spinBackSeconds);
     void setIsolator(bool on);
     void setCrossfaderCurve(int curve);
     void setCrossfaderAssign(int deck, int assign);

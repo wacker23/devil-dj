@@ -61,6 +61,10 @@ struct DeckState
     bool slip = false;                // slip mode on
     bool slipping = false;            // the shadow playhead runs (the deck will return to it)
     double slipPositionSamples = 0.0; // the shadow (= the playhead when not slipping)
+
+    // Reverse and stops (P3-05).
+    bool reverse = false;
+    std::uint8_t stopping = 0; // 0 no, 1 braking, 2 spinning back
 };
 
 // Mixer channel settings as the audio thread has them (targets; the sound follows within 20 ms).

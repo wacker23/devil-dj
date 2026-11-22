@@ -165,12 +165,16 @@ void AudioEngine::advanceClock(int numSamples) noexcept
     {
         const auto& slot = decks[i];
         auto& in = inputs[i];
-        in.playing = slot.deck.track() != nullptr && slot.deck.isPlaying();
+        // A deck leads only while its timeline moves normally: slipping, its shadow is the timeline (P3-04);
+        // reversed or braking without slip it doesn't lead (the clock runs on at its tempo, P3-05).
+        const auto& d = slot.deck;
+        in.playing = d.track() != nullptr && d.isPlaying() &&
+                     (d.isSlipping() || (!d.isReverse() && !d.isStopping()));
         in.hasGrid = !slot.grid.empty();
         in.synced = slot.synced;
         if (in.hasGrid)
         {
-            const double position = slot.deck.position();
+            const double position = d.slipPosition();
             in.beat = slot.grid.beatAt(position);
             in.bpm = slot.grid.bpmAt(position) * slot.deck.rate();
         }
@@ -224,7 +228,7 @@ void AudioEngine::followMaster() noexcept
         // Tempo: the master's (or half / double), as heard.
         const double q = syncMultiple(masterBpm, gridBpm);
         deck.setSyncTempo((masterBpm * q / gridBpm - 1.0) * 100.0);
-        if (!deck.isPlaying())
+        if (!deck.isPlaying() || deck.isReverse() || deck.isStopping() || deck.isSlipping())
         {
             deck.setRateCorrection(1.0);
             continue;
@@ -761,6 +765,40 @@ void AudioEngine::apply(const SetSlip& command) noexcept
         decks[command.deck].slipHoldPad = -1;
 }
 
+void AudioEngine::apply(const SetReverse& command) noexcept
+{
+    if (command.deck < kMaxDecks && !decks[command.deck].hasPending)
+        decks[command.deck].deck.setReverse(command.on);
+}
+
+void AudioEngine::apply(const Stop& command) noexcept
+{
+    if (command.deck >= kMaxDecks || decks[command.deck].hasPending)
+        return;
+    auto& slot = decks[command.deck];
+    if (command.kind == StopKind::Instant || slot.deck.transport() != Deck::Transport::Playing ||
+        slot.deck.isScratching())
+    {
+        if (slot.deck.isPlaying())
+            apply(Pause{command.deck});
+        return;
+    }
+    if (slot.deck.isStopping())
+        return;
+    slot.hotCuePreview = -1;
+    if (command.kind == StopKind::Brake)
+        slot.deck.brake(brakeSeconds);
+    else
+        slot.deck.spinBack(spinBackSeconds);
+}
+
+void AudioEngine::apply(const SetStopStyle& command) noexcept
+{
+    pauseStyle = command.pause;
+    brakeSeconds = std::clamp(static_cast<double>(command.brakeSeconds), 0.05, 10.0);
+    spinBackSeconds = std::clamp(static_cast<double>(command.spinBackSeconds), 0.1, 10.0);
+}
+
 void AudioEngine::apply(const JumpBy& command) noexcept
 {
     if (command.deck >= kMaxDecks || decks[command.deck].hasPending)
@@ -787,7 +825,8 @@ void AudioEngine::renderDeckWithActions(DeckSlot& slot, float* l, float* r, int 
         else
         {
             const double rate = slot.deck.rate();
-            if (!slot.deck.isPlaying() || rate <= 0.0 || a.at < slot.deck.position())
+            if (!slot.deck.isPlaying() || rate <= 0.0 || slot.deck.isReverse() || slot.deck.isStopping() ||
+                a.at < slot.deck.position())
             {
                 due = done; // not moving forward, or its grid point is already behind (an earlier jump): now
             }
@@ -846,7 +885,11 @@ void AudioEngine::apply(const TogglePlay& command) noexcept
     const auto& slot = decks[command.deck];
     const bool waiting = std::any_of(slot.queued.begin(), slot.queued.begin() + slot.queuedCount,
                                      [](const auto& a) { return a.kind == DeckSlot::QueuedAction::Kind::Play; });
-    if (slot.deck.transport() == Deck::Transport::Playing || waiting)
+    if (slot.deck.isStopping())
+        apply(Play{command.deck}); // during a brake / spin-back: back to playing (P3-05)
+    else if (slot.deck.transport() == Deck::Transport::Playing && !waiting && pauseStyle != StopKind::Instant)
+        apply(Stop{command.deck, pauseStyle});
+    else if (slot.deck.transport() == Deck::Transport::Playing || waiting)
         apply(Pause{command.deck});
     else
         apply(Play{command.deck}); // from a held cue: keeps playing
@@ -1264,6 +1307,8 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         s.slip = d.slipOn();
         s.slipping = d.isSlipping();
         s.slipPositionSamples = d.slipPosition();
+        s.reverse = d.isReverse();
+        s.stopping = static_cast<std::uint8_t>(d.stopKindNow());
         if (s.hasGrid)
         {
             s.beat = slot.grid.beatAt(s.positionSamples);

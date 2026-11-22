@@ -467,6 +467,17 @@ void MainComponent::registerActions()
         onPress(cmd(DA::AutoLoop), [this, d] { engine.send(engine::Loop{d, engine::LoopOp::Auto, 0.0}); });
         onPress(cmd(DA::LoopIn), [this, d] { engine.send(engine::Loop{d, engine::LoopOp::In}); });
         onPress(cmd(DA::LoopOut), [this, d] { engine.send(engine::Loop{d, engine::LoopOp::Out}); });
+        // Reverse while held; brake / spin-back stop a playing deck (P3-05).
+        actions.setHandler(cmd(DA::Reverse),
+                           [this, d](Phase p)
+                           {
+                               if (p == Phase::Press)
+                                   engine.send(engine::SetReverse{d, true});
+                               else if (p == Phase::Release)
+                                   engine.send(engine::SetReverse{d, false});
+                           });
+        onPress(cmd(DA::Brake), [this, d] { engine.send(engine::Stop{d, engine::StopKind::Brake}); });
+        onPress(cmd(DA::SpinBack), [this, d] { engine.send(engine::Stop{d, engine::StopKind::SpinBack}); });
         onPress(cmd(DA::LoopHalve), [this, d] { engine.send(engine::Loop{d, engine::LoopOp::Halve}); });
         onPress(cmd(DA::LoopDouble), [this, d] { engine.send(engine::Loop{d, engine::LoopOp::Double}); });
         onPress(cmd(DA::Reloop),
@@ -705,6 +716,13 @@ void MainComponent::setHighQualityResampling(bool on)
 {
     engine.send(engine::SetInterpolationQuality{on ? engine::InterpolationQuality::High
                                                    : engine::InterpolationQuality::Standard});
+}
+
+void MainComponent::setStopStyle(int style, double brakeSeconds, double spinBackSeconds)
+{
+    const auto kind = style == 1 ? engine::StopKind::Brake : style == 2 ? engine::StopKind::SpinBack
+                                                                        : engine::StopKind::Instant;
+    engine.send(engine::SetStopStyle{kind, static_cast<float>(brakeSeconds), static_cast<float>(spinBackSeconds)});
 }
 
 void MainComponent::toggleKeyLock(engine::DeckId deck)
@@ -1376,7 +1394,8 @@ juce::StringArray MainComponent::statusLines()
             if (s.synced)
                 lines.add("   SYNC" + juce::String(s.master ? " (master)" : "") + "  phase " +
                           juce::String(s.phaseErrorMs, 2) + " ms");
-            lines.add(juce::String("   ") + (s.scratching ? "SCRATCH  " : "") + (s.keyLock ? "KEY LOCK  " : "") + (s.slip ? (s.slipping ? "SLIPPING  " : "SLIP  ") : "") +
+            lines.add(juce::String("   ") + (s.scratching ? "SCRATCH  " : "") + (s.keyLock ? "KEY LOCK  " : "") + (s.slip ? (s.slipping ? "SLIPPING  " : "SLIP  ") : "") + (s.reverse ? "REVERSE  " : "") +
+                      (s.stopping == 1 ? "BRAKE  " : s.stopping == 2 ? "SPIN-BACK  " : "") +
                       "tempo " + juce::String(s.tempoPercent >= 0 ? "+" : "") + juce::String(s.tempoPercent, 1) +
                       " % (range +-" + juce::String(juce::roundToInt(s.tempoRangePercent)) + ")  bend " +
                       juce::String(s.pitchBendPercent, 1) + " %  rate " + juce::String(s.rate, 4));

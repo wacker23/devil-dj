@@ -337,7 +337,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
   Shadow playhead keeps running during loops, hot-cue holds, scratching, reverse and pause; releasing returns to the shadow position.
   Done when: engine test: slip loop of 1 beat for 4 beats returns to exactly +4 beats.
 
-- [ ] **P3-05 Reverse and brake**
+- [x] **P3-05 Reverse and brake**
   Reverse playback toggle; vinyl brake / spin-back as release actions with adjustable time.
   Done when: manual test.
 

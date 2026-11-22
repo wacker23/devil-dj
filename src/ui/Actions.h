@@ -78,7 +78,9 @@ namespace devildj::ui
     X(CallPrevious, "Call the previous memory cue", false)                                                             \
     X(CallNext, "Call the next memory cue", false)                                                                     \
     X(LoopIn, "Loop in", false)                                                                                        \
-    X(LoopOut, "Loop out", false)
+    X(LoopOut, "Loop out", false)                                                                                      \
+    X(Brake, "Vinyl brake (stop)", false)                                                                              \
+    X(SpinBack, "Spin-back (stop)", false)
 
 #define DEVILDJ_GLOBAL_ACTIONS(X)                                                                                      \
     X(CrossfaderLeft, "Crossfader left (hold to glide)", false)                                                        \

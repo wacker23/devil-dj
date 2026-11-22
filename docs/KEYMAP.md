@@ -30,7 +30,8 @@ Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / r
 | Filter sweep to low-pass / high-pass (hold) | Shift+3 / Shift+4 | Shift+9 / Shift+0 |
 | Filter reset | Shift+5 | Shift+- |
 | Jump to track start | Shift+Z | Shift+M |
-| Reverse (hold) | Shift+X | Shift+, |
+| Reverse (hold; the REV button on the deck toggles it) | Shift+X | Shift+, |
+| Vinyl brake / spin-back (stop a playing deck; times and whether PAUSE brakes: Decks > Pause / stop) | Ctrl+Shift+D / Ctrl+Shift+F | Ctrl+Shift+L / Ctrl+Shift+; |
 | Key Sync (transpose to the master's key; turns key lock on) | Shift+C | Shift+. |
 | Key shift -1 / +1 semitone (turns key lock on) | Ctrl+1 / Ctrl+2 | Ctrl+7 / Ctrl+8 |
 | Memory cue: store one at the playhead (the MEM button lists them) | Ctrl+Z | Ctrl+M |

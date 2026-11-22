@@ -3,6 +3,7 @@
 #include "util/CrashHandler.h"
 #include "util/Log.h"
 
+#include <cmath>
 #include <thread>
 
 namespace devildj::app
@@ -49,6 +50,22 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
         ranges.addItem(TempoRange16, "+-16 %", true, tempoRange == 16.0);
         ranges.addItem(TempoRange50, "+-50 %", true, tempoRange == 50.0);
         menu.addSubMenu("Tempo range", ranges);
+        // P3-05: how PAUSE stops, and the brake / spin-back times.
+        juce::PopupMenu stops;
+        const char* styles[] = {"Instantly", "Vinyl brake", "Spin-back"};
+        for (int i = 0; i < 3; ++i)
+            stops.addItem(PauseStyleFirst + i, juce::String("Pause: ") + styles[i], true, pauseStyle == i);
+        stops.addSeparator();
+        juce::PopupMenu brakeTimes, spinTimes;
+        for (int i = 0; i < 5; ++i)
+        {
+            const auto name = juce::String(kStopTimes[i]) + " s";
+            brakeTimes.addItem(BrakeTimeFirst + i, name, true, std::abs(brakeSeconds - kStopTimes[i]) < 1e-6);
+            spinTimes.addItem(SpinTimeFirst + i, name, true, std::abs(spinBackSeconds - kStopTimes[i]) < 1e-6);
+        }
+        stops.addSubMenu("Brake time (Ctrl+Shift+D / L)", brakeTimes);
+        stops.addSubMenu("Spin-back time (Ctrl+Shift+F / ;)", spinTimes);
+        menu.addSubMenu("Pause / stop", stops);
         menu.addSeparator();
         menu.addItem(DebugOverlay, "Show status overlay (F12)");
     }
@@ -149,6 +166,18 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
             quantizeEighths = kQuantizeEighths[menuItemID - QuantizeFirst];
         if (onQuantize)
             onQuantize(quantize, quantizeEighths);
+        return;
+    }
+    if (menuItemID >= PauseStyleFirst && menuItemID <= SpinTimeLast)
+    {
+        if (menuItemID <= PauseStyleLast)
+            pauseStyle = menuItemID - PauseStyleFirst;
+        else if (menuItemID <= BrakeTimeLast)
+            brakeSeconds = kStopTimes[menuItemID - BrakeTimeFirst];
+        else
+            spinBackSeconds = kStopTimes[menuItemID - SpinTimeFirst];
+        if (onStopStyle)
+            onStopStyle(pauseStyle, brakeSeconds, spinBackSeconds);
         return;
     }
     if (menuItemID >= AutoGainTargetFirst && menuItemID <= AutoGainTargetLast)

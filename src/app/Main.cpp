@@ -128,6 +128,20 @@ public:
             mainComponent->setCrossfaderAssign(1, std::clamp(assignB, 0, 2));
             menu->setMixerState(cueMix, level, curve, assignA, assignB);
         }
+        {
+            const int style = std::clamp(settings->get(keys::pauseStyle), 0, 2);
+            const double brake = std::clamp(settings->get(keys::brakeSeconds), 0.05, 10.0);
+            const double spin = std::clamp(settings->get(keys::spinBackSeconds), 0.1, 10.0);
+            menu->setStopStyle(style, brake, spin);
+            mainComponent->setStopStyle(style, brake, spin);
+        }
+        menu->onStopStyle = [this](int style, double brake, double spin)
+        {
+            settings->set(keys::pauseStyle, style);
+            settings->set(keys::brakeSeconds, brake);
+            settings->set(keys::spinBackSeconds, spin);
+            mainComponent->setStopStyle(style, brake, spin);
+        };
         menu->setKeySyncCompatible(settings->get(keys::keySyncCompatible));
         mainComponent->setKeySyncCompatible(settings->get(keys::keySyncCompatible));
         menu->onKeySyncCompatible = [this](bool on)

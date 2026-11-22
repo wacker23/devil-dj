@@ -344,6 +344,9 @@ std::vector<KeyBinding> defaultKeymap()
         {X, Comma, mods::Ctrl | mods::Shift, DA::TapTempo},
         {C, Period, mods::Ctrl | mods::Shift, DA::Metronome},
         {V, Slash, mods::Ctrl | mods::Shift, DA::GridLock},
+        // Stops (P3-05).
+        {D, L, mods::Ctrl | mods::Shift, DA::Brake},
+        {F, Semicolon, mods::Ctrl | mods::Shift, DA::SpinBack},
     };
     for (const auto& r : rows)
     {

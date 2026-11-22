@@ -133,6 +133,9 @@ DeckView::DeckView(engine::AudioEngine& audioEngine, engine::DeckId deckId, Trac
     tap.setTooltip("Tap tempo: tap 4 times or more in time with the track");
     keyLock.onClick = [this] { engine.send(engine::SetKeyLock{deck, !state.keyLock}); };
     slip.onClick = [this] { engine.send(engine::SetSlip{deck, !state.slip}); };
+    reverse.onClick = [this] { engine.send(engine::SetReverse{deck, !state.reverse}); };
+    reverse.setTooltip("Reverse: play backwards (hold Shift+X / Shift+, for a moment of it; with SLIP on, it "
+                       "returns to where the track would be)");
     slip.setTooltip("Slip: loops, held hot cues, scratching and pause run on silently; letting go returns to "
                     "where the track would be (Ctrl+Q / Ctrl+U)");
     sync.onClick = [this] { engine.send(engine::SetSync{deck, !state.synced}); };
@@ -189,8 +192,9 @@ DeckView::DeckView(engine::AudioEngine& audioEngine, engine::DeckId deckId, Trac
     jumpSize.setTooltip("Beat jump size in beats (larger / smaller: Shift+6 / Ctrl+Shift+6, Shift+= / Ctrl+Shift+=)");
     for (auto* b : {static_cast<juce::Button*>(cue.get()), static_cast<juce::Button*>(&play),
                     static_cast<juce::Button*>(&sync), static_cast<juce::Button*>(&keyLock),
-                    static_cast<juce::Button*>(&slip), static_cast<juce::Button*>(&grid),
-                    static_cast<juce::Button*>(&tap), static_cast<juce::Button*>(&jumpBack), static_cast<juce::Button*>(&jumpForward),
+                    static_cast<juce::Button*>(&slip), static_cast<juce::Button*>(&reverse),
+                    static_cast<juce::Button*>(&grid), static_cast<juce::Button*>(&tap),
+                    static_cast<juce::Button*>(&jumpBack), static_cast<juce::Button*>(&jumpForward),
                     static_cast<juce::Button*>(&jumpSize), static_cast<juce::Button*>(&mem)})
     {
         b->setColour(juce::TextButton::buttonColourId, kPanel);
@@ -236,10 +240,11 @@ void DeckView::refresh()
     cue->setToggleState(state.cuePreview, juce::dontSendNotification);
     keyLock.setToggleState(state.keyLock, juce::dontSendNotification);
     slip.setToggleState(state.slip, juce::dontSendNotification);
+    reverse.setToggleState(state.reverse, juce::dontSendNotification);
     slip.setColour(juce::TextButton::buttonOnColourId, state.slipping ? juce::Colour(0xffe0a030) : kAccent);
     for (auto* b : {static_cast<juce::Button*>(cue.get()), static_cast<juce::Button*>(&play),
                     static_cast<juce::Button*>(&keyLock), static_cast<juce::Button*>(&slip),
-                    static_cast<juce::Button*>(&grid),
+                    static_cast<juce::Button*>(&reverse), static_cast<juce::Button*>(&grid),
                     static_cast<juce::Button*>(&tap), static_cast<juce::Button*>(&mem)})
         b->setEnabled(state.loaded);
     grid.setToggleState(state.metronome || state.gridLocked, juce::dontSendNotification);
@@ -316,12 +321,14 @@ void DeckView::resized()
     }
     overviewView->setBounds(area);
 
-    const int w = std::min(96, (buttons.getWidth() - 6 * kMargin - 120) / 5);
+    const int w = std::min(96, (buttons.getWidth() - 7 * kMargin - 120) / 6);
     cue->setBounds(buttons.removeFromLeft(w));
     buttons.removeFromLeft(kMargin);
     play.setBounds(buttons.removeFromLeft(w));
     buttons.removeFromLeft(kMargin);
     sync.setBounds(buttons.removeFromLeft(w));
+    reverse.setBounds(buttons.removeFromRight(w));
+    buttons.removeFromRight(kMargin);
     slip.setBounds(buttons.removeFromRight(w));
     buttons.removeFromRight(kMargin);
     keyLock.setBounds(buttons.removeFromRight(w + 16));

@@ -92,6 +92,29 @@ public:
     double slipPosition() const noexcept { return slipReasons != 0 ? shadow : playhead; }
     void beginSlipHold() noexcept { beginSlip(kSlipHold); } // a hot cue held while playing (call before the jump)
     void endSlipHold() noexcept { endSlip(kSlipHold); }
+
+    // Reverse (P3-05): the playhead runs backwards at the same rate (key lock is bypassed meanwhile, crossfaded).
+    // Loops wrap from their start back to their end. At the start of the track the deck stops. With slip on,
+    // reverse is a slip reason: turning it off returns to where the track would be ("censor").
+    void setReverse(bool on) noexcept;
+    bool isReverse() const noexcept { return reverseOn; }
+
+    // Brake / spin-back (P3-05): stopping as a turntable does, over `seconds`. Brake: the rate falls linearly to 0.
+    // Spin-back: the record is spun backwards (kSpinBackRate x the rate, reached in 60 ms) and slows to a stop.
+    // Either ends paused; play during it takes the deck back to its normal rate (with slip: to the shadow, as
+    // the stop is a slip pause from its first sample). Only while playing; key lock is bypassed meanwhile.
+    enum class StopKind : std::uint8_t
+    {
+        None,
+        Brake,
+        SpinBack,
+    };
+    void brake(double seconds) noexcept { startStop(StopKind::Brake, seconds); }
+    void spinBack(double seconds) noexcept { startStop(StopKind::SpinBack, seconds); }
+    bool isStopping() const noexcept { return stopKind != StopKind::None; }
+    StopKind stopKindNow() const noexcept { return stopKind; }
+    static constexpr double kSpinBackRate = 3.0;
+    static constexpr double kSpinAttackSeconds = 0.06;
     double loopStart() const noexcept { return loopIn; }
     double loopEnd() const noexcept { return loopOut; }
 
@@ -212,13 +235,24 @@ private:
     double loopIn = 0.0, loopOut = 0.0;
     void wrapLoop() noexcept;
     // Slip (P3-04): why the shadow runs (a set of reasons; it returns when the last one ends).
-    static constexpr std::uint8_t kSlipLoop = 1, kSlipHold = 2, kSlipScratch = 4, kSlipPause = 8;
+    static constexpr std::uint8_t kSlipLoop = 1, kSlipHold = 2, kSlipScratch = 4, kSlipPause = 8, kSlipReverse = 16;
     bool slipEnabled = false;
     std::uint8_t slipReasons = 0;
     double shadow = 0.0;
     void beginSlip(std::uint8_t reason) noexcept;
     void endSlip(std::uint8_t reason) noexcept;
     void slipReturn() noexcept;
+    // Reverse and stops (P3-05).
+    bool reverseOn = false;
+    StopKind stopKind = StopKind::None;
+    int stopTotal = 1, stopElapsed = 0;
+    double stopFrom = 0.0; // the signed rate when the stop began
+    void startStop(StopKind kind, double seconds) noexcept;
+    void cancelStop() noexcept;
+    double nextStopRate() noexcept;
+    bool stretchedNow() const noexcept; // the main head plays through the stretcher (key lock, moving normally)
+    void switchSource(bool wasStretched) noexcept; // crossfade when that changed
+    void wrapLoopBack() noexcept;
     void renderPart(float* left, float* right, int numSamples) noexcept;
 
     int mainFadeRemaining = 0; // > 0 while the main head fades in

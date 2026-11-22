@@ -53,5 +53,9 @@ inline const SettingKey<int> quantizeEighths{"quantizeEighths", 8};
 // Key Sync (P2-22): also accept keys compatible with the master's (a step round the Camelot wheel), not only its
 // own Camelot number - smaller moves.
 inline const SettingKey<bool> keySyncCompatible{"keySyncCompatible", false};
+// P3-05: how PAUSE stops a playing deck (0 instantly, 1 vinyl brake, 2 spin-back) and the stop times in seconds.
+inline const SettingKey<int> pauseStyle{"pauseStyle", 0};
+inline const SettingKey<double> brakeSeconds{"brakeSeconds", 1.0};
+inline const SettingKey<double> spinBackSeconds{"spinBackSeconds", 1.0};
 
 } // namespace devildj::app::keys
