@@ -80,7 +80,8 @@ namespace devildj::ui
     X(LoopIn, "Loop in", false)                                                                                        \
     X(LoopOut, "Loop out", false)                                                                                      \
     X(Brake, "Vinyl brake (stop)", false)                                                                              \
-    X(SpinBack, "Spin-back (stop)", false)                                                                                 X(ReleaseEchoOut, "Release FX: echo out (hold)", false)                                                                X(ReleaseBrake, "Release FX: brake (hold)", false)                                                                     X(ReleaseSpinBack, "Release FX: spin back (hold)", false)                                                              X(ReleaseSweep, "Release FX: filter sweep (hold)", false)
+    X(SpinBack, "Spin-back (stop)", false)                                                                                 X(ReleaseEchoOut, "Release FX: echo out (hold)", false)                                                                X(ReleaseBrake, "Release FX: brake (hold)", false)                                                                     X(ReleaseSpinBack, "Release FX: spin back (hold)", false)                                                              X(ReleaseSweep, "Release FX: filter sweep (hold)", false)                                                          \
+    X(CaptureToSampler, "Capture the loop (or slicer range) to the sampler", false)
 
 #define DEVILDJ_GLOBAL_ACTIONS(X)                                                                                      \
     X(CrossfaderLeft, "Crossfader left (hold to glide)", false)                                                        \

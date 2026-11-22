@@ -138,6 +138,10 @@ private:
     bool showSampler = false;
     void showPanel(bool sampler);
     void loadSample(int slot, const juce::File& file, double bpm, const juce::String& name);
+    // P3-14: the deck's loop (or, with slicer = true, its slicer range) into a sampler slot - the shown bank's first
+    // empty one - and saved as a 32-bit float WAV in Documents\Devil-DJ\Samples.
+    void captureToSampler(engine::DeckId deck, bool slicer);
+    static juce::File samplesFolder();
     void chooseSampleFile(int slot);
     std::unique_ptr<juce::FileChooser> sampleChooser;
     void chooseEffect(int unit, int slot, int type); // creates and installs it (-1: empty the slot)

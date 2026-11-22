@@ -547,6 +547,8 @@ void MainComponent::registerActions()
                            });
         onPress(cmd(DA::Brake), [this, d] { engine.send(engine::Stop{d, engine::StopKind::Brake}); });
         onPress(cmd(DA::SpinBack), [this, d] { engine.send(engine::Stop{d, engine::StopKind::SpinBack}); });
+        onPress(cmd(DA::CaptureToSampler), // P3-14 (no default key): the loop, else the slicer range
+                [this, d] { captureToSampler(d, !engine.readState().decks[d].loopActive); });
         // Release FX (P3-11), held: no default keys (bind them in keymap.json); the FX panel has buttons.
         for (const auto [action, kind] : {std::pair{DA::ReleaseEchoOut, 0}, std::pair{DA::ReleaseBrake, 1},
                                           std::pair{DA::ReleaseSpinBack, 2}, std::pair{DA::ReleaseSweep, 3}})
@@ -921,6 +923,7 @@ void MainComponent::showLoopMenu(engine::DeckId deck)
     m.addItem("Save as a memory loop (Ctrl+Z / Ctrl+M)", s.loopActive && deckGrids[deck].trackId != 0, false,
               [this, deck] { addMemoryCue(deck); });
     m.addItem("Export the loop as WAV...", s.loopActive, false, [this, deck] { exportLoop(deck); });
+    m.addItem("Capture the loop to the sampler", s.loopActive, false, [this, deck] { captureToSampler(deck, false); });
     m.addItem("Exit the loop", s.loopActive, false, [this, deck] { engine.send(engine::Loop{deck, engine::LoopOp::Exit}); });
     m.showMenuAsync(juce::PopupMenu::Options().withMousePosition());
 }
@@ -1244,6 +1247,65 @@ void MainComponent::padAction(engine::DeckId deck, int pad, bool alternate, bool
     }
 }
 
+juce::File MainComponent::samplesFolder()
+{
+    return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("Devil-DJ/Samples");
+}
+
+void MainComponent::captureToSampler(engine::DeckId deck, bool slicer)
+{
+    if (deck >= 2)
+        return;
+    const auto& s = engine.readState();
+    const auto& st = s.decks[deck];
+    if (slicer ? !st.slicerOn : !st.loopActive)
+        return;
+    const double a = slicer ? st.slicerStart : st.loopStart;
+    const double b = slicer ? st.slicerEnd : st.loopEnd;
+    const auto track = registry.get(st.bufferId);
+    if (track == nullptr)
+        return;
+    std::shared_ptr<const engine::TrackBuffer> copy =
+        app::copyRange(*track, static_cast<int>(std::llround(a)), static_cast<int>(std::llround(b)));
+    if (copy == nullptr)
+        return;
+    const auto& grid = deckGrids[deck].grid;
+    const double bpm = grid.empty() ? 0.0 : grid.bpmAt(a);
+    // The shown bank's first empty slot, else any empty one, else the bank's first.
+    const int bank = samplerPanel.bank() * engine::Sampler::kSlotsPerBank;
+    int slot = -1;
+    for (int i = 0; i < engine::Sampler::kSlots && slot < 0; ++i)
+    {
+        const int candidate = (bank + i) % engine::Sampler::kSlots;
+        if (!s.sampler[static_cast<std::size_t>(candidate)].loaded)
+            slot = candidate;
+    }
+    if (slot < 0)
+        slot = bank;
+    const auto* raw = copy.get();
+    const auto id = registry.add(copy);
+    if (!engine.send(engine::SamplerLoad{static_cast<std::uint8_t>(slot), raw, id, static_cast<float>(bpm)}))
+    {
+        registry.release(id);
+        return;
+    }
+    const auto title = track->title.isNotEmpty() ? track->title : track->file.getFileNameWithoutExtension();
+    const auto stamp = juce::Time::getCurrentTime().formatted("%Y-%m-%d %H%M%S");
+    const auto name = juce::String(slicer ? "Slices " : "Loop ") + (bpm > 0.0 ? juce::String(bpm, 1) + " " : juce::String()) + title;
+    samplerPanel.setSlotName(slot, name);
+    // Saved for later (and for other software), off the message thread.
+    const auto file = samplesFolder().getChildFile(juce::File::createLegalFileName(name + " " + stamp + ".wav"));
+    juce::Thread::launch(
+        [copy, file]
+        {
+            file.getParentDirectory().createDirectory();
+            if (const auto error = app::writeLoopWav(*copy, 0, copy->numSamples(), file, 32); error.isNotEmpty())
+                util::logWarning("Capture: {}", error.toStdString());
+            else
+                util::logInfo("Capture: saved {}", file.getFullPathName().toStdString());
+        });
+}
+
 void MainComponent::showPanel(bool sampler)
 {
     showSampler = sampler;
@@ -1472,6 +1534,8 @@ void MainComponent::showPadModeMenu(engine::DeckId deck)
         m.addItem(name, true, padModes[deck] == mode, [this, deck, mode] { setPadMode(deck, mode); });
     }
     m.addSeparator();
+    m.addItem("Capture the slicer range to the sampler", engine.readState().decks[deck].slicerOn, false,
+              [this, deck] { captureToSampler(deck, true); });
     for (const double beats : {8.0, 16.0, 32.0})
         m.addItem("Slicer: " + juce::String(juce::roundToInt(beats)) + " beats", true, slicerBeats[deck] == beats,
                   [this, deck, beats]

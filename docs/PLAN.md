@@ -379,7 +379,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
   4 banks × 8 slots; load from library, file, loop capture or Beat Maker (Phase 4); modes one-shot / loop / gate; quantized start; sync to master BPM (stretch); per-slot gain; sampler bus with its own channel strip, cue, and crossfader assign.
   Done when: 8 simultaneous looped slots, synced, no xruns.
 
-- [ ] **P3-14 Capture**
+- [x] **P3-14 Capture**
   Capture the current loop or slicer range of a deck into a sampler slot (saved as WAV in the user samples folder).
   Done when: captured loop plays back sample-identical (test).
 
