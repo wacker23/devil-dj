@@ -26,6 +26,7 @@ target_sources(DevilDJTests PRIVATE
     beatmaker/BeatMakerSmokeTests.cpp
     codebeat/CodeBeatSmokeTests.cpp
     dsp/DriftBufferTests.cpp
+    dsp/FxTests.cpp
     dsp/DspSmokeTests.cpp
     dsp/ResamplerTests.cpp
     dsp/SincResamplerTests.cpp

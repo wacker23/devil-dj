@@ -28,6 +28,11 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
 {
     sampleRate = newSampleRate > 0.0 ? newSampleRate : 48000.0;
     capacity = std::max(maxBlockSize, 1);
+    preparedBlockSize = capacity;
+    for (auto& unit : fxUnits) // P3-08
+        unit.prepare(sampleRate, capacity);
+    for (auto& effect : ownedEffects)
+        effect->prepare(sampleRate, capacity);
     masterBus.setSize(2, capacity, false, true, false);
     cueBus.setSize(2, capacity, false, true, false);
     deckScratch.setSize(2, capacity, false, true, false);
@@ -921,6 +926,117 @@ void AudioEngine::apply(const SlicerPad& command) noexcept
     rollSlice(slot, command.pad);
 }
 
+// ---- FX (P3-08) ----
+
+bool AudioEngine::installEffect(int unit, int slot, std::unique_ptr<dsp::fx::Effect> effect)
+{
+    if (unit < 0 || unit >= kFxUnits || slot < 0 || slot >= kFxSlots)
+        return false;
+    dsp::fx::Effect* raw = effect.get();
+    if (effect != nullptr)
+    {
+        effect->prepare(sampleRate, preparedBlockSize);
+        ownedEffects.push_back(std::move(effect));
+    }
+    if (send(FxSetEffect{static_cast<std::uint8_t>(unit), static_cast<std::uint8_t>(slot), raw}))
+        return true;
+    if (raw != nullptr)
+        ownedEffects.pop_back();
+    return false;
+}
+
+int AudioEngine::collectEffects()
+{
+    int collected = 0;
+    dsp::fx::Effect* e = nullptr;
+    while (releasedEffects.tryPop(e))
+    {
+        const auto it = std::find_if(ownedEffects.begin(), ownedEffects.end(),
+                                     [e](const auto& owned) { return owned.get() == e; });
+        if (it != ownedEffects.end())
+        {
+            ownedEffects.erase(it);
+            ++collected;
+        }
+    }
+    return collected;
+}
+
+void AudioEngine::retireEffect(dsp::fx::Effect* effect) noexcept
+{
+    if (effect == nullptr)
+        return;
+    if (releasedEffects.tryPush(effect))
+        return;
+    if (numPendingEffects < kMaxPendingEffects)
+        pendingEffects[static_cast<std::size_t>(numPendingEffects++)] = effect;
+    // (more than that in one go: it stays owned until the engine goes away)
+}
+
+void AudioEngine::apply(const FxSetEffect& command) noexcept
+{
+    if (command.unit >= kFxUnits || command.slot >= kFxSlots)
+        return;
+    auto& slot = fxUnits[command.unit].slot(command.slot);
+    retireEffect(slot.effect());
+    slot.setEffect(command.effect);
+    if (command.effect != nullptr)
+        command.effect->setBeats(fxBeats[command.unit][command.slot] > 0.0f ? fxBeats[command.unit][command.slot]
+                                                                             : 1.0);
+}
+
+void AudioEngine::apply(const FxCommand& command) noexcept
+{
+    if (command.unit >= kFxUnits)
+        return;
+    auto& unit = fxUnits[command.unit];
+    const int s = std::min<int>(command.slot, kFxSlots - 1);
+    auto& slot = unit.slot(s);
+    switch (command.op)
+    {
+        case FxOp::On:
+            if (command.value == 0.0f || unit.slotUsable(s))
+                slot.setOn(command.value != 0.0f);
+            break;
+        case FxOp::Wet:
+            slot.setWet(command.value);
+            break;
+        case FxOp::Beats:
+            fxBeats[command.unit][static_cast<std::size_t>(s)] = std::clamp(command.value, 1.0f / 16.0f, 16.0f);
+            if (slot.effect() != nullptr)
+                slot.effect()->setBeats(fxBeats[command.unit][static_cast<std::size_t>(s)]);
+            break;
+        case FxOp::Param:
+            if (slot.effect() != nullptr)
+                slot.effect()->setParam(command.index, std::clamp(command.value, 0.0f, 1.0f));
+            break;
+        case FxOp::Target:
+        {
+            const int t = static_cast<int>(command.value);
+            if (t >= 0 && t < kFxTargetCount)
+            {
+                fxTargets[command.unit] = static_cast<FxTarget>(t);
+                unit.reset(); // no tail carried from one place to another (switched-on slots start again)
+            }
+            break;
+        }
+        case FxOp::Mode:
+            unit.setMode(command.value != 0.0f ? dsp::fx::FxUnit::Mode::Single : dsp::fx::FxUnit::Mode::Multi);
+            break;
+    }
+}
+
+void AudioEngine::processFx(FxTarget target, float* left, float* right, int numSamples) noexcept
+{
+    dsp::fx::BeatContext beat;
+    beat.bpm = clock.bpm();
+    beat.beatAtBlockStart = clock.beatAtBlockStart();
+    beat.beatsPerSample = clock.beatsPerSample();
+    for (int u = 0; u < kFxUnits; ++u)
+        if (fxTargets[static_cast<std::size_t>(u)] == target)
+            fxUnits[static_cast<std::size_t>(u)].process(left, right, numSamples, beat);
+}
+
 void AudioEngine::apply(const JumpBy& command) noexcept
 {
     if (command.deck >= kMaxDecks || decks[command.deck].hasPending)
@@ -1146,6 +1262,7 @@ void AudioEngine::renderMaster(int numSamples) noexcept
     // Master gain (the limiter runs in finishBuses, after the headphone mix has taken its copy).
     float* l = masterBus.getWritePointer(0);
     float* r = masterBus.getWritePointer(1);
+    processFx(FxTarget::Master, l, r, numSamples); // FX units on the master (P3-08)
     if (masterGain.isRamping() || masterGain.value() != 1.0)
         for (int i = 0; i < numSamples; ++i)
         {
@@ -1300,6 +1417,7 @@ void AudioEngine::renderDecks(int numSamples) noexcept
         updateSlicer(slot);
         renderMetronome(i, before, slot.deck.position(), numSamples);
         strips[i].processPreFader(l, r, numSamples);
+        processFx(static_cast<FxTarget>(i), l, r, numSamples); // FX units on this channel (P3-08)
         m.meter.process(l, r, numSamples);
         if (m.cueSend.isRamping() || m.cueSend.value() > 0.0)
         {
@@ -1384,6 +1502,35 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
     current.outputChannels = numChannels;
     current.cueRouted = cueIsRouted(layout, numChannels);
     current.buffersAwaitingRelease = static_cast<std::uint32_t>(numPendingReleases);
+    {
+        int kept = 0; // replaced effects that didn't fit into the queue: try again
+        for (int i = 0; i < numPendingEffects; ++i)
+        {
+            auto* e = pendingEffects[static_cast<std::size_t>(i)];
+            if (!releasedEffects.tryPush(e))
+                pendingEffects[static_cast<std::size_t>(kept++)] = e;
+        }
+        numPendingEffects = kept;
+        current.effectsAwaitingRelease = static_cast<std::uint32_t>(numPendingEffects);
+        for (int u = 0; u < kFxUnits; ++u)
+        {
+            const auto& unit = fxUnits[static_cast<std::size_t>(u)];
+            auto& fs = current.fx[static_cast<std::size_t>(u)];
+            fs.target = fxTargets[static_cast<std::size_t>(u)];
+            fs.mode = unit.mode() == dsp::fx::FxUnit::Mode::Single ? 1 : 0;
+            for (int s = 0; s < kFxSlots; ++s)
+            {
+                const auto& slot = unit.slot(s);
+                auto& ss = fs.slots[static_cast<std::size_t>(s)];
+                ss.hasEffect = slot.effect() != nullptr;
+                ss.on = slot.isOn();
+                ss.stage = static_cast<std::uint8_t>(slot.stage());
+                ss.wet = slot.wet();
+                const float b = fxBeats[static_cast<std::size_t>(u)][static_cast<std::size_t>(s)];
+                ss.beats = b > 0.0f ? b : 1.0f;
+            }
+        }
+    }
     for (std::size_t i = 0; i < decks.size(); ++i)
     {
         const auto& slot = decks[i];

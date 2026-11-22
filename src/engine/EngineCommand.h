@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dsp/fx/Effect.h"
 #include "engine/EngineIds.h"
 #include "engine/MasterClock.h"
 #include "engine/OutputRouter.h"
@@ -355,6 +356,33 @@ struct SlicerPad
     bool release = false;
 };
 
+// FX units (P3-08). An effect is created and prepared on the message thread (AudioEngine::installEffect) and
+// handed over by pointer; the one it replaces comes back through the engine's release queue.
+struct FxSetEffect
+{
+    std::uint8_t unit = 0, slot = 0;
+    dsp::fx::Effect* effect = nullptr; // nullptr: empty the slot
+};
+
+enum class FxOp : std::uint8_t
+{
+    On,     // slot on (value != 0) / off (with its tail)
+    Wet,    // slot dry / wet 0..1
+    Beats,  // slot beat length (beats)
+    Param,  // slot parameter `index` (0..1)
+    Target, // unit target (value = FxTarget)
+    Mode,   // unit mode (0 multi, 1 single)
+};
+
+struct FxCommand
+{
+    std::uint8_t unit = 0;
+    FxOp op = FxOp::On;
+    std::uint8_t slot = 0;
+    std::uint8_t index = 0;
+    float value = 0.0f;
+};
+
 // Beat sync (P2-19): the deck follows the master clock's tempo (half / double aware) and phase.
 struct SetSync
 {
@@ -367,7 +395,7 @@ using EngineCommand =
                  Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo, PitchBend, SetInterpolationQuality, SetKeyLock,
                  SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge, SetParam, SetBeatgrid, SetMetronome,
                  SetClockSource, SetInternalTempo, SetSync, SetQuantize, BeatJump, JumpBy, SetHotCues, HotCue,
-                 SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle, SetSlicer, SlicerPad>;
+                 SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle, SetSlicer, SlicerPad, FxSetEffect, FxCommand>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

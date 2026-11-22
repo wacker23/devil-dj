@@ -74,6 +74,23 @@ struct DeckState
     int slicerRolling = -1; // the slice being rolled
 };
 
+// An FX unit as the audio thread has it (P3-08).
+struct FxSlotState
+{
+    bool hasEffect = false;
+    bool on = false;         // switched on
+    std::uint8_t stage = 0;  // dsp::fx::FxSlot::Stage: 0 off, 1 on, 2 fading out, 3 tail
+    float wet = 1.0f;
+    float beats = 1.0f;
+};
+
+struct FxUnitState
+{
+    FxTarget target = FxTarget::Master;
+    std::uint8_t mode = 0; // 0 multi, 1 single
+    std::array<FxSlotState, kFxSlots> slots{};
+};
+
 // Mixer channel settings as the audio thread has them (targets; the sound follows within 20 ms).
 struct ChannelState
 {
@@ -143,6 +160,10 @@ struct EngineState
     // Quantize (P2-20).
     bool quantize = false;
     float quantizeBeats = 1.0f;
+
+    // FX units (P3-08).
+    std::array<FxUnitState, kFxUnits> fx{};
+    std::uint32_t effectsAwaitingRelease = 0; // replaced effects not yet handed back (queue was full)
 };
 
 static_assert(std::is_trivially_copyable_v<EngineState>, "EngineState must stay trivially copyable");

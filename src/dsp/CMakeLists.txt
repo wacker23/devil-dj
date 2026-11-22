@@ -2,6 +2,8 @@
 add_library(devildj_dsp STATIC
     DriftBuffer.cpp
     Limiter.cpp
+    fx/FxSlot.cpp
+    fx/FxUnit.cpp
     Resampler.cpp
     SignalsmithStretcher.cpp
     SincResampler.cpp)
@@ -13,6 +15,9 @@ target_sources(devildj_dsp PUBLIC
     FILES
         Biquad.h
         DriftBuffer.h
+        fx/Effect.h
+        fx/FxSlot.h
+        fx/FxUnit.h
         LevelMeter.h
         Limiter.h
         LinearRamp.h

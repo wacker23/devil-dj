@@ -40,6 +40,21 @@ constexpr int kChannelParamCount = static_cast<int>(ChannelParam::Count);
 
 // Flat id of every continuous parameter (ARCHITECTURE 3.2) so MIDI Learn and the keymap address them the same
 // way: channel 0 Trim, EqLow, ... then channel 1 ... Later tasks append (crossfader, master, FX, ...).
+// FX units (P3-08): two, each with 3 slots; where each one is inserted.
+constexpr int kFxUnits = 2;
+constexpr int kFxSlots = 3;
+enum class FxTarget : std::uint8_t
+{
+    Deck0, // decks 1-4: in the channel strip, after the filter / color FX, before the fader
+    Deck1,
+    Deck2,
+    Deck3,
+    Sampler,  // the sampler channel (P3-13; until it exists the unit has nothing to process)
+    CodeDeck, // the code deck channel (Phase 5; likewise)
+    Master,   // the master bus, before master gain and the limiter
+};
+constexpr int kFxTargetCount = 7;
+
 // Hot cues per deck (P3-01): two pages of 8 pads (A-H, I-P).
 constexpr int kHotCues = 16;
 

@@ -3,6 +3,7 @@
 #include "dsp/DriftBuffer.h"
 #include "dsp/LevelMeter.h"
 #include "dsp/Limiter.h"
+#include "dsp/fx/FxUnit.h"
 #include "engine/ChannelStrip.h"
 #include "engine/Crossfader.h"
 #include "engine/MasterClock.h"
@@ -19,6 +20,8 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <memory>
+#include <vector>
 
 namespace devildj::engine
 {
@@ -54,6 +57,14 @@ public:
     // Ids of buffers the engine no longer uses; the owner pops them (10 Hz housekeeping) and releases them from
     // the BufferRegistry. Message thread.
     bool popReleasedBuffer(BufferId& id) noexcept { return releasedBuffers.tryPop(id); }
+
+    // FX (P3-08), message thread: prepares the effect for the current device, keeps it, and hands it to the audio
+    // thread for that unit / slot (nullptr empties the slot). False if the command queue is full (the effect is
+    // then dropped). collectEffects() deletes the effects the audio thread has let go of; call it now and then
+    // (the app's timer). Effects are prepared again when the engine is.
+    bool installEffect(int unit, int slot, std::unique_ptr<dsp::fx::Effect> effect);
+    int collectEffects();
+    int ownedEffectCount() const noexcept { return static_cast<int>(ownedEffects.size()); }
 
     // Latest published state. One reader thread only (the UI); the reference stays valid until the next call.
     const EngineState& readState() noexcept { return state.read(); }
@@ -128,6 +139,10 @@ private:
     void apply(const SetStopStyle& command) noexcept;
     void apply(const SetSlicer& command) noexcept;
     void apply(const SlicerPad& command) noexcept;
+    void apply(const FxSetEffect& command) noexcept;
+    void apply(const FxCommand& command) noexcept;
+    void processFx(FxTarget target, float* left, float* right, int numSamples) noexcept;
+    void retireEffect(dsp::fx::Effect* effect) noexcept;
     void followMaster() noexcept;                              // P2-19: every synced deck that doesn't lead
     bool tempoToMaster(DeckId deck, double percent) noexcept; // sync lock: a follower's fader moves the master
     void advanceClock(int numSamples) noexcept;
@@ -147,6 +162,16 @@ private:
     std::unique_ptr<CommandQueue> commandQueue = std::make_unique<CommandQueue>();
     CommandQueue& commands = *commandQueue;
     util::SpscQueue<BufferId, 256> releasedBuffers; // audio thread -> message thread
+    // FX units (P3-08): the units and their targets (audio thread), the effects (owned by the message thread).
+    std::array<dsp::fx::FxUnit, kFxUnits> fxUnits;
+    std::array<FxTarget, kFxUnits> fxTargets{FxTarget::Master, FxTarget::Master};
+    std::array<std::array<float, kFxSlots>, kFxUnits> fxBeats{};
+    util::SpscQueue<dsp::fx::Effect*, 64> releasedEffects; // audio thread -> message thread
+    static constexpr int kMaxPendingEffects = 16;
+    std::array<dsp::fx::Effect*, kMaxPendingEffects> pendingEffects{};
+    int numPendingEffects = 0;
+    std::vector<std::unique_ptr<dsp::fx::Effect>> ownedEffects; // message thread only
+    int preparedBlockSize = 512;
     util::TripleBuffer<EngineState> state;
     std::atomic<std::uint64_t> dropped{0};
 

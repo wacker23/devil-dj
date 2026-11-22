@@ -353,7 +353,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
 
 ### Effects
 
-- [ ] **P3-08 FX framework**
+- [x] **P3-08 FX framework**
   `dsp/fx/Effect` interface (prepare, reset, process stereo block, beat-synced parameters from MasterClock, dry/wet, on/off with tail handling). Two FX units, each with up to 3 slots (multi mode) or 1 effect with full parameters (single mode); target selectable per unit: deck 1–4, sampler, code deck, master.
   Done when: unit tests for tail handling and bypass (bit-exact when off).
 
