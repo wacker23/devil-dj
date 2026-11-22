@@ -67,6 +67,8 @@ public:
     bool installEffect(int unit, int slot, std::unique_ptr<dsp::fx::Effect> effect);
     int collectEffects();
     int ownedEffectCount() const noexcept { return static_cast<int>(ownedEffects.size()); }
+    // Pad FX (P3-12), message thread: the effect behind a deck's pad (owned like installEffect's).
+    bool installPadEffect(int deck, int pad, std::unique_ptr<dsp::fx::Effect> effect);
 
     // Latest published state. One reader thread only (the UI); the reference stays valid until the next call.
     const EngineState& readState() noexcept { return state.read(); }
@@ -145,6 +147,8 @@ private:
     void apply(const FxCommand& command) noexcept;
     void apply(const SetColorFx& command) noexcept;
     void apply(const ReleaseFxCommand& command) noexcept;
+    void apply(const PadFxSetEffect& command) noexcept;
+    void apply(const PadFxCommand& command) noexcept;
     dsp::fx::BeatContext beatContext() const noexcept;
     void processFx(FxTarget target, float* left, float* right, int numSamples) noexcept;
     void retireEffect(dsp::fx::Effect* effect) noexcept;
@@ -254,6 +258,8 @@ private:
     dsp::fx::ColorFx::Type colorType = dsp::fx::ColorFx::Type::Filter;
     // Release FX (P3-11), one per channel after the color FX; when one has ended its deck pauses.
     std::array<dsp::fx::ReleaseFx, kMaxChannels> releaseFx;
+    // Pad FX (P3-12): per channel, one slot per pad, after the color FX (before the release FX).
+    std::array<std::array<dsp::fx::FxSlot, kPadFxSlots>, kMaxChannels> padFx;
     struct MixerChannel
     {
         CrossfaderAssign assign = CrossfaderAssign::Thru;

@@ -17,6 +17,7 @@
 #include "ui/DebugOverlay.h"
 #include "ui/DeckView.h"
 #include "ui/FxPanel.h"
+#include "PadFxPresets.h"
 #include "ui/LibraryBrowser.h"
 #include "ui/MemoryCuePanel.h"
 #include "ui/KeyboardController.h"
@@ -193,6 +194,12 @@ private:
     // The pad grid (P3-06): each deck's mode; a pad press / release in it; the mode menu.
     std::array<ui::PadMode, 2> padModes{ui::PadMode::HotCue, ui::PadMode::HotCue};
     std::array<double, 2> slicerBeats{8.0, 8.0}; // P3-07
+    // Pad FX (P3-12): the presets, the bank on the pads, its effects installed behind both decks' pads.
+    app::PadFxPresets padFxPresets = app::defaultPadFxPresets();
+    int padFxBank = 0;
+    void installPadFxBank();
+    void showPadFxMenu(engine::DeckId deck, int pad);
+    void editPadFx(int pad, const app::PadFxPreset& preset); // the current bank's pad
     void setPadMode(engine::DeckId deck, ui::PadMode mode);
     void padAction(engine::DeckId deck, int pad, bool alternate, bool release);
     void showPadModeMenu(engine::DeckId deck);
@@ -250,6 +257,9 @@ public:
     // P3-10: what the FILTER knobs do (the mixer's choice is reported through onColorFxChanged, for the settings).
     void setColorFx(int type);
     std::function<void(int type)> onColorFxChanged;
+    // P3-12: the Pad FX presets as JSON (from the settings), and their changes (to save).
+    void setPadFxPresets(const juce::String& json);
+    std::function<void(const juce::String& json)> onPadFxPresetsChanged;
     void setIsolator(bool on);
     void setCrossfaderCurve(int curve);
     void setCrossfaderAssign(int deck, int assign);

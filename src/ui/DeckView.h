@@ -72,6 +72,10 @@ public:
     void setPadMode(PadMode mode);
     PadMode padMode() const noexcept { return padModeNow; }
     void setPadHeld(int pad, bool held); // a pad held from the keyboard (lights it like a finger on it)
+    // Pad FX (P3-12): the bank's pads - names, colours, and which are release effects (lit while they act).
+    void setPadFxLooks(const std::array<juce::String, 8>& names, const std::array<std::uint32_t, 8>& colours,
+                       const std::array<bool, 8>& release, int bank);
+    std::function<void(int pad)> onPadFxMenu; // right-click a pad in Pad FX mode: edit its preset
     juce::TextButton& padModeButton() noexcept { return modeButton; }
     // Memory cues (P3-02): MEM opens the list; their positions (buffer samples) and colours for the overview.
     std::function<void()> onMemoryPanel;
@@ -134,6 +138,10 @@ private:
     PadMode padModeNow = PadMode::HotCue;
     std::uint8_t padsHeldByKeys = 0;
     juce::TextButton modeButton{"HOT CUE"};
+    std::array<juce::String, 8> padFxNames;
+    std::array<std::uint32_t, 8> padFxColours{};
+    std::array<bool, 8> padFxRelease{};
+    int padFxBank = 0;
     std::array<std::uint32_t, 16> hotCueColours{};
     std::array<juce::String, 16> hotCueLabels;
     std::vector<std::pair<double, std::uint32_t>> memoryCues;

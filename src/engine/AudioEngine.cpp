@@ -44,6 +44,9 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
         c.prepare(sampleRate, capacity);
     for (auto& rf : releaseFx) // P3-11
         rf.prepare(sampleRate, capacity);
+    for (auto& channel : padFx) // P3-12
+        for (auto& slot : channel)
+            slot.prepare(sampleRate, capacity);
     for (auto& strip : strips)
         strip.prepare(sampleRate, capacity);
     for (std::size_t i = 0; i < mixer.size(); ++i)
@@ -1044,6 +1047,58 @@ dsp::fx::BeatContext AudioEngine::beatContext() const noexcept
     return beat;
 }
 
+bool AudioEngine::installPadEffect(int deck, int pad, std::unique_ptr<dsp::fx::Effect> effect)
+{
+    if (deck < 0 || deck >= kMaxChannels || pad < 0 || pad >= kPadFxSlots)
+        return false;
+    dsp::fx::Effect* raw = effect.get();
+    if (effect != nullptr)
+    {
+        effect->prepare(sampleRate, preparedBlockSize);
+        ownedEffects.push_back(std::move(effect));
+    }
+    if (send(PadFxSetEffect{static_cast<DeckId>(deck), static_cast<std::uint8_t>(pad), raw}))
+        return true;
+    if (raw != nullptr)
+        ownedEffects.pop_back();
+    return false;
+}
+
+void AudioEngine::apply(const PadFxSetEffect& command) noexcept
+{
+    if (command.deck >= kMaxChannels || command.pad >= kPadFxSlots)
+        return;
+    auto& slot = padFx[command.deck][command.pad];
+    retireEffect(slot.effect());
+    slot.setEffect(command.effect);
+}
+
+void AudioEngine::apply(const PadFxCommand& command) noexcept
+{
+    if (command.deck >= kMaxChannels || command.pad >= kPadFxSlots)
+        return;
+    auto& slot = padFx[command.deck][command.pad];
+    switch (command.op)
+    {
+        case FxOp::On:
+            slot.setOn(command.value != 0.0f);
+            break;
+        case FxOp::Wet:
+            slot.setWet(command.value);
+            break;
+        case FxOp::Beats:
+            if (slot.effect() != nullptr)
+                slot.effect()->setBeats(std::clamp(command.value, 1.0f / 16.0f, 16.0f));
+            break;
+        case FxOp::Param:
+            if (slot.effect() != nullptr)
+                slot.effect()->setParam(command.index, std::clamp(command.value, 0.0f, 1.0f));
+            break;
+        default:
+            break;
+    }
+}
+
 void AudioEngine::apply(const ReleaseFxCommand& command) noexcept
 {
     if (command.deck >= kMaxChannels)
@@ -1483,6 +1538,8 @@ void AudioEngine::renderDecks(int numSamples) noexcept
         renderMetronome(i, before, slot.deck.position(), numSamples);
         strips[i].processPreFader(l, r, numSamples);
         colorFx[i].process(l, r, numSamples, beatContext());      // Color FX (P3-10)
+        for (auto& pad : padFx[i])                                 // Pad FX (P3-12)
+            pad.process(l, r, numSamples, beatContext());
         releaseFx[i].process(l, r, numSamples, beatContext());    // Release FX (P3-11)
         if (releaseFx[i].finished()) // ended on the effect: the deck pauses; back to normal once it is silent
         {
@@ -1663,6 +1720,15 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
                           : stage == dsp::fx::ReleaseFx::Stage::Held ? 1
                                                                      : 2;
             s.releaseFxKind = static_cast<std::uint8_t>(releaseFx[i].kind());
+            s.padFxOn = s.padFxActive = 0;
+            for (int p = 0; p < kPadFxSlots; ++p)
+            {
+                const auto& pad = padFx[i][static_cast<std::size_t>(p)];
+                if (pad.isOn())
+                    s.padFxOn = static_cast<std::uint8_t>(s.padFxOn | (1u << p));
+                if (pad.isActive())
+                    s.padFxActive = static_cast<std::uint8_t>(s.padFxActive | (1u << p));
+            }
         }
         s.slicerRolling = slot.slicerRolling;
         s.slicerCurrent = -1;

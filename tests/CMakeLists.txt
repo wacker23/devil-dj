@@ -21,6 +21,7 @@ target_sources(DevilDJTests PRIVATE
     app/HotCueStoreTests.cpp
     app/LibraryBackupTests.cpp
     app/MemoryCueTests.cpp
+    app/PadFxTests.cpp
     app/SettingsTests.cpp
     app/SoakTestTests.cpp
     beatmaker/BeatMakerSmokeTests.cpp

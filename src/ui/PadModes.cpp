@@ -57,8 +57,6 @@ const char* padModeComesWith(PadMode mode) noexcept
 {
     switch (mode)
     {
-        case PadMode::PadFx:
-            return "P3-12";
         case PadMode::Sampler:
             return "P3-13";
         default:

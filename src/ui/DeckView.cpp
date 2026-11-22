@@ -187,6 +187,10 @@ DeckView::DeckView(engine::AudioEngine& audioEngine, engine::DeckId deckId, Trac
                 if (onHotCueMenu)
                     onHotCueMenu(i);
             }
+            else if (padModeNow == PadMode::PadFx && onPadFxMenu)
+            {
+                onPadFxMenu(i);
+            }
             else if (onPadModeMenu)
             {
                 onPadModeMenu();
@@ -540,6 +544,8 @@ void DeckView::setPadMode(PadMode mode)
     juce::String text = padModeName(mode);
     if (mode == PadMode::HotCue)
         text << (padPage == 0 ? " A-H" : " I-P");
+    if (mode == PadMode::PadFx)
+        text << " " << (padFxBank + 1);
     modeButton.setButtonText(text);
     juce::String tip;
     switch (mode)
@@ -560,6 +566,10 @@ void DeckView::setPadMode(PadMode mode)
         case PadMode::Keyboard:
             tip = "Keyboard: hot cue A played at that pitch; from pause it plays while held.";
             break;
+        case PadMode::PadFx:
+            tip = "Pad FX: each pad an effect preset - on while held (or latched: press on, press off); release "
+                  "effects end the track when let go. Right-click a pad to edit it; Shift + pad 1 / 2: bank 1 / 2.";
+            break;
         case PadMode::Slicer:
             tip = "Slicer: the next 8 / 16 / 32 beats in 8 slices (shown on the waveform); hold a pad to roll its "
                   "slice on the grid, let go to be back where the track would be. Shift + pad 1 / 2 / 3: 8 / 16 / "
@@ -572,6 +582,18 @@ void DeckView::setPadMode(PadMode mode)
     tip << " Keys: Q W E R / A S D F (deck A), U I O P / J K L ; (deck B).";
     for (auto& p : pads)
         p->setTooltip(tip);
+    refreshPads();
+}
+
+void DeckView::setPadFxLooks(const std::array<juce::String, 8>& names, const std::array<std::uint32_t, 8>& colours,
+                             const std::array<bool, 8>& release, int bank)
+{
+    padFxNames = names;
+    padFxColours = colours;
+    padFxRelease = release;
+    padFxBank = bank;
+    if (padModeNow == PadMode::PadFx)
+        setPadMode(padModeNow); // the bank in the mode button
     refreshPads();
 }
 
@@ -593,7 +615,15 @@ void DeckView::refreshPads()
         {
             auto& p = *pads[static_cast<std::size_t>(i)];
             const bool held = p.isDown() || (padsHeldByKeys & (1u << i)) != 0;
-            const auto look = padLook(padModeNow, i, state, held);
+            auto look = padLook(padModeNow, i, state, held);
+            if (padModeNow == PadMode::PadFx) // the app's presets
+            {
+                look.text = padFxNames[static_cast<std::size_t>(i)];
+                look.colour = padFxColours[static_cast<std::size_t>(i)];
+                look.enabled = state.loaded && look.text.isNotEmpty();
+                look.lit = held || (padFxRelease[static_cast<std::size_t>(i)] ? false
+                                                                              : (state.padFxActive & (1u << i)) != 0);
+            }
             if (p.getButtonText() != look.text)
                 p.setButtonText(look.text);
             const auto rgb = juce::Colour(0xff000000u | look.colour);

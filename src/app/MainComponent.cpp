@@ -266,6 +266,7 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
             }
         }
     }
+    installPadFxBank(); // P3-12
     fxTimer = std::make_unique<juce::TimedCallback>([this] { engine.collectEffects(); });
     fxTimer->startTimerHz(2);
     addAndMakeVisible(*libraryBrowser);
@@ -284,6 +285,7 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
         auto& view = d == 0 ? deckA : deckB;
         view.onHotCuePad = [this, d](int pad, bool down) { padAction(d, pad, false, !down); };
         view.onPadModeMenu = [this, d] { showPadModeMenu(d); };
+        view.onPadFxMenu = [this, d](int pad) { showPadFxMenu(d, pad); };
         view.onHotCueMenu = [this, d](int pad) { showHotCueMenu(d, pad); };
         view.onMemoryPanel = [this, d] { openMemoryPanel(d); };
         view.onLoopButton = [this, d](ui::DeckView::LoopButton b) { loopButton(d, b); };
@@ -1166,12 +1168,182 @@ void MainComponent::padAction(engine::DeckId deck, int pad, bool alternate, bool
     if (deck >= 2)
         return;
     const auto& state = engine.readState().decks[deck];
+    if (padModes[deck] == ui::PadMode::PadFx) // P3-12: the presets
+    {
+        if (alternate)
+        {
+            if (!release && pad < app::kPadFxBanks && pad != padFxBank) // Shift + pad 1 / 2: the bank
+            {
+                padFxBank = pad;
+                installPadFxBank();
+            }
+            return;
+        }
+        const auto& preset = padFxPresets[static_cast<std::size_t>(padFxBank)][static_cast<std::size_t>(pad)];
+        for (const auto& c : app::padFxCommands(preset, deck, pad, release, state))
+            engine.send(c);
+        return;
+    }
     for (const auto& c : ui::padCommands(padModes[deck], deck, pad, hotCuePage, alternate, release, state))
     {
         if (const auto* slicer = std::get_if<engine::SetSlicer>(&c))
             slicerBeats[deck] = slicer->beats;
         engine.send(c);
     }
+}
+
+void MainComponent::setPadFxPresets(const juce::String& json)
+{
+    padFxPresets = json.isEmpty() ? app::defaultPadFxPresets() : app::presetsFromJson(json);
+    installPadFxBank();
+}
+
+void MainComponent::installPadFxBank()
+{
+    const auto& bank = padFxPresets[static_cast<std::size_t>(padFxBank)];
+    std::array<juce::String, 8> names;
+    std::array<std::uint32_t, 8> colours{};
+    std::array<bool, 8> release{};
+    for (int pad = 0; pad < app::kPadFxPads; ++pad)
+    {
+        const auto& p = bank[static_cast<std::size_t>(pad)];
+        names[static_cast<std::size_t>(pad)] = app::presetName(p);
+        colours[static_cast<std::size_t>(pad)] = app::presetColour(p);
+        release[static_cast<std::size_t>(pad)] = p.release;
+        for (engine::DeckId d = 0; d < 2; ++d)
+        {
+            std::unique_ptr<dsp::fx::Effect> fx;
+            if (!p.release)
+            {
+                fx = dsp::fx::makeEffect(static_cast<dsp::fx::EffectType>(p.type));
+                fx->setBeats(p.beats);
+                for (int k = 0; k < std::min(3, fx->numParams()); ++k)
+                    fx->setParam(k, p.params[static_cast<std::size_t>(k)]);
+            }
+            engine.installPadEffect(d, pad, std::move(fx)); // (prepares it for the device)
+            engine.send(engine::PadFxCommand{d, static_cast<std::uint8_t>(pad), engine::FxOp::Wet, 0, p.wet});
+        }
+    }
+    deckA.setPadFxLooks(names, colours, release, padFxBank);
+    deckB.setPadFxLooks(names, colours, release, padFxBank);
+}
+
+void MainComponent::editPadFx(int pad, const app::PadFxPreset& preset)
+{
+    padFxPresets[static_cast<std::size_t>(padFxBank)][static_cast<std::size_t>(pad)] = preset;
+    installPadFxBank();
+    if (onPadFxPresetsChanged)
+        onPadFxPresetsChanged(app::toJson(padFxPresets));
+}
+
+void MainComponent::showPadFxMenu(engine::DeckId deck, int pad)
+{
+    if (deck >= 2 || pad < 0 || pad >= app::kPadFxPads)
+        return;
+    const auto current = padFxPresets[static_cast<std::size_t>(padFxBank)][static_cast<std::size_t>(pad)];
+    juce::PopupMenu m;
+    m.addSectionHeader("Pad FX " + juce::String(padFxBank + 1) + "-" + juce::String(pad + 1) + ": " +
+                       app::presetName(current));
+    juce::PopupMenu beatFx, releaseFx;
+    for (int t = 0; t < dsp::fx::kEffectTypeCount; ++t)
+        beatFx.addItem(dsp::fx::effectTypeName(static_cast<dsp::fx::EffectType>(t)), true,
+                       !current.release && current.type == t,
+                       [this, pad, t, current]
+                       {
+                           auto p = app::presetFor(false, t);
+                           p.beats = current.beats;
+                           p.latch = current.latch;
+                           editPadFx(pad, p);
+                       });
+    for (int k = 0; k < dsp::fx::ReleaseFx::kKindCount; ++k)
+        releaseFx.addItem(dsp::fx::ReleaseFx::kindName(static_cast<dsp::fx::ReleaseFx::Kind>(k)), true,
+                          current.release && current.type == k,
+                          [this, pad, k, current]
+                          {
+                              auto p = app::presetFor(true, k);
+                              p.beats = current.beats;
+                              p.wet = 1.0f;
+                              editPadFx(pad, p);
+                          });
+    m.addSubMenu("Effect", beatFx);
+    m.addSubMenu("Release effect", releaseFx);
+    juce::PopupMenu beatsMenu;
+    for (const double b : ui::FxPanel::kBeatSteps)
+        beatsMenu.addItem(ui::FxPanel::beatsText(b), true, std::abs(current.beats - b) < 1e-6,
+                          [this, pad, current, b]
+                          {
+                              auto p = current;
+                              p.beats = static_cast<float>(b);
+                              editPadFx(pad, p);
+                          });
+    m.addSubMenu("Beats", beatsMenu);
+    if (!current.release)
+    {
+        juce::PopupMenu wetMenu;
+        for (const float w : {0.25f, 0.5f, 0.6f, 0.75f, 1.0f})
+            wetMenu.addItem(juce::String(juce::roundToInt(w * 100.0f)) + " %", true, std::abs(current.wet - w) < 1e-4f,
+                            [this, pad, current, w]
+                            {
+                                auto p = current;
+                                p.wet = w;
+                                editPadFx(pad, p);
+                            });
+        m.addSubMenu("Wet", wetMenu);
+        // The knobs of the effect, in quarters.
+        if (auto fx = dsp::fx::makeEffect(static_cast<dsp::fx::EffectType>(current.type)))
+            for (int k = 0; k < std::min(3, fx->numParams()); ++k)
+            {
+                juce::PopupMenu knob;
+                for (const float v : {0.0f, 0.25f, 0.5f, 0.75f, 1.0f})
+                    knob.addItem(juce::String(juce::roundToInt(v * 100.0f)) + " %", true,
+                                 std::abs(current.params[static_cast<std::size_t>(k)] - v) < 1e-4f,
+                                 [this, pad, current, k, v]
+                                 {
+                                     auto p = current;
+                                     p.params[static_cast<std::size_t>(k)] = v;
+                                     editPadFx(pad, p);
+                                 });
+                m.addSubMenu(fx->param(k).name, knob);
+            }
+        m.addItem("Latched (press on, press off)", true, current.latch,
+                  [this, pad, current]
+                  {
+                      auto p = current;
+                      p.latch = !p.latch;
+                      editPadFx(pad, p);
+                  });
+    }
+    // A snapshot of an FX unit's first slot: its effect, beats, wet and knobs as they are now.
+    for (int u = 0; u < 2; ++u)
+    {
+        const int type = fxPanel.effectType(u, 0);
+        m.addItem("Snapshot of FX" + juce::String(u + 1) + " slot 1", type >= 0, false,
+                  [this, pad, u, type]
+                  {
+                      auto p = app::presetFor(false, type);
+                      const auto& slot = engine.readState().fx[static_cast<std::size_t>(u)].slots[0];
+                      p.beats = slot.beats;
+                      p.wet = slot.wet;
+                      for (int k = 0; k < 3; ++k)
+                          p.params[static_cast<std::size_t>(k)] = static_cast<float>(
+                              fxPanel.unit(u).slots[0].knobs[static_cast<std::size_t>(k)]->getValue());
+                      editPadFx(pad, p);
+                  });
+    }
+    m.addSeparator();
+    m.addItem("Default for this pad", true, false,
+              [this, pad]
+              {
+                  editPadFx(pad, app::defaultPadFxPresets()[static_cast<std::size_t>(padFxBank)]
+                                                           [static_cast<std::size_t>(pad)]);
+              });
+    m.addItem(padFxBank == 0 ? "Show bank 2 (Shift + pad 2)" : "Show bank 1 (Shift + pad 1)",
+              [this]
+              {
+                  padFxBank = 1 - padFxBank;
+                  installPadFxBank();
+              });
+    m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&(deck == 0 ? deckA : deckB).padButton(pad)));
 }
 
 void MainComponent::showPadModeMenu(engine::DeckId deck)

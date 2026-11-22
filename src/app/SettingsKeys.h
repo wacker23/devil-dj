@@ -57,6 +57,8 @@ inline const SettingKey<bool> keySyncCompatible{"keySyncCompatible", false};
 inline const SettingKey<int> pauseStyle{"pauseStyle", 0};
 // P3-10: what the FILTER knobs do (dsp::fx::ColorFx::Type: 0 filter, 1 space, 2 dub echo, 3 noise, 4 crush, 5 pitch).
 inline const SettingKey<int> colorFx{"colorFx", 0};
+// P3-12: the Pad FX presets (JSON; empty = the defaults).
+inline const SettingKey<juce::String> padFxPresets{"padFxPresets", {}};
 inline const SettingKey<double> brakeSeconds{"brakeSeconds", 1.0};
 inline const SettingKey<double> spinBackSeconds{"spinBackSeconds", 1.0};
 

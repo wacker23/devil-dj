@@ -369,7 +369,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
   Hold-to-apply effects that cut the dry signal on release (echo out, brake, spin-back, filter sweep) with beat length.
   Done when: manual test; works with Pad FX.
 
-- [ ] **P3-12 Pad FX**
+- [x] **P3-12 Pad FX**
   2 banks × 8 pads of preset effect + parameter snapshots; momentary or latched; user-editable presets.
   Done when: presets persist; keyboard mode triggers them.
 

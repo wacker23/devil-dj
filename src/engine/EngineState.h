@@ -76,6 +76,10 @@ struct DeckState
     // Release FX (P3-11) on this deck's channel: 0 idle, 1 held, 2 released (ending); its kind.
     std::uint8_t releaseFx = 0;
     std::uint8_t releaseFxKind = 0;
+
+    // Pad FX (P3-12): which pads' effects are switched on, and which are sounding (on, fading or ringing out).
+    std::uint8_t padFxOn = 0;
+    std::uint8_t padFxActive = 0;
 };
 
 // An FX unit as the audio thread has it (P3-08).

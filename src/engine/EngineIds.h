@@ -54,6 +54,8 @@ enum class FxTarget : std::uint8_t
     Master,   // the master bus, before master gain and the limiter
 };
 constexpr int kFxTargetCount = 7;
+// Pad FX (P3-12): an effect slot per pad, per channel (the pads' current bank).
+constexpr int kPadFxSlots = 8;
 
 // Hot cues per deck (P3-01): two pages of 8 pads (A-H, I-P).
 constexpr int kHotCues = 16;

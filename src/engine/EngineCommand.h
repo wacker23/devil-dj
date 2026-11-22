@@ -400,6 +400,24 @@ struct ReleaseFxCommand
     float beats = 1.0f;
 };
 
+// Pad FX (P3-12): the effect behind a pad of a deck (handed over by pointer, like FxSetEffect), and its settings
+// / on-off (op On, Wet, Beats, Param as for FxCommand).
+struct PadFxSetEffect
+{
+    DeckId deck = 0;
+    std::uint8_t pad = 0;
+    dsp::fx::Effect* effect = nullptr;
+};
+
+struct PadFxCommand
+{
+    DeckId deck = 0;
+    std::uint8_t pad = 0;
+    FxOp op = FxOp::On;
+    std::uint8_t index = 0;
+    float value = 0.0f;
+};
+
 // Beat sync (P2-19): the deck follows the master clock's tempo (half / double aware) and phase.
 struct SetSync
 {
@@ -412,7 +430,7 @@ using EngineCommand =
                  Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo, PitchBend, SetInterpolationQuality, SetKeyLock,
                  SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge, SetParam, SetBeatgrid, SetMetronome,
                  SetClockSource, SetInternalTempo, SetSync, SetQuantize, BeatJump, JumpBy, SetHotCues, HotCue,
-                 SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle, SetSlicer, SlicerPad, FxSetEffect, FxCommand, SetColorFx, ReleaseFxCommand>;
+                 SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle, SetSlicer, SlicerPad, FxSetEffect, FxCommand, SetColorFx, ReleaseFxCommand, PadFxSetEffect, PadFxCommand>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 
