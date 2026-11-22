@@ -407,7 +407,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
 
 ### Hardware-free polish
 
-- [ ] **P3-20 Full default keymap**
+- [x] **P3-20 Full default keymap**
   All Phase 1–3 actions bound per `docs/KEYMAP.md`; keymap editor (click action → press key; conflicts shown); import/export keymap JSON; presets "Default", "Laptop compact".
   Done when: every action in `Actions.h` is bindable; export/import round-trip test.
 

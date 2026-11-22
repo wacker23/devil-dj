@@ -17,6 +17,7 @@
 #include "ui/DebugOverlay.h"
 #include "ui/DeckView.h"
 #include "ui/FxPanel.h"
+#include "ui/KeymapEditor.h"
 #include "ui/RecorderPanel.h"
 #include "ui/SamplerPanel.h"
 #include "engine/Recorder.h"
@@ -288,6 +289,8 @@ private:
     std::unique_ptr<juce::FileChooser> importChooser;
     ui::DebugOverlay overlay;
     ui::KeymapOverlay keymapOverlay; // Ctrl+/ held (P1-17)
+    juce::Component::SafePointer<ui::KeymapEditor> keymapEditor; // P3-20, in its own window while open
+    std::unique_ptr<juce::FileChooser> keymapChooser;
     SoakTest soak;
     bool quitAfterSoak = false;
     std::unique_ptr<juce::TimedCallback> soakWaiter;
@@ -347,6 +350,7 @@ public:
     // User keymap (P1-17): Documents\Devil-DJ\Keymaps\keymap.json on top of the KEYMAP.md defaults.
     static juce::File keymapFolder();
     void reloadKeymap();
+    void editKeymap(); // P3-20: the keymap editor (Options > Edit keymap)
     void openKeymapFolder();
 
     // Soak test (P1-20): Options menu, or the command line (--soak=MIN [--soak-silent] [--soak-quit]

@@ -519,6 +519,13 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
 
 bool MainComponent::onPhysicalKey(const ui::KeyboardController::KeyEvent& e)
 {
+    // The keymap editor waiting for a key (P3-20): it gets the next one (modifiers alone don't count).
+    if (keymapEditor != nullptr && keymapEditor->isCapturing())
+    {
+        if (e.down && !e.repeat && !ui::scan::isModifier(e.scanCode))
+            keymapEditor->captureChord({e.scanCode, e.modifiers});
+        return true;
+    }
     // Only while the main window has the keyboard (dialogs and file choosers get their keys untouched).
     auto* peer = getPeer();
     if (peer == nullptr || !peer->isFocused())
@@ -2371,7 +2378,8 @@ void MainComponent::reloadKeymap()
     if (file.existsAsFile())
     {
         std::vector<std::string> errors;
-        bindings = ui::applyKeymapOverrides(std::move(bindings), file.loadFileAsString().toStdString(), errors);
+        // A full map saved by the keymap editor (P3-20), or overrides on the default map (P1-16).
+        bindings = ui::keymapFromJson(file.loadFileAsString().toStdString(), errors);
         status =
             "keymap.json loaded" +
             (errors.empty() ? juce::String() : ", " + juce::String(static_cast<int>(errors.size())) + " problem(s)");
@@ -2382,6 +2390,56 @@ void MainComponent::reloadKeymap()
     keyboard.setBindings(std::move(bindings));
     keymapOverlay.setStatus(status);
     keymapOverlay.setBindings(keyboard.currentBindings());
+}
+
+void MainComponent::editKeymap()
+{
+    if (keymapEditor != nullptr)
+    {
+        keymapEditor->toFront(true);
+        return;
+    }
+    auto* editor = new ui::KeymapEditor(keyboard.currentBindings());
+    keymapEditor = editor;
+    editor->onSave = [this](const std::vector<ui::KeyBinding>& map)
+    {
+        const auto folder = keymapFolder();
+        folder.createDirectory();
+        folder.getChildFile("keymap.json").replaceWithText(juce::String::fromUTF8(ui::keymapToJson(map).c_str()));
+        reloadKeymap();
+    };
+    editor->onExport = [this](const std::vector<ui::KeyBinding>& map)
+    {
+        keymapChooser = std::make_unique<juce::FileChooser>("Export the keymap", keymapFolder().getChildFile("my keymap.json"), "*.json");
+        keymapChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
+                                   [map](const juce::FileChooser& c)
+                                   {
+                                       const auto file = c.getResult();
+                                       if (file != juce::File())
+                                           file.replaceWithText(juce::String::fromUTF8(ui::keymapToJson(map).c_str()));
+                                   });
+    };
+    editor->onImport = [this]
+    {
+        keymapChooser = std::make_unique<juce::FileChooser>("Import a keymap", keymapFolder(), "*.json");
+        keymapChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                                   [this](const juce::FileChooser& c)
+                                   {
+                                       const auto file = c.getResult();
+                                       if (!file.existsAsFile() || keymapEditor == nullptr)
+                                           return;
+                                       std::vector<std::string> errors;
+                                       keymapEditor->setBindings(ui::keymapFromJson(file.loadFileAsString().toStdString(), errors));
+                                   });
+    };
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(editor);
+    options.dialogTitle = "Keymap";
+    options.dialogBackgroundColour = juce::Colour(0xff16161b);
+    options.escapeKeyTriggersCloseButton = false; // Esc may be the key being set
+    options.useNativeTitleBar = true;
+    options.resizable = true;
+    options.launchAsync();
 }
 
 void MainComponent::openKeymapFolder()

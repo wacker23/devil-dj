@@ -144,6 +144,7 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
         menu.addSubMenu("Quantize", quantizeMenu);
         menu.addItem(KeySyncCompatible, "Key Sync: compatible keys too (smaller moves)", true, keySyncCompatible);
         menu.addSeparator();
+        menu.addItem(EditKeymap, "Edit keymap...");
         menu.addItem(OpenKeymapFolder, "Open keymap folder (keymap.json)");
         menu.addItem(ReloadKeymap, "Reload keymap");
         menu.addItem(-1, "Hold Ctrl + / to see the keyboard map", false);
@@ -334,6 +335,11 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
         case SoakStop:
             if (onSoakTest)
                 onSoakTest(menuItemID == Soak60 ? 60.0 : menuItemID == Soak5 ? 5.0 : 0.0);
+            break;
+
+        case EditKeymap:
+            if (onEditKeymap)
+                onEditKeymap();
             break;
 
         case ReloadKeymap:

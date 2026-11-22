@@ -80,6 +80,7 @@ public:
     std::function<void(double rangePercent)> onTempoRange;
     std::function<void(bool on)> onHighQualityResampling;
     std::function<void()> onReloadKeymap;
+    std::function<void()> onEditKeymap; // P3-20
     std::function<void()> onOpenKeymapFolder;
     std::function<void(double minutes)> onSoakTest; // 0 = stop
     std::function<void(int deck)> onToggleKeyLock;
@@ -128,6 +129,7 @@ private:
         TempoRange50,
         HighQualityResampling,
         ReloadKeymap,
+        EditKeymap,
         OpenKeymapFolder,
         Soak60,
         Soak5,

@@ -223,6 +223,7 @@ public:
         menu->onTempoRange = [this](double range) { mainComponent->setTempoRange(range); };
         menu->onHighQualityResampling = [this](bool on) { mainComponent->setHighQualityResampling(on); };
         menu->onReloadKeymap = [this] { mainComponent->reloadKeymap(); };
+        menu->onEditKeymap = [this] { mainComponent->editKeymap(); };
         menu->onSoakTest = [this](double minutes)
         {
             if (minutes <= 0.0)

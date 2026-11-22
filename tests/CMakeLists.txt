@@ -1,4 +1,4 @@
-# One Catch2 test executable; sources mirror the src/ module folders.
+﻿# One Catch2 test executable; sources mirror the src/ module folders.
 # Catch2WithMain supplies main(). Tests are registered with ctest per TEST_CASE.
 
 include(Catch)
@@ -85,6 +85,7 @@ target_sources(DevilDJTests PRIVATE
     ui/PadModeTests.cpp
     ui/FileBrowserTests.cpp
     ui/KeyboardControllerTests.cpp
+    ui/KeymapEditorTests.cpp
     ui/KeymapOverlayTests.cpp
     ui/LibraryBrowserTests.cpp
     ui/MixerViewTests.cpp
