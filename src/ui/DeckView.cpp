@@ -560,6 +560,11 @@ void DeckView::setPadMode(PadMode mode)
         case PadMode::Keyboard:
             tip = "Keyboard: hot cue A played at that pitch; from pause it plays while held.";
             break;
+        case PadMode::Slicer:
+            tip = "Slicer: the next 8 / 16 / 32 beats in 8 slices (shown on the waveform); hold a pad to roll its "
+                  "slice on the grid, let go to be back where the track would be. Shift + pad 1 / 2 / 3: 8 / 16 / "
+                  "32 beats.";
+            break;
         default:
             tip = juce::String(padModeName(mode)) + ": comes with " + padModeComesWith(mode) + ".";
             break;

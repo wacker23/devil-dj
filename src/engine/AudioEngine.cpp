@@ -421,6 +421,9 @@ void AudioEngine::requestTrack(DeckId deckId, const TrackBuffer* buffer, BufferI
     slot.hotCues = {}; // the app sends the new track's
     slot.hotCuePreview = -1;
     slot.slipHoldPad = -1;
+    slot.slicerHeld = 0;
+    slot.slicerRolling = -1;
+    slot.slicerStartBeat = -1e9; // placed again on the new track
     slot.loopInPending = false;
     slot.haveLastLoop = false;
     slot.clickActive = false;
@@ -820,6 +823,104 @@ void AudioEngine::apply(const SetStopStyle& command) noexcept
     spinBackSeconds = std::clamp(static_cast<double>(command.spinBackSeconds), 0.1, 10.0);
 }
 
+void AudioEngine::updateSlicer(DeckSlot& slot) noexcept
+{
+    if (!slot.slicerOn || slot.grid.empty() || slot.deck.track() == nullptr)
+        return;
+    const double n = slot.slicerBeats;
+    const double beat = slot.grid.beatAt(slot.deck.slipPosition()); // the track's timeline
+    if (beat < slot.slicerStartBeat || beat >= slot.slicerStartBeat + 2.0 * n) // placed anew (on, a seek)
+        slot.slicerStartBeat = std::floor(beat / 4.0 + 1e-9) * 4.0;              // the bar at or before
+    else if (beat >= slot.slicerStartBeat + n)
+        slot.slicerStartBeat += n; // domain shift: the next N beats
+}
+
+void AudioEngine::dropQueuedJumps(DeckSlot& slot) noexcept
+{
+    int kept = 0;
+    for (int k = 0; k < slot.queuedCount; ++k)
+    {
+        const auto& a = slot.queued[static_cast<std::size_t>(k)];
+        if (a.kind == DeckSlot::QueuedAction::Kind::Play)
+            slot.queued[static_cast<std::size_t>(kept++)] = a;
+    }
+    slot.queuedCount = kept;
+}
+
+void AudioEngine::rollSlice(DeckSlot& slot, int pad) noexcept
+{
+    const auto& g = slot.grid;
+    auto& deck = slot.deck;
+    const double sliceBeats = slot.slicerBeats / 8.0;
+    const double a = g.sampleAt(slot.slicerStartBeat + pad * sliceBeats);
+    const double b = g.sampleAt(slot.slicerStartBeat + (pad + 1) * sliceBeats);
+    slot.slicerRolling = pad;
+    dropQueuedJumps(slot);
+    // Always on the grid: from the next slice boundary (where the playhead is, also inside a rolling slice).
+    const double next = (std::floor(g.beatAt(deck.position()) / sliceBeats + 1e-9) + 1.0) * sliceBeats;
+    queue(slot, {DeckSlot::QueuedAction::Kind::Jump, g.sampleAt(next), a, b - a});
+}
+
+void AudioEngine::apply(const SetSlicer& command) noexcept
+{
+    if (command.deck >= kMaxDecks)
+        return;
+    auto& slot = decks[command.deck];
+    const double beats = command.beats >= 24.0 ? 32.0 : command.beats >= 12.0 ? 16.0 : 8.0;
+    if (command.on && (!slot.slicerOn || beats != slot.slicerBeats))
+        slot.slicerStartBeat = -1e9; // placed on the next block
+    slot.slicerBeats = beats;
+    if (!command.on && slot.slicerOn && slot.slicerHeld != 0) // a slice rolling: let it go
+    {
+        slot.slicerHeld = 0;
+        slot.slicerRolling = -1;
+        dropQueuedJumps(slot);
+        slot.deck.exitLoop();
+        slot.deck.endSlicerHold();
+    }
+    slot.slicerOn = command.on;
+    updateSlicer(slot);
+}
+
+void AudioEngine::apply(const SlicerPad& command) noexcept
+{
+    if (command.deck >= kMaxDecks || command.pad >= 8 || decks[command.deck].hasPending)
+        return;
+    auto& slot = decks[command.deck];
+    auto& deck = slot.deck;
+    const auto bit = static_cast<std::uint8_t>(1u << command.pad);
+    if (command.release)
+    {
+        if ((slot.slicerHeld & bit) == 0)
+            return;
+        slot.slicerHeld = static_cast<std::uint8_t>(slot.slicerHeld & ~bit);
+        if (slot.slicerHeld != 0)
+        {
+            if (slot.slicerRolling == command.pad) // another pad is still down: roll that one
+                for (int p = 7; p >= 0; --p)
+                    if ((slot.slicerHeld & (1u << p)) != 0)
+                    {
+                        rollSlice(slot, p);
+                        break;
+                    }
+            return;
+        }
+        // The last pad up: back to where the track would be.
+        slot.slicerRolling = -1;
+        dropQueuedJumps(slot);
+        deck.exitLoop();
+        deck.endSlicerHold();
+        return;
+    }
+    if (!slot.slicerOn || slot.grid.empty() || deck.transport() != Deck::Transport::Playing || deck.isReverse() ||
+        deck.rate() <= 0.0)
+        return;
+    if (slot.slicerHeld == 0)
+        deck.beginSlicerHold();
+    slot.slicerHeld = static_cast<std::uint8_t>(slot.slicerHeld | bit);
+    rollSlice(slot, command.pad);
+}
+
 void AudioEngine::apply(const JumpBy& command) noexcept
 {
     if (command.deck >= kMaxDecks || decks[command.deck].hasPending)
@@ -1196,6 +1297,7 @@ void AudioEngine::renderDecks(int numSamples) noexcept
         }
         const double before = slot.deck.position();
         renderDeckWithActions(slot, l, r, numSamples);
+        updateSlicer(slot);
         renderMetronome(i, before, slot.deck.position(), numSamples);
         strips[i].processPreFader(l, r, numSamples);
         m.meter.process(l, r, numSamples);
@@ -1330,6 +1432,17 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         s.slipPositionSamples = d.slipPosition();
         s.reverse = d.isReverse();
         s.stopping = static_cast<std::uint8_t>(d.stopKindNow());
+        s.slicerOn = slot.slicerOn && !slot.grid.empty() && slot.slicerStartBeat > -1e8;
+        s.slicerBeats = slot.slicerBeats;
+        s.slicerRolling = slot.slicerRolling;
+        s.slicerCurrent = -1;
+        if (s.slicerOn)
+        {
+            s.slicerStart = slot.grid.sampleAt(slot.slicerStartBeat);
+            s.slicerEnd = slot.grid.sampleAt(slot.slicerStartBeat + slot.slicerBeats);
+            const double into = (slot.grid.beatAt(d.slipPosition()) - slot.slicerStartBeat) / (slot.slicerBeats / 8.0);
+            s.slicerCurrent = into >= 0.0 && into < 8.0 ? static_cast<int>(into) : -1;
+        }
         if (s.hasGrid)
         {
             s.beat = slot.grid.beatAt(s.positionSamples);

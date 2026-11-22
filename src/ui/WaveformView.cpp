@@ -204,6 +204,27 @@ void WaveformView::paint(juce::Graphics& g)
             }
         }
 
+        // Slicer (P3-07): the domain tinted, its 8 slices marked, the rolling one brighter.
+        if (preview == nullptr && s.slicerOn && s.slicerEnd > s.slicerStart)
+        {
+            const juce::Colour teal(0xff30c0c0);
+            const double sliceLength = (s.slicerEnd - s.slicerStart) / 8.0;
+            for (int i = 0; i < 8; ++i)
+            {
+                const auto x0 = static_cast<float>((s.slicerStart + i * sliceLength - leftSample) / spp);
+                const auto x1 = static_cast<float>((s.slicerStart + (i + 1) * sliceLength - leftSample) / spp);
+                if (x1 < area.getX() || x0 > area.getRight())
+                    continue;
+                g.setColour(teal.withAlpha(i == s.slicerRolling ? 0.30f : (i % 2 == 0 ? 0.10f : 0.05f)));
+                g.fillRect(juce::Rectangle<float>(x0, area.getY(), x1 - x0, 10.0f));
+                g.setColour(teal.withAlpha(0.8f));
+                g.fillRect(x0, area.getY(), 1.0f, 10.0f);
+                g.setFont(juce::FontOptions(9.0f));
+                g.drawText(juce::String(i + 1), juce::Rectangle<float>(x0 + 2.0f, area.getY(), 14.0f, 10.0f),
+                           juce::Justification::centredLeft);
+            }
+        }
+
         // Slip (P3-04): where the track would be - a ghost playhead the deck returns to.
         if (preview == nullptr && s.slipping)
         {

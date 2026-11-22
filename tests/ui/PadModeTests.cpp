@@ -62,7 +62,8 @@ TEST_CASE("Pads: the layouts", "[ui][pads]")
     CHECK(ui::padSemitones(3) == 3);
     CHECK(ui::padSemitones(4) == -4);
     CHECK(ui::padSemitones(7) == -1);
-    for (const auto mode : {PadMode::Slicer, PadMode::PadFx, PadMode::Sampler})
+    CHECK(ui::padModeAvailable(PadMode::Slicer)); // P3-07
+    for (const auto mode : {PadMode::PadFx, PadMode::Sampler})
     {
         CHECK_FALSE(ui::padModeAvailable(mode));
         CHECK(ui::padCommands(mode, 0, 2, 0, false, false, {}).empty());

@@ -347,7 +347,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
   8-pad grid per deck (on screen + keyboard rows from KEYMAP), modes switchable via F1–F4 (+Shift for more): Hot Cue, Beat Loop (1/4…32), Beat Jump, Slicer, Key Shift (−4…+3 semitones), Keyboard (play hot cue 1 chromatically), Pad FX, Sampler.
   Done when: each mode works from keyboard and mouse; pad colours reflect state.
 
-- [ ] **P3-07 Slicer**
+- [x] **P3-07 Slicer**
   Divide 8/16/32 beats ahead into 8 slices; pad press plays that slice quantized (roll while held), slip-style return on release; domain shift.
   Done when: manual test on a 128 BPM track sounds on-grid.
 

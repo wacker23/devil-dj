@@ -65,6 +65,13 @@ struct DeckState
     // Reverse and stops (P3-05).
     bool reverse = false;
     std::uint8_t stopping = 0; // 0 no, 1 braking, 2 spinning back
+
+    // Slicer (P3-07), in buffer samples.
+    bool slicerOn = false;
+    double slicerBeats = 8.0;
+    double slicerStart = 0.0, slicerEnd = 0.0;
+    int slicerCurrent = -1; // the slice the track is in (where it would be, while a slice rolls)
+    int slicerRolling = -1; // the slice being rolled
 };
 
 // Mixer channel settings as the audio thread has them (targets; the sound follows within 20 ms).

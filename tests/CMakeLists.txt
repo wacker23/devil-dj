@@ -45,6 +45,7 @@ target_sources(DevilDJTests PRIVATE
     engine/LoopTests.cpp
     engine/SlipTests.cpp
     engine/ReverseTests.cpp
+    engine/SlicerTests.cpp
     engine/KeyShiftTests.cpp
     engine/MasterClockTests.cpp
     engine/DeckTempoTests.cpp

@@ -337,6 +337,24 @@ struct SetStopStyle
     float spinBackSeconds = 1.0f;
 };
 
+// Slicer (P3-07): the deck's slicer domain on / off and its length (8, 16 or 32 beats, 8 slices). The domain
+// starts on the bar at or before the playhead and moves on by its length as the track plays past its end.
+struct SetSlicer
+{
+    DeckId deck = 0;
+    bool on = false;
+    double beats = 8.0;
+};
+
+// A slicer pad (0..7): while held, its slice rolls (loops) from the next slice boundary; when the last pad is
+// let go, the deck returns to where the track would be (a slip hold, also with slip off).
+struct SlicerPad
+{
+    DeckId deck = 0;
+    std::uint8_t pad = 0;
+    bool release = false;
+};
+
 // Beat sync (P2-19): the deck follows the master clock's tempo (half / double aware) and phase.
 struct SetSync
 {
@@ -349,7 +367,7 @@ using EngineCommand =
                  Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo, PitchBend, SetInterpolationQuality, SetKeyLock,
                  SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge, SetParam, SetBeatgrid, SetMetronome,
                  SetClockSource, SetInternalTempo, SetSync, SetQuantize, BeatJump, JumpBy, SetHotCues, HotCue,
-                 SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle>;
+                 SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle, SetSlicer, SlicerPad>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

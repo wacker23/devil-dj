@@ -19,7 +19,9 @@ namespace devildj::ui
 //   Beat Jump - back / forward 1, 2 (top) / 4, 8 beats (bottom): odd pads back, even pads forward
 //   Key Shift - the key in semitones: 0, +1, +2, +3 (top) / -4, -3, -2, -1 (bottom), key lock on; Shift+pad: 0
 //   Keyboard  - hot cue A played at those pitches (press plays it, release from pause returns, like a held hot cue)
-//   Slicer, Pad FX, Sampler come with their tasks (P3-07, P3-12, P3-13): until then their pads do nothing.
+//   Slicer    - the 8 slices of the slicer domain (8 / 16 / 32 beats, P3-07): held, a slice rolls on the grid;
+//               let go, the deck is where the track would be. Shift + pad 1 / 2 / 3: domain 8 / 16 / 32 beats.
+//   Pad FX, Sampler come with their tasks (P3-12, P3-13): until then their pads do nothing.
 enum class PadMode : std::uint8_t
 {
     HotCue,

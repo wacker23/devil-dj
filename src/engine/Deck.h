@@ -92,6 +92,9 @@ public:
     double slipPosition() const noexcept { return slipReasons != 0 ? shadow : playhead; }
     void beginSlipHold() noexcept { beginSlip(kSlipHold); } // a hot cue held while playing (call before the jump)
     void endSlipHold() noexcept { endSlip(kSlipHold); }
+    // The slicer's pad hold (P3-07): a slip hold even with slip off - the track always goes on underneath.
+    void beginSlicerHold() noexcept;
+    void endSlicerHold() noexcept { endSlip(kSlipSlice); }
 
     // Reverse (P3-05): the playhead runs backwards at the same rate (key lock is bypassed meanwhile, crossfaded).
     // Loops wrap from their start back to their end. At the start of the track the deck stops. With slip on,
@@ -235,7 +238,8 @@ private:
     double loopIn = 0.0, loopOut = 0.0;
     void wrapLoop() noexcept;
     // Slip (P3-04): why the shadow runs (a set of reasons; it returns when the last one ends).
-    static constexpr std::uint8_t kSlipLoop = 1, kSlipHold = 2, kSlipScratch = 4, kSlipPause = 8, kSlipReverse = 16;
+    static constexpr std::uint8_t kSlipLoop = 1, kSlipHold = 2, kSlipScratch = 4, kSlipPause = 8, kSlipReverse = 16,
+                                 kSlipSlice = 32;
     bool slipEnabled = false;
     std::uint8_t slipReasons = 0;
     double shadow = 0.0;

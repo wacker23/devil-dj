@@ -403,6 +403,19 @@ void Deck::beginSlip(std::uint8_t reason) noexcept
     slipReasons = static_cast<std::uint8_t>(slipReasons | reason);
 }
 
+void Deck::beginSlicerHold() noexcept
+{
+    if (buffer == nullptr)
+        return;
+    if (slipReasons == 0)
+    {
+        if (state != Transport::Playing)
+            return;
+        shadow = playhead;
+    }
+    slipReasons = static_cast<std::uint8_t>(slipReasons | kSlipSlice);
+}
+
 void Deck::endSlip(std::uint8_t reason) noexcept
 {
     if ((slipReasons & reason) == 0)

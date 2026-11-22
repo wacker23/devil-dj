@@ -188,6 +188,7 @@ private:
     void setHotCuePage(int page);
     // The pad grid (P3-06): each deck's mode; a pad press / release in it; the mode menu.
     std::array<ui::PadMode, 2> padModes{ui::PadMode::HotCue, ui::PadMode::HotCue};
+    std::array<double, 2> slicerBeats{8.0, 8.0}; // P3-07
     void setPadMode(engine::DeckId deck, ui::PadMode mode);
     void padAction(engine::DeckId deck, int pad, bool alternate, bool release);
     void showPadModeMenu(engine::DeckId deck);

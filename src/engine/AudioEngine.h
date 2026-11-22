@@ -126,6 +126,8 @@ private:
     void apply(const SetReverse& command) noexcept;
     void apply(const Stop& command) noexcept;
     void apply(const SetStopStyle& command) noexcept;
+    void apply(const SetSlicer& command) noexcept;
+    void apply(const SlicerPad& command) noexcept;
     void followMaster() noexcept;                              // P2-19: every synced deck that doesn't lead
     bool tempoToMaster(DeckId deck, double percent) noexcept; // sync lock: a follower's fader moves the master
     void advanceClock(int numSamples) noexcept;
@@ -186,6 +188,12 @@ private:
         std::array<HotCueSlot, kHotCues> hotCues{}; // P3-01, in buffer samples
         int hotCuePreview = -1;                     // held from pause
         int slipHoldPad = -1;                       // P3-04: held while playing with slip on (returns on release)
+        // Slicer (P3-07): the domain in grid beats, the pads held, the slice rolling.
+        bool slicerOn = false;
+        double slicerBeats = 8.0;
+        double slicerStartBeat = 0.0;
+        std::uint8_t slicerHeld = 0;
+        int slicerRolling = -1;
         // Loops (P3-03).
         double autoLoopBeats = 4.0;
         bool loopInPending = false;
@@ -233,6 +241,9 @@ private:
     double quantizeBeats = 1.0;
     void startPlaying(DeckSlot& slot) noexcept;
     void queue(DeckSlot& slot, DeckSlot::QueuedAction action) noexcept;
+    void updateSlicer(DeckSlot& slot) noexcept;          // domain shift (P3-07)
+    void rollSlice(DeckSlot& slot, int pad) noexcept;    // the slice's loop from its next boundary
+    void dropQueuedJumps(DeckSlot& slot) noexcept;
     // Renders one deck, split at the samples where its queued actions fall due.
     void renderDeckWithActions(DeckSlot& slot, float* l, float* r, int numSamples) noexcept;
     void updateCueMix() noexcept;

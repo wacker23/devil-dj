@@ -12,6 +12,7 @@ constexpr std::uint32_t kLoopColour = 0x3CC46A;
 constexpr std::uint32_t kJumpColour = 0x3C7CE0;
 constexpr std::uint32_t kKeyColour = 0x9A5CE0;
 constexpr std::uint32_t kKeyboardColour = 0xE08A3C;
+constexpr std::uint32_t kSlicerColour = 0x30C0C0;
 
 int clampPad(int pad) noexcept { return std::clamp(pad, 0, 7); }
 
@@ -56,8 +57,6 @@ const char* padModeComesWith(PadMode mode) noexcept
 {
     switch (mode)
     {
-        case PadMode::Slicer:
-            return "P3-07";
         case PadMode::PadFx:
             return "P3-12";
         case PadMode::Sampler:
@@ -123,8 +122,13 @@ PadLook padLook(PadMode mode, int pad, const engine::DeckState& deck, bool held)
             look.enabled = deck.loaded;
             break;
         }
-        case PadMode::HotCue:
         case PadMode::Slicer:
+            look.text = juce::String(pad + 1);
+            look.colour = kSlicerColour;
+            look.lit = held || deck.slicerRolling == pad || (deck.slicerRolling < 0 && deck.slicerCurrent == pad);
+            look.enabled = deck.loaded && deck.hasGrid && deck.slicerOn;
+            break;
+        case PadMode::HotCue:
         case PadMode::PadFx:
         case PadMode::Sampler:
             look.text = "-";
@@ -187,6 +191,14 @@ std::vector<engine::EngineCommand> padCommands(PadMode mode, engine::DeckId deck
             out.push_back(engine::HotCue{deck, 0, engine::HotCueOp::Press});
             break;
         case PadMode::Slicer:
+            if (alternate)
+            {
+                if (!release && pad < 3)
+                    out.push_back(engine::SetSlicer{deck, true, pad == 0 ? 8.0 : pad == 1 ? 16.0 : 32.0});
+                break;
+            }
+            out.push_back(engine::SlicerPad{deck, static_cast<std::uint8_t>(pad), release});
+            break;
         case PadMode::PadFx:
         case PadMode::Sampler:
             break;

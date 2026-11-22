@@ -1090,6 +1090,8 @@ void MainComponent::setPadMode(engine::DeckId deck, ui::PadMode mode)
 {
     if (deck >= 2)
         return;
+    if ((padModes[deck] == ui::PadMode::Slicer) != (mode == ui::PadMode::Slicer)) // the slicer domain (P3-07)
+        engine.send(engine::SetSlicer{deck, mode == ui::PadMode::Slicer, slicerBeats[deck]});
     padModes[deck] = mode;
     (deck == 0 ? deckA : deckB).setPadMode(mode);
 }
@@ -1100,7 +1102,11 @@ void MainComponent::padAction(engine::DeckId deck, int pad, bool alternate, bool
         return;
     const auto& state = engine.readState().decks[deck];
     for (const auto& c : ui::padCommands(padModes[deck], deck, pad, hotCuePage, alternate, release, state))
+    {
+        if (const auto* slicer = std::get_if<engine::SetSlicer>(&c))
+            slicerBeats[deck] = slicer->beats;
         engine.send(c);
+    }
 }
 
 void MainComponent::showPadModeMenu(engine::DeckId deck)
@@ -1120,6 +1126,16 @@ void MainComponent::showPadModeMenu(engine::DeckId deck)
         m.addItem(name, true, padModes[deck] == mode, [this, deck, mode] { setPadMode(deck, mode); });
     }
     m.addSeparator();
+    for (const double beats : {8.0, 16.0, 32.0})
+        m.addItem("Slicer: " + juce::String(juce::roundToInt(beats)) + " beats", true, slicerBeats[deck] == beats,
+                  [this, deck, beats]
+                  {
+                      slicerBeats[deck] = beats;
+                      if (padModes[deck] == ui::PadMode::Slicer)
+                          engine.send(engine::SetSlicer{deck, true, beats});
+                      else
+                          setPadMode(deck, ui::PadMode::Slicer);
+                  });
     m.addItem(hotCuePage == 0 ? "Hot cues: show pads I-P (F1)" : "Hot cues: show pads A-H (F1)",
               [this, deck]
               {
