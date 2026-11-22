@@ -383,7 +383,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
   Capture the current loop or slicer range of a deck into a sampler slot (saved as WAV in the user samples folder).
   Done when: captured loop plays back sample-identical (test).
 
-- [ ] **P3-15 Sequencer**
+- [x] **P3-15 Sequencer**
   Record sampler pad presses into a 1/2/4-bar quantized loop; overdub, mute per slot, erase, save up to 8 sequences per bank, recall via "Sequence Call" pad mode; metronome option.
   Done when: recorded sequence replays identically after restart.
 

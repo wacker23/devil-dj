@@ -50,6 +50,7 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
     for (auto& strip : strips)
         strip.prepare(sampleRate, capacity);
     sampler.prepare(sampleRate, capacity); // P3-13
+    sequencer.reset();                      // P3-15
     samplerPendingBeat.fill(-1.0);
     samplerPending = false;
     for (std::size_t i = 0; i < mixer.size(); ++i)
@@ -1124,6 +1125,8 @@ void AudioEngine::apply(const SamplerPad& command) noexcept
     {
         samplerPendingBeat[command.slot] = -1.0; // a gate let go before its beat: never starts
         sampler.releasePad(command.slot);
+        if (sampler.slot(command.slot).mode == Sampler::Mode::Gate)
+            sequencer.record(command.slot, true, clock.beatAtBlockEnd()); // (only while recording)
         return;
     }
     const auto& slot = sampler.slot(command.slot);
@@ -1133,9 +1136,86 @@ void AudioEngine::apply(const SamplerPad& command) noexcept
         samplerPendingBeat[command.slot] =
             std::ceil(clock.beatAtBlockEnd() / quantizeBeats - 1e-9) * quantizeBeats;
         samplerPending = true;
+        sequencer.record(command.slot, false, samplerPendingBeat[command.slot]); // where it will sound
         return;
     }
     sampler.press(command.slot, 0);
+    sequencer.record(command.slot, false, clock.beatAtBlockEnd());
+}
+
+void AudioEngine::apply(const SequencerCommand& command) noexcept
+{
+    switch (command.op)
+    {
+        case SequencerOp::Clear:
+            sequencer.clear(static_cast<int>(command.value));
+            break;
+        case SequencerOp::Bars:
+            sequencer.setBars(static_cast<int>(command.value));
+            break;
+        case SequencerOp::Play:
+            sequencer.setPlaying(command.value != 0.0f);
+            break;
+        case SequencerOp::Record:
+            if (command.value != 0.0f)
+                sequencer.setRecording(true);
+            else
+                sequencer.setRecording(false); // plays on
+            break;
+        case SequencerOp::Erase:
+            sequencer.erase();
+            break;
+        case SequencerOp::EraseSlot:
+            sequencer.eraseSlot(command.slot);
+            break;
+        case SequencerOp::Mute:
+            sequencer.setMuted(command.slot, command.value != 0.0f);
+            break;
+        case SequencerOp::Metronome:
+            sequencerMetronome = command.value != 0.0f;
+            break;
+    }
+}
+
+void AudioEngine::apply(const SequencerEvents& command) noexcept
+{
+    for (int i = 0; i < std::min<int>(command.count, SequencerEvents::kChunk); ++i)
+        sequencer.add(command.events[static_cast<std::size_t>(i)]);
+}
+
+void AudioEngine::renderSequencerClick(int numSamples) noexcept
+{
+    // While recording with the metronome on: a click on every master beat, into the headphones.
+    if (sequencerMetronome && sequencer.recording() && clock.beatsPerSample() > 0.0)
+    {
+        const double a = clock.beatAtBlockStart(), b = clock.beatAtBlockEnd();
+        const double k = std::ceil(a - 1e-9);
+        if (k < b)
+        {
+            const bool downbeat = std::fmod(k, 4.0) == 0.0;
+            seqClickDelay = static_cast<int>(std::floor((k - a) / clock.beatsPerSample()));
+            seqClickPosition = 0;
+            seqClickLength = static_cast<int>(0.015 * sampleRate);
+            seqClickIncrement = 2.0 * std::numbers::pi * (downbeat ? 2000.0 : 1000.0) / sampleRate;
+            seqClickLevel = downbeat ? 0.5f : 0.35f;
+            seqClickActive = true;
+        }
+    }
+    if (!seqClickActive)
+        return;
+    float* cl = cueBus.getWritePointer(0);
+    float* cr = cueBus.getWritePointer(1);
+    const double decay = 1.0 / (0.003 * sampleRate);
+    for (int s = std::max(0, seqClickDelay); s < numSamples && seqClickPosition < seqClickLength; ++s, ++seqClickPosition)
+    {
+        const double p = seqClickPosition;
+        const auto v = static_cast<float>(seqClickLevel * std::exp(-p * decay) * std::sin(p * seqClickIncrement));
+        cl[s] += v;
+        cr[s] += v;
+    }
+    seqClickDelay = 0;
+    if (seqClickPosition >= seqClickLength)
+        seqClickActive = false;
 }
 
 void AudioEngine::apply(const SamplerSet& command) noexcept
@@ -1636,6 +1716,11 @@ void AudioEngine::renderSampler(int numSamples) noexcept
             }
         }
     }
+    // The sequencer's presses due in this block (P3-15), at their samples.
+    if (clock.beatsPerSample() > 0.0)
+        sequencer.process(sampler, clock.beatAtBlockStart(), clock.beatAtBlockEnd(), 1.0 / clock.beatsPerSample(),
+                          numSamples);
+    renderSequencerClick(numSamples);
     juce::FloatVectorOperations::clear(l, numSamples);
     juce::FloatVectorOperations::clear(r, numSamples);
     sampler.render(l, r, numSamples, clock.bpm());
@@ -1887,6 +1972,12 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         st.bpm = static_cast<float>(slot.bpm);
         st.progress = static_cast<float>(sampler.progress(s));
     }
+    current.sequencer.playing = sequencer.playing(); // P3-15
+    current.sequencer.recording = sequencer.recording();
+    current.sequencer.metronome = sequencerMetronome;
+    current.sequencer.mutes = sequencer.mutedSlots();
+    current.sequencer.position = sequencer.positionAt(clock.beatAtBlockEnd());
+    current.sequencer.sequence = sequencer.sequence();
     current.crossfader = static_cast<float>(crossfaderPosition);
     current.crossfaderCurve = static_cast<std::uint8_t>(crossfaderCurve);
     current.masterGainDb = static_cast<float>(masterGainDb);

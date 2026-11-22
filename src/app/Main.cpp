@@ -145,6 +145,8 @@ public:
         mainComponent->setColorFx(settings->get(keys::colorFx)); // P3-10
         mainComponent->onColorFxChanged = [this](int type) { settings->set(keys::colorFx, type); };
         mainComponent->setPadFxPresets(settings->get(keys::padFxPresets)); // P3-12
+        mainComponent->setSequences(settings->get(keys::sequences));       // P3-15
+        mainComponent->onSequencesChanged = [this](const juce::String& json) { settings->set(keys::sequences, json); };
         mainComponent->onPadFxPresetsChanged = [this](const juce::String& json)
         { settings->set(keys::padFxPresets, json); };
         menu->setKeySyncCompatible(settings->get(keys::keySyncCompatible));

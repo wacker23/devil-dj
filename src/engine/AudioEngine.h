@@ -14,6 +14,7 @@
 #include "engine/EngineState.h"
 #include "engine/OutputRouter.h"
 #include "engine/Sampler.h"
+#include "engine/Sequencer.h"
 #include "engine/TrackBuffer.h"
 #include "util/SpscQueue.h"
 #include "util/TripleBuffer.h"
@@ -153,6 +154,9 @@ private:
     void apply(const SamplerLoad& command) noexcept;
     void apply(const SamplerPad& command) noexcept;
     void apply(const SamplerSet& command) noexcept;
+    void apply(const SequencerCommand& command) noexcept;
+    void apply(const SequencerEvents& command) noexcept;
+    void renderSequencerClick(int numSamples) noexcept;
     // One channel from its source's audio in l / r to the master and cue buses (strip, color FX, pad FX, release FX,
     // the FX units on it, meter, cue, fader, crossfader).
     void mixChannel(int channel, float* l, float* r, int numSamples) noexcept;
@@ -267,6 +271,13 @@ private:
     Sampler sampler;
     std::array<double, Sampler::kSlots> samplerPendingBeat{}; // < 0 = none
     bool samplerPending = false;
+    // The sequencer (P3-15) and its metronome click (into the headphones while recording).
+    Sequencer sequencer;
+    bool sequencerMetronome = false;
+    int seqClickPosition = 0, seqClickLength = 0, seqClickDelay = -1;
+    double seqClickIncrement = 0.0;
+    float seqClickLevel = 0.0f;
+    bool seqClickActive = false;
     dsp::fx::ColorFx::Type colorType = dsp::fx::ColorFx::Type::Filter;
     // Release FX (P3-11), one per channel after the color FX; when one has ended its deck pauses.
     std::array<dsp::fx::ReleaseFx, kMaxChannels> releaseFx;

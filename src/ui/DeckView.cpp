@@ -572,6 +572,10 @@ void DeckView::setPadMode(PadMode mode)
             tip = "Pad FX: each pad an effect preset - on while held (or latched: press on, press off); release "
                   "effects end the track when let go. Right-click a pad to edit it; Shift + pad 1 / 2: bank 1 / 2.";
             break;
+        case PadMode::SequenceCall:
+            tip = "Sequence call: pad 1-8 plays the sampler bank's sequence 1-8 (the playing one again: stop). Record "
+                  "them with REC in the SAMPLER panel.";
+            break;
         case PadMode::Sampler:
             tip = "Sampler: the pads play the sampler's bank (one-shot / loop: press; gate: hold); Shift + pad 1-4: "
                   "bank 1-4. Load the slots in the SAMPLER panel.";
@@ -603,6 +607,13 @@ void DeckView::setPadFxLooks(const std::array<juce::String, 8>& names, const std
     refreshPads();
 }
 
+void DeckView::setSequenceLooks(const std::array<bool, 8>& filled, int current)
+{
+    sequenceFilled = filled;
+    sequenceCurrent = current;
+    refreshPads();
+}
+
 void DeckView::setSamplerBank(int bank)
 {
     samplerBank = std::clamp(bank, 0, engine::Sampler::kBanks - 1);
@@ -630,6 +641,16 @@ void DeckView::refreshPads()
             auto& p = *pads[static_cast<std::size_t>(i)];
             const bool held = p.isDown() || (padsHeldByKeys & (1u << i)) != 0;
             auto look = padLook(padModeNow, i, state, held);
+            if (padModeNow == PadMode::SequenceCall) // the bank's sequences (P3-15)
+            {
+                const auto& seq = engine.readState().sequencer;
+                look.text = "SEQ " + juce::String(i + 1);
+                look.colour = 0x3CC4B4;
+                look.enabled = true; // an empty one can be called too (and recorded into)
+                look.lit = held || (i == sequenceCurrent && seq.playing);
+                if (!sequenceFilled[static_cast<std::size_t>(i)] && i != sequenceCurrent)
+                    look.text = "-";
+            }
             if (padModeNow == PadMode::Sampler) // the sampler's bank
             {
                 const auto& st = engine.readState().sampler[static_cast<std::size_t>(

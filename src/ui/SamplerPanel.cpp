@@ -98,6 +98,53 @@ SamplerPanel::SamplerPanel(engine::AudioEngine& e)
         const int now = engine.readState().channels[engine::kSamplerChannel].crossfaderAssign;
         sendParam(engine::ChannelParam::CrossfaderAssign, static_cast<float>((now + 1) % 3));
     };
+    // The sequencer (P3-15).
+    for (auto* b : {&rec, &seqPlay, &bars, &erase, &metro, &seq})
+    {
+        style(*b);
+        addAndMakeVisible(*b);
+    }
+    rec.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xffe0483c));
+    rec.setTooltip("Record pad presses into the sequence (it plays while recording: overdub); again: stop recording");
+    rec.onClick = [this]
+    {
+        const bool on = engine.readState().sequencer.recording;
+        engine.send(engine::SequencerCommand{engine::SequencerOp::Record, 0, on ? 0.0f : 1.0f});
+    };
+    seqPlay.setTooltip("Play / stop the sequence (it keeps to the master clock's bars)");
+    seqPlay.onClick = [this]
+    {
+        const bool on = engine.readState().sequencer.playing;
+        engine.send(engine::SequencerCommand{engine::SequencerOp::Play, 0, on ? 0.0f : 1.0f});
+    };
+    bars.setTooltip("The sequence's length: 1, 2 or 4 bars");
+    bars.onClick = [this]
+    {
+        const int now = engine.readState().sequencer.sequence.bars;
+        engine.send(engine::SequencerCommand{engine::SequencerOp::Bars, 0, static_cast<float>(now >= 4 ? 1 : now * 2)});
+    };
+    erase.setTooltip("Erase the whole sequence (one slot: right-click the slot)");
+    erase.onClick = [this] { engine.send(engine::SequencerCommand{engine::SequencerOp::Erase, 0, 0.0f}); };
+    metro.setTooltip("A click in the headphones on every beat while recording");
+    metro.onClick = [this]
+    {
+        const bool on = engine.readState().sequencer.metronome;
+        engine.send(engine::SequencerCommand{engine::SequencerOp::Metronome, 0, on ? 0.0f : 1.0f});
+    };
+    seq.setTooltip("Which of the bank's 8 sequences this is (they are saved; Sequence Call pad mode plays them)");
+    seq.onClick = [this]
+    {
+        juce::PopupMenu m;
+        m.addSectionHeader("Sequence (bank " + juce::String(currentBank + 1) + ")");
+        for (int i = 0; i < 8; ++i)
+            m.addItem("Sequence " + juce::String(i + 1), true, i == sequenceIndex,
+                      [this, i]
+                      {
+                          if (onSequence)
+                              onSequence(i);
+                      });
+        m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&seq));
+    };
     level = std::make_unique<ValueControl>("LEVEL", ValueControl::Style::VerticalFader, 1.0);
     level->setAccent(kSamplerColour);
     level->valueText = [](double v) { return juce::String(juce::roundToInt(100.0 * v)) + " %"; };
@@ -144,6 +191,14 @@ void SamplerPanel::showSlotMenu(int tileIndex)
     m.addItem("Load the browser's selected track", [this, slot] { if (onLoadSelected) onLoadSelected(slot); });
     m.addItem("Empty the slot", engine.readState().sampler[static_cast<std::size_t>(slot)].loaded, false,
               [this, slot] { if (onClear) onClear(slot); });
+    m.addSeparator();
+    const bool muted = (engine.readState().sequencer.mutes & (1u << slot)) != 0;
+    m.addItem("Mute it in the sequence", true, muted,
+              [this, slot, muted]
+              { engine.send(engine::SequencerCommand{engine::SequencerOp::Mute, static_cast<std::uint8_t>(slot), muted ? 0.0f : 1.0f}); });
+    m.addItem("Erase it from the sequence", true, false,
+              [this, slot]
+              { engine.send(engine::SequencerCommand{engine::SequencerOp::EraseSlot, static_cast<std::uint8_t>(slot), 0.0f}); });
     m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&tiles[static_cast<std::size_t>(tileIndex)].play));
 }
 
@@ -172,6 +227,14 @@ void SamplerPanel::refresh()
         t.sync.setEnabled(st.loaded && st.bpm > 0.0f);
         if (!t.gain->isBeingChanged() && std::abs(t.gain->getValue() - st.gain / 2.0) > 1e-4)
             t.gain->setValue(st.gain / 2.0, false);
+    }
+    {
+        const auto& sq = s.sequencer;
+        rec.setToggleState(sq.recording, juce::dontSendNotification);
+        seqPlay.setToggleState(sq.playing, juce::dontSendNotification);
+        bars.setButtonText(juce::String(sq.sequence.bars) + (sq.sequence.bars == 1 ? " BAR" : " BARS"));
+        metro.setToggleState(sq.metronome, juce::dontSendNotification);
+        seq.setButtonText("SEQ " + juce::String(sequenceIndex + 1));
     }
     const auto& ch = s.channels[engine::kSamplerChannel];
     cue.setToggleState(ch.cue, juce::dontSendNotification);
@@ -202,6 +265,19 @@ void SamplerPanel::resized()
     for (auto& b : banks)
         b.setBounds(bankColumn.removeFromTop(bh).reduced(0, 1));
     area.removeFromLeft(6);
+    {
+        // The sequencer: 2 columns x 3 rows.
+        auto column = area.removeFromLeft(112);
+        const int rh = column.getHeight() / 3;
+        juce::TextButton* order[] = {&rec, &seqPlay, &bars, &erase, &metro, &seq};
+        for (int row = 0; row < 3; ++row)
+        {
+            auto r = column.removeFromTop(rh);
+            order[row * 2]->setBounds(r.removeFromLeft(r.getWidth() / 2).reduced(1));
+            order[row * 2 + 1]->setBounds(r.reduced(1));
+        }
+        area.removeFromLeft(6);
+    }
     // The slots: 8 tiles in a row.
     const int w = area.getWidth() / engine::Sampler::kSlotsPerBank;
     for (int i = 0; i < engine::Sampler::kSlotsPerBank; ++i)
@@ -241,6 +317,8 @@ void SamplerPanel::paint(juce::Graphics& g)
         juce::String label = st.loaded ? (name.isNotEmpty() ? name : juce::String("sample")) : juce::String("empty");
         if (st.loaded && st.bpm > 0.0f)
             label << "  " << juce::String(st.bpm, 1);
+        if ((s.sequencer.mutes & (1u << slot)) != 0)
+            label = "[M] " + label; // muted in the sequence
         g.drawText(label, t.area.reduced(4, 1).withHeight(14), juce::Justification::centredLeft, true);
     }
 }

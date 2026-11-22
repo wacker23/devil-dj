@@ -30,6 +30,8 @@ target_sources(devildj_engine INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/OutputRouter.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/Sampler.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Sampler.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Sequencer.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Sequencer.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/TrackBuffer.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/TrackDecoder.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/TrackDecoder.h"

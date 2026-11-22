@@ -19,6 +19,7 @@
 #include "ui/FxPanel.h"
 #include "ui/SamplerPanel.h"
 #include "PadFxPresets.h"
+#include "SequenceStore.h"
 #include "ui/LibraryBrowser.h"
 #include "ui/MemoryCuePanel.h"
 #include "ui/KeyboardController.h"
@@ -138,6 +139,12 @@ private:
     bool showSampler = false;
     void showPanel(bool sampler);
     void loadSample(int slot, const juce::File& file, double bpm, const juce::String& name);
+    // The sequencer's sequences (P3-15): the store, which one is in the engine, saving it when it changes.
+    app::SequenceStore sequences;
+    int sequenceBank = 0, sequenceIndex = 0;
+    void callSequence(int bank, int index, bool play);
+    void keepSequence(); // the engine's sequence into the store (and the settings) when it has changed
+    void showSequenceLooks();
     // P3-14: the deck's loop (or, with slicer = true, its slicer range) into a sampler slot - the shown bank's first
     // empty one - and saved as a 32-bit float WAV in Documents\Devil-DJ\Samples.
     void captureToSampler(engine::DeckId deck, bool slicer);
@@ -272,6 +279,9 @@ public:
     std::function<void(int type)> onColorFxChanged;
     // P3-12: the Pad FX presets as JSON (from the settings), and their changes (to save).
     void setPadFxPresets(const juce::String& json);
+    // P3-15: the sequences as JSON (from the settings), and their changes (to save).
+    void setSequences(const juce::String& json);
+    std::function<void(const juce::String& json)> onSequencesChanged;
     std::function<void(const juce::String& json)> onPadFxPresetsChanged;
     void setIsolator(bool on);
     void setCrossfaderCurve(int curve);

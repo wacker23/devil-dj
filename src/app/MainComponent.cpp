@@ -285,6 +285,7 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     {
         deckA.setSamplerBank(bank);
         deckB.setSamplerBank(bank);
+        showSequenceLooks();
     };
     mixer.onColorFx = [this](int type)
     {
@@ -307,7 +308,13 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
         }
     }
     installPadFxBank(); // P3-12
-    fxTimer = std::make_unique<juce::TimedCallback>([this] { engine.collectEffects(); });
+    samplerPanel.onSequence = [this](int index) { callSequence(samplerPanel.bank(), index, false); };
+    fxTimer = std::make_unique<juce::TimedCallback>(
+        [this]
+        {
+            engine.collectEffects();
+            keepSequence(); // P3-15
+        });
     fxTimer->startTimerHz(2);
     addAndMakeVisible(*libraryBrowser);
     libraryBrowser->onLoad = [this](int deck, const juce::File& file)
@@ -1211,6 +1218,17 @@ void MainComponent::padAction(engine::DeckId deck, int pad, bool alternate, bool
     if (deck >= 2)
         return;
     const auto& state = engine.readState().decks[deck];
+    if (padModes[deck] == ui::PadMode::SequenceCall) // P3-15: the bank's sequences
+    {
+        if (release || alternate)
+            return;
+        const int bank = samplerPanel.bank();
+        if (bank == sequenceBank && pad == sequenceIndex && engine.readState().sequencer.playing)
+            engine.send(engine::SequencerCommand{engine::SequencerOp::Play, 0, 0.0f}); // the playing one: stop
+        else
+            callSequence(bank, pad, true);
+        return;
+    }
     if (padModes[deck] == ui::PadMode::Sampler) // P3-13: the sampler's bank
     {
         if (alternate)
@@ -1304,6 +1322,71 @@ void MainComponent::captureToSampler(engine::DeckId deck, bool slicer)
             else
                 util::logInfo("Capture: saved {}", file.getFullPathName().toStdString());
         });
+}
+
+void MainComponent::setSequences(const juce::String& json)
+{
+    sequences = app::sequencesFromJson(json);
+    callSequence(0, 0, false);
+}
+
+void MainComponent::keepSequence()
+{
+    const auto& s = engine.readState().sequencer;
+    if (s.recording)
+        return; // when recording stops
+    auto now = app::fromEngine(s.sequence);
+    auto& stored = sequences[static_cast<std::size_t>(sequenceBank)][static_cast<std::size_t>(sequenceIndex)];
+    const auto same = [](const app::StoredSequence& a, const app::StoredSequence& b)
+    {
+        if (a.bars != b.bars || a.events.size() != b.events.size())
+            return false;
+        for (std::size_t i = 0; i < a.events.size(); ++i)
+            if (a.events[i].beat != b.events[i].beat || a.events[i].slot != b.events[i].slot ||
+                a.events[i].kind != b.events[i].kind)
+                return false;
+        return true;
+    };
+    if (same(now, app::fromEngine([&] {
+            engine::Sequence copy;
+            copy.bars = static_cast<std::uint8_t>(stored.bars);
+            copy.count = static_cast<int>(stored.events.size());
+            for (std::size_t i = 0; i < stored.events.size() && i < copy.events.size(); ++i)
+                copy.events[i] = stored.events[i];
+            return copy;
+        }())))
+        return;
+    stored = std::move(now);
+    showSequenceLooks();
+    if (onSequencesChanged)
+        onSequencesChanged(app::toJson(sequences));
+}
+
+void MainComponent::callSequence(int bank, int index, bool play)
+{
+    keepSequence(); // the one in the engine first
+    sequenceBank = std::clamp(bank, 0, app::kSequenceBanks - 1);
+    sequenceIndex = std::clamp(index, 0, app::kSequencesPerBank - 1);
+    if (engine.readState().sequencer.recording)
+        engine.send(engine::SequencerCommand{engine::SequencerOp::Record, 0, 0.0f});
+    for (const auto& c :
+         app::loadCommands(sequences[static_cast<std::size_t>(sequenceBank)][static_cast<std::size_t>(sequenceIndex)]))
+        engine.send(c);
+    if (play)
+        engine.send(engine::SequencerCommand{engine::SequencerOp::Play, 0, 1.0f});
+    samplerPanel.setSequenceIndex(sequenceIndex);
+    showSequenceLooks();
+}
+
+void MainComponent::showSequenceLooks()
+{
+    std::array<bool, 8> filled{};
+    const auto& bank = sequences[static_cast<std::size_t>(samplerPanel.bank())];
+    for (std::size_t i = 0; i < filled.size(); ++i)
+        filled[i] = !bank[i].empty();
+    const int current = samplerPanel.bank() == sequenceBank ? sequenceIndex : -1;
+    deckA.setSequenceLooks(filled, current);
+    deckB.setSequenceLooks(filled, current);
 }
 
 void MainComponent::showPanel(bool sampler)
@@ -1521,7 +1604,8 @@ void MainComponent::showPadModeMenu(engine::DeckId deck)
 {
     if (deck >= 2)
         return;
-    static constexpr const char* keys[] = {"F1", "F2", "F3", "F4", "Shift+F1", "Shift+F2", "Shift+F3", "Shift+F4"};
+    static constexpr const char* keys[] = {"F1",       "F2",       "F3",       "F4",      "Shift+F1",
+                                           "Shift+F2", "Shift+F3", "Shift+F4", "no key"};
     juce::PopupMenu m;
     m.addSectionHeader(juce::String("Deck ") + engine::deckLetter(deck) + " pads");
     for (int i = 0; i < ui::kPadModeCount; ++i)

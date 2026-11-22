@@ -59,6 +59,8 @@ inline const SettingKey<int> pauseStyle{"pauseStyle", 0};
 inline const SettingKey<int> colorFx{"colorFx", 0};
 // P3-12: the Pad FX presets (JSON; empty = the defaults).
 inline const SettingKey<juce::String> padFxPresets{"padFxPresets", {}};
+// P3-15: the sampler's sequences (JSON).
+inline const SettingKey<juce::String> sequences{"sequences", {}};
 inline const SettingKey<double> brakeSeconds{"brakeSeconds", 1.0};
 inline const SettingKey<double> spinBackSeconds{"spinBackSeconds", 1.0};
 

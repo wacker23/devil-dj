@@ -112,6 +112,15 @@ struct SamplerSlotState
     float progress = -1.0f; // 0..1 while playing, -1 = not
 };
 
+// The sequencer (P3-15).
+struct SequencerState
+{
+    bool playing = false, recording = false, metronome = false;
+    std::uint32_t mutes = 0;   // slot bits
+    double position = 0.0;     // beats into the sequence (0 .. its length)
+    Sequence sequence;          // what is in the engine (events as recorded)
+};
+
 // Mixer channel settings as the audio thread has them (targets; the sound follows within 20 ms).
 struct ChannelState
 {
@@ -191,6 +200,7 @@ struct EngineState
 
     // Sampler (P3-13): its 4 banks x 8 slots (its mixer channel is channels[kSamplerChannel]).
     std::array<SamplerSlotState, 32> sampler{};
+    SequencerState sequencer; // P3-15
 };
 
 static_assert(std::is_trivially_copyable_v<EngineState>, "EngineState must stay trivially copyable");

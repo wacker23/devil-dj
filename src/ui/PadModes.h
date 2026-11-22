@@ -33,8 +33,9 @@ enum class PadMode : std::uint8_t
     Keyboard,
     PadFx,
     Sampler,
+    SequenceCall, // P3-15: the sampler bank's 8 sequences (no F key: the mode menu)
 };
-inline constexpr int kPadModeCount = 8;
+inline constexpr int kPadModeCount = 9;
 
 const char* padModeName(PadMode mode) noexcept;
 // The task a mode is waiting for ("P3-07"), or nullptr when it works.

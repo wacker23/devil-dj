@@ -78,6 +78,8 @@ public:
     std::function<void(int pad)> onPadFxMenu; // right-click a pad in Pad FX mode: edit its preset
     // Sampler pads (P3-13): which bank the pads play.
     void setSamplerBank(int bank);
+    // Sequence Call pads (P3-15): which of the bank's 8 sequences have something in them, and which is in the engine.
+    void setSequenceLooks(const std::array<bool, 8>& filled, int current);
     juce::TextButton& padModeButton() noexcept { return modeButton; }
     // Memory cues (P3-02): MEM opens the list; their positions (buffer samples) and colours for the overview.
     std::function<void()> onMemoryPanel;
@@ -145,6 +147,8 @@ private:
     std::array<bool, 8> padFxRelease{};
     int padFxBank = 0;
     int samplerBank = 0;
+    std::array<bool, 8> sequenceFilled{};
+    int sequenceCurrent = -1;
     std::array<std::uint32_t, 16> hotCueColours{};
     std::array<juce::String, 16> hotCueLabels;
     std::vector<std::pair<double, std::uint32_t>> memoryCues;

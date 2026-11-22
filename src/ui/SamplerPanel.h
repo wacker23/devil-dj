@@ -30,6 +30,16 @@ public:
     std::function<void(int slot)> onLoadSelected; // the browser's selected track
     std::function<void(int slot)> onClear;
     std::function<void(int bank)> onBank;         // the bank shown changed (the pads follow)
+    // The sequencer (P3-15): REC / PLAY / bars / ERASE / METRO drive the engine; the SEQ button's menu chooses which
+    // of the bank's 8 sequences is in the engine (onSequence(index)) - the app keeps and saves them.
+    std::function<void(int index)> onSequence;
+    void setSequenceIndex(int index) { sequenceIndex = index; refresh(); }
+    juce::TextButton& recButton() noexcept { return rec; }
+    juce::TextButton& seqPlayButton() noexcept { return seqPlay; }
+    juce::TextButton& barsButton() noexcept { return bars; }
+    juce::TextButton& eraseButton() noexcept { return erase; }
+    juce::TextButton& metroButton() noexcept { return metro; }
+    juce::TextButton& seqButton() noexcept { return seq; }
 
     void setSlotName(int slot, const juce::String& name);
     void setBank(int bank);
@@ -79,6 +89,8 @@ private:
     std::array<juce::TextButton, engine::Sampler::kBanks> banks;
     std::array<juce::String, engine::Sampler::kSlots> names;
     juce::TextButton cue{"CUE"}, assign{"THRU"};
+    juce::TextButton rec{"REC"}, seqPlay{"SEQ"}, bars{"1 BAR"}, erase{"ERASE"}, metro{"METRO"}, seq{"SEQ 1"};
+    int sequenceIndex = 0;
     std::unique_ptr<ValueControl> level, filter;
     int currentBank = 0;
     juce::VBlankAttachment vblank;
