@@ -3,6 +3,8 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <functional>
+#include <cmath>
+#include <algorithm>
 
 namespace devildj::app
 {
@@ -43,6 +45,15 @@ public:
         quantizeEighths = eighths;
     }
     static constexpr int kQuantizeEighths[] = {1, 2, 4, 8};
+    // The mixer's saved state, for the ticks in the Mixer menu.
+    void setMixerState(double cueMix, double headphoneDb, int curve, int assignA, int assignB) noexcept
+    {
+        cueMixIndex = std::clamp(static_cast<int>(std::lround(cueMix * 4.0)), 0, 4);
+        levelIndex = std::clamp(static_cast<int>(std::lround(-headphoneDb / 6.0)), 0, 3);
+        crossfaderCurve = std::clamp(curve, 0, 2);
+        assign[0] = std::clamp(assignA, 0, 2);
+        assign[1] = std::clamp(assignB, 0, 2);
+    }
     std::function<void(bool on)> onKeySyncCompatible; // P2-22
     void setKeySyncCompatible(bool on) noexcept { keySyncCompatible = on; }
     std::function<void()> onToggleDebugOverlay;

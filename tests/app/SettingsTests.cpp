@@ -62,6 +62,9 @@ TEST_CASE("Settings app keys have the documented defaults", "[app][Settings]")
     CHECK(settings.get(keys::keyNotation) == 0);           // musical keys (P2-15)
     CHECK(settings.get(keys::autoGain));                   // Auto Gain on (P2-16)
     CHECK(settings.get(keys::autoGainTarget) == -10);      // LUFS
+    CHECK(settings.get(keys::headphoneMix) == 0.0);        // cue only: the headphones prepare the next track
+    CHECK(settings.get(keys::crossfaderAssignA) == 0);     // deck A on the A side
+    CHECK(settings.get(keys::crossfaderAssignB) == 2);
     CHECK(settings.get(keys::audioDeviceState).isEmpty()); // system default device
 }
 

@@ -20,6 +20,15 @@ inline const SettingKey<int> outputLayout{"outputLayout", 0};
 // P2-25: the headphone device for layout 3 (a device name of the main driver). Empty = the first other one.
 inline const SettingKey<juce::String> cueDevice{"cueDevice", {}};
 
+// The mixer as it was left (saved when the app closes, from the engine, so knobs and menus both count):
+// headphone mix 0 = cue only (the default: the headphones prepare the next track) .. 1 = master only, headphone
+// level dB, crossfader curve (0 smooth, 1 linear, 2 cut), each deck's crossfader side (0 A, 1 THRU, 2 B).
+inline const SettingKey<double> headphoneMix{"headphoneMix", 0.0};
+inline const SettingKey<double> headphoneLevelDb{"headphoneLevelDb", 0.0};
+inline const SettingKey<int> crossfaderCurve{"crossfaderCurve", 0};
+inline const SettingKey<int> crossfaderAssignA{"crossfaderAssignA", 0};
+inline const SettingKey<int> crossfaderAssignB{"crossfaderAssignB", 2};
+
 // Show the Debug menu (crash tests, log folder) in Release builds too. Debug builds always show it.
 inline const SettingKey<bool> showDebugMenu{"showDebugMenu", false};
 

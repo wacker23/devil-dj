@@ -17,6 +17,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <memory>
 
@@ -114,6 +115,19 @@ public:
             settings->set(keys::quantizeEighths, eighths);
             menu->setQuantize(on, eighths);
         };
+        // The mixer as it was left (P2 follow-up).
+        {
+            const double cueMix = std::clamp(settings->get(keys::headphoneMix), 0.0, 1.0);
+            const double level = std::clamp(settings->get(keys::headphoneLevelDb), -100.0, 6.0);
+            const int curve = settings->get(keys::crossfaderCurve), assignA = settings->get(keys::crossfaderAssignA),
+                      assignB = settings->get(keys::crossfaderAssignB);
+            mainComponent->setCueMix(cueMix);
+            mainComponent->setHeadphoneLevel(level);
+            mainComponent->setCrossfaderCurve(std::clamp(curve, 0, 2));
+            mainComponent->setCrossfaderAssign(0, std::clamp(assignA, 0, 2));
+            mainComponent->setCrossfaderAssign(1, std::clamp(assignB, 0, 2));
+            menu->setMixerState(cueMix, level, curve, assignA, assignB);
+        }
         menu->setKeySyncCompatible(settings->get(keys::keySyncCompatible));
         mainComponent->setKeySyncCompatible(settings->get(keys::keySyncCompatible));
         menu->onKeySyncCompatible = [this](bool on)
@@ -303,6 +317,7 @@ public:
 
     void shutdown() override
     {
+        saveMixerState();
         if (mainWindow != nullptr)
             mainWindow->setMenuBar(nullptr);
         backupThread = nullptr; // waits for a running backup before the library closes
@@ -479,6 +494,21 @@ private:
             openCueDevice();
         else if (cueDevice != nullptr)
             cueDevice->close();
+    }
+
+    // The mixer as it is now (knobs and menus both), for the next start.
+    void saveMixerState()
+    {
+        if (engine == nullptr || settings == nullptr)
+            return;
+        const auto& s = engine->readState();
+        if (s.blockCounter == 0) // the engine never ran (no sound card): it holds no choices of the user's
+            return;
+        settings->set(keys::headphoneMix, static_cast<double>(s.cueMix));
+        settings->set(keys::headphoneLevelDb, static_cast<double>(s.headphoneLevelDb));
+        settings->set(keys::crossfaderCurve, static_cast<int>(s.crossfaderCurve));
+        settings->set(keys::crossfaderAssignA, static_cast<int>(s.channels[0].crossfaderAssign));
+        settings->set(keys::crossfaderAssignB, static_cast<int>(s.channels[1].crossfaderAssign));
     }
 
     // P2-25: the saved headphone device, or the first other output of the driver. Error, or empty.
