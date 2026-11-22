@@ -162,3 +162,11 @@ TEST_CASE("Drift buffer: silent until primed, the delay is the target, a stalled
     CHECK_FALSE(b.playing());
     CHECK(outL[200] == 0.0f);
 }
+
+TEST_CASE("Drift buffer: 60 minutes with two devices - no under- or overflow, drift corrected", "[.long][dsp][drift]")
+{
+    // P3-22 (built as P2-25): an hour of the master device and a headphone device 200 ppm apart (0.72 s of drift
+    // uncorrected), and an hour at 48 / 44.1 kHz.
+    check(run(48000.0, 512, 48000.0, 480, 200.0, 3600.0), 48000.0);
+    check(run(48000.0, 256, 44100.0, 441, -150.0, 3600.0), 44100.0);
+}

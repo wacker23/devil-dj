@@ -11,6 +11,10 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P3-22 Dual-device cueing
+- What changed: nothing new in the app - the second output device for the headphones was built ahead of time in P2-25 (Audio settings > Separate headphones: the master on one device, the cue on another, through the drift-compensating `dsp::DriftBuffer`, a P controller on its smoothed fill steering a cubic resampler within +-0.5 %). This task adds its hour-long test.
+- Tests (Done-when: 60-minute run with two devices: buffer neither under- nor overflows; drift-corrected; no audible glitches): [.long], simulated clocks (run in Release, 9 s): 60 minutes with the headphone device's clock 200 ppm fast against the master (0.72 s of drift if nothing corrected it), and 60 minutes at 48 kHz / 44.1 kHz with -150 ppm: no underrun or overflow after settling, the fill stays within 35 % of its target, a 1 kHz tone comes out at 1 kHz (within 0.5 Hz), no step larger than the sine's own (no clicks), the channels intact. The run on real hardware (the owner's two devices) is the Phase 3 gate's set.
+
 ## 2026-11-23 · P3-21 Touch mode
 - What changed: Options > Touch mode (larger controls): the whole interface is drawn 1.25x, so every button, pad, knob and fader is a bigger target for a finger (remembered; on small screens the browser gives up rows first). Multi-touch already works the way JUCE delivers it - each finger is its own input source and goes to the control under it, and every control keeps its own drag - so two faders, two pads or both decks' waveforms can be worked at once; dragging a waveform with a finger scratches / scrubs exactly as the mouse does (P1-14).
 - Tests (Done-when: manual test on a Windows touchscreen - the owner's, if one is at hand - or simulated pointer events): two faders dragged in interleaved moves (two fingers) each move only by their own drag, in opposite directions; two pads held at once and let go one by one give down A, down B, up A, up B; both decks' waveforms grabbed and dragged opposite ways alternately - deck A scrubbed forward, deck B held at its start, neither left playing; the touch-mode scale set and back.

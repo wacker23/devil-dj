@@ -415,7 +415,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
   Larger hit targets option, multi-touch (two faders at once), touch-drag jog.
   Done when: manual test on a Windows touchscreen (or simulated pointer events).
 
-- [ ] **P3-22 Dual-device cueing**
+- [x] **P3-22 Dual-device cueing**
   Optional second output device for headphones (e.g. laptop jack + USB DAC for speakers). Second device callback consumes a ring buffer filled by the main callback; adaptive resampling (PI controller on buffer fill level) compensates clock drift.
   Done when: 60-minute run with two devices: buffer neither under- nor overflows; drift-corrected; no audible glitches.
 
