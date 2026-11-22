@@ -182,11 +182,30 @@ DeckView::DeckView(engine::AudioEngine& audioEngine, engine::DeckId deckId, Trac
         };
         p->onMenu = [this, i]
         {
-            if (onHotCueMenu)
-                onHotCueMenu(i);
+            if (padModeNow == PadMode::HotCue)
+            {
+                if (onHotCueMenu)
+                    onHotCueMenu(i);
+            }
+            else if (onPadModeMenu)
+            {
+                onPadModeMenu();
+            }
         };
         addAndMakeVisible(*p);
     }
+    modeButton.setColour(juce::TextButton::buttonColourId, kPanel);
+    modeButton.setColour(juce::TextButton::textColourOffId, kText);
+    modeButton.setWantsKeyboardFocus(false);
+    modeButton.setTooltip("Pad mode: hot cue, beat loop, beat jump, slicer, key shift, keyboard, pad FX, sampler "
+                          "(F1-F4, Shift+F1-F4: both decks)");
+    modeButton.onClick = [this]
+    {
+        if (onPadModeMenu)
+            onPadModeMenu();
+    };
+    addAndMakeVisible(modeButton);
+    setPadMode(PadMode::HotCue);
     jumpBack.setTooltip("Beat jump back by the jump size (5 / - keys)");
     jumpForward.setTooltip("Beat jump forward by the jump size (6 / = keys)");
     jumpSize.setTooltip("Beat jump size in beats (larger / smaller: Shift+6 / Ctrl+Shift+6, Shift+= / Ctrl+Shift+=)");
@@ -310,13 +329,20 @@ void DeckView::resized()
         }
     }
     {
-        auto padRow = area.removeFromBottom(30); // hot cue pads (P3-01)
+        auto padArea = area.removeFromBottom(2 * 26 + 4); // the pad grid, 2 x 4 like the keys (P3-06)
         area.removeFromBottom(kMargin);
-        const int pw = (padRow.getWidth() - 7 * 4) / 8;
-        for (auto& p : pads)
+        modeButton.setBounds(padArea.removeFromLeft(72));
+        padArea.removeFromLeft(4);
+        const int pw = (padArea.getWidth() - 3 * 4) / 4;
+        for (int row = 0; row < 2; ++row)
         {
-            p->setBounds(padRow.removeFromLeft(pw));
-            padRow.removeFromLeft(4);
+            auto r = padArea.removeFromTop(26);
+            padArea.removeFromTop(4);
+            for (int c = 0; c < 4; ++c)
+            {
+                pads[static_cast<std::size_t>(row * 4 + c)]->setBounds(r.removeFromLeft(pw));
+                r.removeFromLeft(4);
+            }
         }
     }
     overviewView->setBounds(area);
@@ -482,7 +508,7 @@ void DeckView::paintOverChildren(juce::Graphics& g)
 void DeckView::setHotCuePage(int page)
 {
     padPage = std::clamp(page, 0, 1);
-    refreshPads();
+    setPadMode(padModeNow); // the mode button shows the page
 }
 
 void DeckView::setHotCueLooks(const std::array<std::uint32_t, 16>& colours, const std::array<juce::String, 16>& labels)
@@ -508,8 +534,75 @@ void DeckView::setMemoryCues(std::vector<std::pair<double, std::uint32_t>> cues)
     overviewView->repaint();
 }
 
+void DeckView::setPadMode(PadMode mode)
+{
+    padModeNow = mode;
+    juce::String text = padModeName(mode);
+    if (mode == PadMode::HotCue)
+        text << (padPage == 0 ? " A-H" : " I-P");
+    modeButton.setButtonText(text);
+    juce::String tip;
+    switch (mode)
+    {
+        case PadMode::HotCue:
+            tip = "Hot cue: press to set (empty pad) or jump / play from it; right-click for colour, name, delete, "
+                  "sort. Shift deletes; F1 switches A-H / I-P.";
+            break;
+        case PadMode::BeatLoop:
+            tip = "Beat loop: a loop of that many beats; the same pad again exits, another resizes it.";
+            break;
+        case PadMode::BeatJump:
+            tip = "Beat jump: back / forward that many beats (a loop moves with it).";
+            break;
+        case PadMode::KeyShift:
+            tip = "Key shift: the key in semitones (key lock on); Shift + pad: back to 0.";
+            break;
+        case PadMode::Keyboard:
+            tip = "Keyboard: hot cue A played at that pitch; from pause it plays while held.";
+            break;
+        default:
+            tip = juce::String(padModeName(mode)) + ": comes with " + padModeComesWith(mode) + ".";
+            break;
+    }
+    tip << " Keys: Q W E R / A S D F (deck A), U I O P / J K L ; (deck B).";
+    for (auto& p : pads)
+        p->setTooltip(tip);
+    refreshPads();
+}
+
+void DeckView::setPadHeld(int pad, bool held)
+{
+    if (pad < 0 || pad > 7)
+        return;
+    const auto bit = static_cast<std::uint8_t>(1u << pad);
+    padsHeldByKeys = static_cast<std::uint8_t>(held ? padsHeldByKeys | bit : padsHeldByKeys & ~bit);
+    refreshPads();
+}
+
 void DeckView::refreshPads()
 {
+    modeButton.setEnabled(true);
+    if (padModeNow != PadMode::HotCue)
+    {
+        for (int i = 0; i < 8; ++i)
+        {
+            auto& p = *pads[static_cast<std::size_t>(i)];
+            const bool held = p.isDown() || (padsHeldByKeys & (1u << i)) != 0;
+            const auto look = padLook(padModeNow, i, state, held);
+            if (p.getButtonText() != look.text)
+                p.setButtonText(look.text);
+            const auto rgb = juce::Colour(0xff000000u | look.colour);
+            const auto background = !look.enabled ? kPanel : look.lit ? rgb : kPanel.interpolatedWith(rgb, 0.22f);
+            if (p.findColour(juce::TextButton::buttonColourId) != background)
+            {
+                p.setColour(juce::TextButton::buttonColourId, background);
+                p.setColour(juce::TextButton::textColourOffId,
+                            !look.enabled ? kDim : look.lit ? juce::Colours::black : rgb.brighter(0.4f));
+            }
+            p.setEnabled(look.enabled);
+        }
+        return;
+    }
     for (int i = 0; i < 8; ++i)
     {
         const int slot = padPage * 8 + i;

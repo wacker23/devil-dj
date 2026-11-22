@@ -7,6 +7,8 @@ target_sources(devildj_ui INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/Actions.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/DebugOverlay.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/DeckView.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/PadModes.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/PadModes.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/DeckView.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/FileBrowserPanel.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/FileBrowserPanel.h"

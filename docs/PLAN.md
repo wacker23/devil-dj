@@ -343,7 +343,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
 
 ### Pads
 
-- [ ] **P3-06 Pad engine + pad grid UI**
+- [x] **P3-06 Pad engine + pad grid UI**
   8-pad grid per deck (on screen + keyboard rows from KEYMAP), modes switchable via F1–F4 (+Shift for more): Hot Cue, Beat Loop (1/4…32), Beat Jump, Slicer, Key Shift (−4…+3 semitones), Keyboard (play hot cue 1 chromatically), Pad FX, Sampler.
   Done when: each mode works from keyboard and mouse; pad colours reflect state.
 

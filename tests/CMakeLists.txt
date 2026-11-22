@@ -69,6 +69,7 @@ target_sources(DevilDJTests PRIVATE
     matcher/MatcherSmokeTests.cpp
     ui/UiSmokeTests.cpp
     ui/DeckViewTests.cpp
+    ui/PadModeTests.cpp
     ui/FileBrowserTests.cpp
     ui/KeyboardControllerTests.cpp
     ui/KeymapOverlayTests.cpp

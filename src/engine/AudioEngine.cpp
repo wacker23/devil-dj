@@ -640,6 +640,27 @@ void AudioEngine::apply(const Loop& command) noexcept
         case LoopOp::Exit:
             deck.exitLoop();
             return;
+        case LoopOp::Beat:
+        {
+            if (g.empty())
+                return;
+            const double beats = clampBeats(command.beats > 0.0 ? command.beats : slot.autoLoopBeats);
+            if (deck.loopActive())
+            {
+                const double a = deck.loopStart();
+                if (std::abs((g.beatAt(deck.loopEnd()) - g.beatAt(a)) - beats) < 1e-6)
+                    deck.exitLoop(); // the same pad again
+                else
+                    start(a, beatsFrom(a, beats)); // another size: from the same start
+                return;
+            }
+            double from = deck.position();
+            if (quantizeOn)
+                from = g.sampleAt(std::floor(g.beatAt(from) / std::min(quantizeBeats, beats) + 1e-6) *
+                                  std::min(quantizeBeats, beats));
+            start(from, beatsFrom(from, beats));
+            return;
+        }
         case LoopOp::Set:
             start(command.start, command.end);
             if (deck.loopActive())

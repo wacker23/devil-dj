@@ -247,6 +247,7 @@ enum class LoopOp : std::uint8_t
     Reloop, // the last loop again, from its start
     Exit,   // stop looping, play on
     Set,    // a stored loop (hot / memory loop): `start` .. `end`, and jump to its start
+    Beat,   // a beat-loop pad (P3-06): a loop of `beats` from here; one of that size plays: exit; another: resize
 };
 
 struct Loop

@@ -20,6 +20,7 @@ Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / r
 | Pads 5–8 | A S D F | J K L ; |
 | Pad alternate function (hot cue mode: delete) | Shift + pad | Shift + pad |
 | Hot cues (P3-01): an empty pad sets one, a set pad jumps there (paused: plays while held); F1 switches A-H / I-P | pads | pads |
+| Pad modes (P3-06): Beat Loop 1/4 1/2 1 2 / 4 8 16 32 beats (same pad again: exit); Beat Jump back / forward 1 2 / 4 8 beats (odd pads back); Key Shift 0 +1 +2 +3 / -4 -3 -2 -1 (Shift + pad: 0); Keyboard: hot cue A at those pitches | pads | pads |
 | Pitch bend − / + (hold) | 1 / 2 | 7 / 8 |
 | Loop halve / double (looping: the loop; else the auto-loop size, 1/64 ... 512 beats) | 3 / 4 | 9 / 0 |
 | Loop in / loop out (manual loop) | Ctrl+X / Ctrl+C | Ctrl+, / Ctrl+. |
@@ -57,7 +58,7 @@ Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / r
 | Cycle intent: hold → up → down → switch | Ctrl+Shift+N |
 | Rate the last transition 👍 / 👎 (teaches the Track Matcher) | ' / Shift+' |
 | Quantize on/off (resolution: Options > Quantize) | ` (backquote) |
-| Pad mode: Hot Cue / Beat Loop / Beat Jump / Slicer | F1 / F2 / F3 / F4 |
+| Pad mode: Hot Cue / Beat Loop / Beat Jump / Slicer (both decks; F1 again in Hot Cue: pads A-H / I-P; each deck's mode button picks its own) | F1 / F2 / F3 / F4 |
 | Pad mode: Key Shift / Keyboard / Pad FX / Sampler | Shift+F1 / Shift+F2 / Shift+F3 / Shift+F4 |
 | FX1 on/off / next effect | F5 / F6 |
 | FX2 on/off / next effect | F7 / F8 |

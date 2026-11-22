@@ -257,8 +257,8 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     for (engine::DeckId d = 0; d < 2; ++d)
     {
         auto& view = d == 0 ? deckA : deckB;
-        view.onHotCuePad = [this, d](int pad, bool down)
-        { engine.send(hotCueForPad(d, pad, hotCuePage, false, !down)); };
+        view.onHotCuePad = [this, d](int pad, bool down) { padAction(d, pad, false, !down); };
+        view.onPadModeMenu = [this, d] { showPadModeMenu(d); };
         view.onHotCueMenu = [this, d](int pad) { showHotCueMenu(d, pad); };
         view.onMemoryPanel = [this, d] { openMemoryPanel(d); };
         view.onLoopButton = [this, d](ui::DeckView::LoopButton b) { loopButton(d, b); };
@@ -448,17 +448,19 @@ void MainComponent::registerActions()
         onPress(cmd(DA::KeyLock), [this, d] { toggleKeyLock(d); });
         onPress(cmd(DA::Slip), [this, d] { engine.send(engine::SetSlip{d, !engine.readState().decks[d].slip}); });
         onPress(cmd(DA::Sync), [this, d] { engine.send(engine::SetSync{d, !engine.readState().decks[d].synced}); });
-        // Hot cue pads (P3-01): pad 1-8 on the current page, Shift + pad deletes.
+        // Pads (P3-01, P3-06): pad 1-8 in the deck's pad mode; Shift + pad is the alternate (hot cue: delete).
         for (int pad = 0; pad < 8; ++pad)
         {
             actions.setHandler(cmd(static_cast<DA>(static_cast<int>(DA::Pad1) + pad)),
                                [this, d, pad](Phase p)
                                {
-                                   if (p != Phase::Repeat)
-                                       engine.send(hotCueForPad(d, pad, hotCuePage, false, p == Phase::Release));
+                                   if (p == Phase::Repeat)
+                                       return;
+                                   (d == 0 ? deckA : deckB).setPadHeld(pad, p == Phase::Press);
+                                   padAction(d, pad, false, p == Phase::Release);
                                });
             onPress(cmd(static_cast<DA>(static_cast<int>(DA::PadAlt1) + pad)),
-                    [this, d, pad] { engine.send(hotCueForPad(d, pad, hotCuePage, true, false)); });
+                    [this, d, pad] { padAction(d, pad, true, false); });
         }
         // Beat jump (P2-21).
         onPress(cmd(DA::KeySync), [this, d] { keySync(d); }); // P2-22
@@ -544,7 +546,28 @@ void MainComponent::registerActions()
                     sendCrossfader();
                 });
     onPress(ui::globalCommand(GA::DebugOverlay), [this] { toggleDebugOverlay(); });
-    onPress(ui::globalCommand(GA::PadModeHotCue), [this] { setHotCuePage(1 - hotCuePage); }); // F1: A-H / I-P
+    // Pad modes (P3-06), both decks: F1-F4, Shift+F1-F4. F1 in hot cue mode switches A-H / I-P.
+    onPress(ui::globalCommand(GA::PadModeHotCue),
+            [this]
+            {
+                if (padModes[0] == ui::PadMode::HotCue && padModes[1] == ui::PadMode::HotCue)
+                    setHotCuePage(1 - hotCuePage);
+                for (engine::DeckId d = 0; d < 2; ++d)
+                    setPadMode(d, ui::PadMode::HotCue);
+            });
+    for (const auto [action, mode] : {std::pair{GA::PadModeBeatLoop, ui::PadMode::BeatLoop},
+                                      std::pair{GA::PadModeBeatJump, ui::PadMode::BeatJump},
+                                      std::pair{GA::PadModeSlicer, ui::PadMode::Slicer},
+                                      std::pair{GA::PadModeKeyShift, ui::PadMode::KeyShift},
+                                      std::pair{GA::PadModeKeyboard, ui::PadMode::Keyboard},
+                                      std::pair{GA::PadModePadFx, ui::PadMode::PadFx},
+                                      std::pair{GA::PadModeSampler, ui::PadMode::Sampler}})
+        onPress(ui::globalCommand(action),
+                [this, mode = mode]
+                {
+                    for (engine::DeckId d = 0; d < 2; ++d)
+                        setPadMode(d, mode);
+                });
     onPress(ui::globalCommand(GA::Quantize),
             [this]
             {
@@ -1063,6 +1086,49 @@ void MainComponent::setHotCuePage(int page)
     deckB.setHotCuePage(hotCuePage);
 }
 
+void MainComponent::setPadMode(engine::DeckId deck, ui::PadMode mode)
+{
+    if (deck >= 2)
+        return;
+    padModes[deck] = mode;
+    (deck == 0 ? deckA : deckB).setPadMode(mode);
+}
+
+void MainComponent::padAction(engine::DeckId deck, int pad, bool alternate, bool release)
+{
+    if (deck >= 2)
+        return;
+    const auto& state = engine.readState().decks[deck];
+    for (const auto& c : ui::padCommands(padModes[deck], deck, pad, hotCuePage, alternate, release, state))
+        engine.send(c);
+}
+
+void MainComponent::showPadModeMenu(engine::DeckId deck)
+{
+    if (deck >= 2)
+        return;
+    static constexpr const char* keys[] = {"F1", "F2", "F3", "F4", "Shift+F1", "Shift+F2", "Shift+F3", "Shift+F4"};
+    juce::PopupMenu m;
+    m.addSectionHeader(juce::String("Deck ") + engine::deckLetter(deck) + " pads");
+    for (int i = 0; i < ui::kPadModeCount; ++i)
+    {
+        const auto mode = static_cast<ui::PadMode>(i);
+        juce::String name = ui::padModeName(mode);
+        name << "  (" << keys[i] << ")";
+        if (!ui::padModeAvailable(mode))
+            name << "  - comes with " << ui::padModeComesWith(mode);
+        m.addItem(name, true, padModes[deck] == mode, [this, deck, mode] { setPadMode(deck, mode); });
+    }
+    m.addSeparator();
+    m.addItem(hotCuePage == 0 ? "Hot cues: show pads I-P (F1)" : "Hot cues: show pads A-H (F1)",
+              [this, deck]
+              {
+                  setHotCuePage(1 - hotCuePage);
+                  setPadMode(deck, ui::PadMode::HotCue);
+              });
+    m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&(deck == 0 ? deckA : deckB).padModeButton()));
+}
+
 void MainComponent::showHotCueMenu(engine::DeckId deck, int pad)
 {
     if (deck >= 2)
@@ -1572,7 +1638,7 @@ void MainComponent::resized()
     auto top = area.removeFromTop(topHeight);
     area.removeFromTop(8);
     const int deckWidth = (top.getWidth() - ui::MixerView::kPreferredWidth - 12) / 2;
-    const int deckHeight = std::min(300, top.getHeight()); // with the pad and loop rows (P3-01, P3-03)
+    const int deckHeight = std::min(326, top.getHeight()); // with the pad grid and loop rows (P3-03, P3-06)
     deckA.setBounds(top.removeFromLeft(deckWidth).withHeight(deckHeight));
     top.removeFromLeft(6);
     deckB.setBounds(top.removeFromRight(deckWidth).withHeight(deckHeight));

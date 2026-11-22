@@ -186,6 +186,11 @@ private:
     void showHotCueLooks(engine::DeckId deck);
     void showHotCueMenu(engine::DeckId deck, int pad);
     void setHotCuePage(int page);
+    // The pad grid (P3-06): each deck's mode; a pad press / release in it; the mode menu.
+    std::array<ui::PadMode, 2> padModes{ui::PadMode::HotCue, ui::PadMode::HotCue};
+    void setPadMode(engine::DeckId deck, ui::PadMode mode);
+    void padAction(engine::DeckId deck, int pad, bool alternate, bool release);
+    void showPadModeMenu(engine::DeckId deck);
     // Memory cues and loops (P3-02).
     std::array<std::vector<MemoryCue>, 2> memoryCues;
     std::array<juce::Component::SafePointer<ui::MemoryCuePanel>, 2> memoryPanels;

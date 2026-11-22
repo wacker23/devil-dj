@@ -2,6 +2,7 @@
 
 #include "engine/AudioEngine.h"
 #include "engine/TrackBuffer.h"
+#include "ui/PadModes.h"
 #include "ui/TrackDropTarget.h"
 #include "util/MusicalKey.h"
 
@@ -62,10 +63,16 @@ public:
     void setTrackKey(int musicalKey, util::KeyNotation notation);
     juce::String keyText() const;
     std::function<void()> onTap;      // TAP: tap tempo
-    // Hot cues (P3-01): the pad strip shows the current page (A-H or I-P); a pad press / release, a right-click.
+    // The pad grid (P3-06): 2 x 4 pads in the current mode; a pad press / release (any mode), a right-click (hot
+    // cue mode: that cue's menu), the mode button (its menu). Hot cue mode shows the current page (A-H or I-P).
     class PadButton;
     std::function<void(int pad, bool down)> onHotCuePad;
     std::function<void(int pad)> onHotCueMenu;
+    std::function<void()> onPadModeMenu;
+    void setPadMode(PadMode mode);
+    PadMode padMode() const noexcept { return padModeNow; }
+    void setPadHeld(int pad, bool held); // a pad held from the keyboard (lights it like a finger on it)
+    juce::TextButton& padModeButton() noexcept { return modeButton; }
     // Memory cues (P3-02): MEM opens the list; their positions (buffer samples) and colours for the overview.
     std::function<void()> onMemoryPanel;
     // Loops (P3-03): the loop row's buttons; the app sends the engine commands (auto loop size, export, ...).
@@ -124,6 +131,9 @@ private:
     juce::Rectangle<int> headerArea, infoArea;
     std::array<std::unique_ptr<PadButton>, 8> pads;
     int padPage = 0;
+    PadMode padModeNow = PadMode::HotCue;
+    std::uint8_t padsHeldByKeys = 0;
+    juce::TextButton modeButton{"HOT CUE"};
     std::array<std::uint32_t, 16> hotCueColours{};
     std::array<juce::String, 16> hotCueLabels;
     std::vector<std::pair<double, std::uint32_t>> memoryCues;
