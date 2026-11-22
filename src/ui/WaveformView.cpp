@@ -154,6 +154,29 @@ void WaveformView::paint(juce::Graphics& g)
             drawBandColumn(g, static_cast<float>(x), 1.0f, mid, half, peaks, x < centreX ? 0.55f : 0.95f);
         }
 
+        // Hot cues (P3-01): a line and a flag with the letter.
+        if (preview == nullptr)
+        {
+            g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+            for (int c = 0; c < 16; ++c)
+            {
+                const double at = s.hotCueStart[static_cast<std::size_t>(c)];
+                if (at < 0.0)
+                    continue;
+                const auto x = static_cast<float>((at - leftSample) / spp);
+                if (x < area.getX() - 16.0f || x > area.getRight() + 2.0f)
+                    continue;
+                const auto colour = juce::Colour(0xff000000u | hotCueColours[static_cast<std::size_t>(c)]);
+                g.setColour(colour);
+                g.fillRect(x - 0.5f, area.getY(), 1.5f, area.getHeight());
+                const juce::Rectangle<float> flag(x, area.getBottom() - 15.0f, 14.0f, 15.0f);
+                g.fillRect(flag);
+                g.setColour(juce::Colours::black);
+                g.drawText(juce::String::charToString(static_cast<juce::juce_wchar>('A' + c)), flag,
+                           juce::Justification::centred);
+            }
+        }
+
         // Cue point (the loading track's comes with it).
         const auto cueX = static_cast<float>((s.cuePointSamples - leftSample) / spp);
         if (preview == nullptr && cueX >= area.getX() - 6.0f && cueX <= area.getRight() + 6.0f)

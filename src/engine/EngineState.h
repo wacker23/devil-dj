@@ -42,6 +42,12 @@ struct DeckState
     bool master = false;       // this deck leads the master clock
     double phaseErrorMs = 0.0; // synced and following: how far its beat is from the master's (+ = behind)
     int queuedActions = 0;     // quantized actions waiting for their grid point (P2-20)
+
+    // Hot cues (P3-01), in buffer samples: start < 0 = an empty slot; length > 0 = a hot loop.
+    std::array<double, kHotCues> hotCueStart{-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0,
+                                             -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0};
+    std::array<double, kHotCues> hotCueLength{};
+    int hotCuePreview = -1; // the slot held from pause (playing from it until released)
 };
 
 // Mixer channel settings as the audio thread has them (targets; the sound follows within 20 ms).

@@ -18,6 +18,7 @@ target_sources(DevilDJTests PRIVATE
     analysis/WaveformCacheTests.cpp
     app/AppSmokeTests.cpp
     app/AudioSettingsTests.cpp
+    app/HotCueStoreTests.cpp
     app/LibraryBackupTests.cpp
     app/SettingsTests.cpp
     app/SoakTestTests.cpp
@@ -39,6 +40,7 @@ target_sources(DevilDJTests PRIVATE
     engine/MetronomeTests.cpp
     engine/MixerMasterTests.cpp
     engine/HeadphoneCueTests.cpp
+    engine/HotCueTests.cpp
     engine/KeyShiftTests.cpp
     engine/MasterClockTests.cpp
     engine/DeckTempoTests.cpp

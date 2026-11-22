@@ -321,7 +321,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
 
 ### Cues and loops
 
-- [ ] **P3-01 Hot cues**
+- [x] **P3-01 Hot cues**
   16 hot cues per track (two pages of 8 pads), set/trigger/delete, colours, labels, quantized, stored in DB. Loop hot cues (store a loop). Sorting by time option.
   Done when: persist across restarts; keyboard pads trigger them.
 

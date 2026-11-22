@@ -1,5 +1,6 @@
 #pragma once
 
+#include "HotCueStore.h"
 #include "PlayTracker.h"
 #include "SoakTest.h"
 #include "engine/AudioDeviceService.h"
@@ -172,6 +173,16 @@ private:
     double historyLastTick = 0.0;
     std::shared_ptr<std::atomic<std::int64_t>> historySession = std::make_shared<std::atomic<std::int64_t>>(0);
     void trackHistory();
+    // Hot cues (P3-01): the loaded tracks' cues as the library has them; saved when the engine's change.
+    std::array<HotCues, 2> hotCues{};
+    std::array<bool, 2> hotCuesInEngine{}; // the engine shows this track's cues (not the last track's) yet
+    int hotCuePage = 0;                    // 0 = pads A-H, 1 = I-P
+    void loadHotCues(engine::DeckId deck);
+    void syncHotCues();
+    void saveHotCues(engine::DeckId deck, std::vector<HotCueChange> changes);
+    void showHotCueLooks(engine::DeckId deck);
+    void showHotCueMenu(engine::DeckId deck, int pad);
+    void setHotCuePage(int page);
     void showAnalysisProgress();
     int analysisTotal = 0;
     std::unique_ptr<juce::FileChooser> importChooser;

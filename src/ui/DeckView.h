@@ -59,6 +59,15 @@ public:
     void setTrackKey(int musicalKey, util::KeyNotation notation);
     juce::String keyText() const;
     std::function<void()> onTap;      // TAP: tap tempo
+    // Hot cues (P3-01): the pad strip shows the current page (A-H or I-P); a pad press / release, a right-click.
+    class PadButton;
+    std::function<void(int pad, bool down)> onHotCuePad;
+    std::function<void(int pad)> onHotCueMenu;
+    void setHotCuePage(int page);
+    // The colours and labels of the 16 hot cues (positions and set / empty come from the engine).
+    void setHotCueLooks(const std::array<std::uint32_t, 16>& colours, const std::array<juce::String, 16>& labels);
+    PadButton& padButton(int pad) noexcept { return *pads[static_cast<std::size_t>(pad)]; }
+    int hotCuePage() const noexcept { return padPage; }
     // Beat jump (P2-21): the arrows jump back / forward by the size; the size button opens the size menu.
     std::function<void(int direction)> onBeatJump;
     std::function<void()> onJumpSizeMenu;
@@ -93,6 +102,11 @@ private:
     juce::VBlankAttachment vblank;
 
     juce::Rectangle<int> headerArea, infoArea;
+    std::array<std::unique_ptr<PadButton>, 8> pads;
+    int padPage = 0;
+    std::array<std::uint32_t, 16> hotCueColours{};
+    std::array<juce::String, 16> hotCueLabels;
+    void refreshPads();
     void dropHoverChanged() override { repaint(); }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DeckView)
@@ -110,6 +124,34 @@ public:
 
 private:
     void buttonStateChanged() override;
+    bool wasDown = false;
+};
+
+// A hot cue pad: press / release like the CUE button (mouse or finger), right-click for its menu.
+class DeckView::PadButton final : public juce::TextButton
+{
+public:
+    std::function<void(bool down)> onHold;
+    std::function<void()> onMenu;
+    void mouseDown(const juce::MouseEvent& e) override
+    {
+        if (e.mods.isPopupMenu())
+        {
+            if (onMenu)
+                onMenu();
+            return;
+        }
+        juce::TextButton::mouseDown(e);
+    }
+
+private:
+    void buttonStateChanged() override
+    {
+        const bool down = isDown();
+        if (down != wasDown && onHold)
+            onHold(down);
+        wasDown = down;
+    }
     bool wasDown = false;
 };
 

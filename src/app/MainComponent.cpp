@@ -2,6 +2,7 @@
 
 #include "analysis/Loudness.h"
 #include "library/HistoryRepository.h"
+#include "ui/TrackColours.h"
 
 #include "engine/TrackDecoder.h"
 #include "library/Database.h"
@@ -253,6 +254,13 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     deckA.onGridMenu = [this] { showGridMenu(0); };
     deckB.onGridMenu = [this] { showGridMenu(1); };
     deckA.onBeatJump = [this](int direction) { beatJump(0, direction); };
+    for (engine::DeckId d = 0; d < 2; ++d)
+    {
+        auto& view = d == 0 ? deckA : deckB;
+        view.onHotCuePad = [this, d](int pad, bool down)
+        { engine.send(hotCueForPad(d, pad, hotCuePage, false, !down)); };
+        view.onHotCueMenu = [this, d](int pad) { showHotCueMenu(d, pad); };
+    }
     deckB.onBeatJump = [this](int direction) { beatJump(1, direction); };
     deckA.onJumpSizeMenu = [this] { showJumpSizeMenu(0); };
     deckB.onJumpSizeMenu = [this] { showJumpSizeMenu(1); };
@@ -437,6 +445,18 @@ void MainComponent::registerActions()
                     });
         onPress(cmd(DA::KeyLock), [this, d] { toggleKeyLock(d); });
         onPress(cmd(DA::Sync), [this, d] { engine.send(engine::SetSync{d, !engine.readState().decks[d].synced}); });
+        // Hot cue pads (P3-01): pad 1-8 on the current page, Shift + pad deletes.
+        for (int pad = 0; pad < 8; ++pad)
+        {
+            actions.setHandler(cmd(static_cast<DA>(static_cast<int>(DA::Pad1) + pad)),
+                               [this, d, pad](Phase p)
+                               {
+                                   if (p != Phase::Repeat)
+                                       engine.send(hotCueForPad(d, pad, hotCuePage, false, p == Phase::Release));
+                               });
+            onPress(cmd(static_cast<DA>(static_cast<int>(DA::PadAlt1) + pad)),
+                    [this, d, pad] { engine.send(hotCueForPad(d, pad, hotCuePage, true, false)); });
+        }
         // Beat jump (P2-21).
         onPress(cmd(DA::KeySync), [this, d] { keySync(d); }); // P2-22
         onPress(cmd(DA::KeyShiftDown), [this, d] { shiftKey(d, -1); });
@@ -495,6 +515,7 @@ void MainComponent::registerActions()
                     sendCrossfader();
                 });
     onPress(ui::globalCommand(GA::DebugOverlay), [this] { toggleDebugOverlay(); });
+    onPress(ui::globalCommand(GA::PadModeHotCue), [this] { setHotCuePage(1 - hotCuePage); }); // F1: A-H / I-P
     onPress(ui::globalCommand(GA::Quantize),
             [this]
             {
@@ -695,6 +716,140 @@ juce::File MainComponent::cacheFolder()
     return juce::File::getSpecialLocation(juce::File::windowsLocalAppData).getChildFile("Devil-DJ/cache");
 }
 
+void MainComponent::loadHotCues(engine::DeckId deck)
+{
+    if (deck >= 2)
+        return;
+    const auto& d = deckGrids[deck];
+    const double fileRate = d.fileRate > 0.0 ? d.fileRate : d.bufferRate;
+    hotCues[deck] = gridReader != nullptr ? app::loadHotCues(*gridReader, d.trackId, fileRate, d.bufferRate) : HotCues{};
+    hotCuesInEngine[deck] = false;
+    engine.send(toEngine(deck, hotCues[deck]));
+    showHotCueLooks(deck);
+}
+
+void MainComponent::syncHotCues()
+{
+    const auto& s = engine.readState();
+    for (engine::DeckId deck = 0; deck < 2; ++deck)
+    {
+        const auto& st = s.decks[deck];
+        auto& known = hotCues[deck];
+        if (!st.loaded)
+            continue;
+        if (!hotCuesInEngine[deck])
+        {
+            // Wait until the engine shows the cues sent for this track (not the last track's).
+            bool same = true;
+            for (std::size_t i = 0; i < known.size(); ++i)
+                same = same && (known[i].set ? std::abs(st.hotCueStart[i] - known[i].start) < 0.5 : st.hotCueStart[i] < 0.0);
+            hotCuesInEngine[deck] = same;
+            continue;
+        }
+        const auto& d = deckGrids[deck];
+        const double fileRate = d.fileRate > 0.0 ? d.fileRate : d.bufferRate;
+        auto changes = diffHotCues(known, st.hotCueStart, st.hotCueLength, fileRate, d.bufferRate);
+        if (changes.empty())
+            continue;
+        showHotCueLooks(deck);
+        saveHotCues(deck, std::move(changes));
+    }
+}
+
+void MainComponent::saveHotCues(engine::DeckId deck, std::vector<HotCueChange> changes)
+{
+    const auto trackId = deckGrids[deck].trackId;
+    if (libraryDb == nullptr || trackId == 0 || changes.empty()) // a file outside the library: this session only
+        return;
+    libraryDb->write(
+        [trackId, changes = std::move(changes)](library::Connection& c)
+        {
+            if (!applyHotCueChanges(c, trackId, changes))
+                util::logWarning("Hot cues: {}", c.lastError());
+        });
+}
+
+void MainComponent::showHotCueLooks(engine::DeckId deck)
+{
+    std::array<std::uint32_t, 16> colours{};
+    std::array<juce::String, 16> labels;
+    for (std::size_t i = 0; i < 16; ++i)
+    {
+        colours[i] = hotCues[deck][i].set ? hotCues[deck][i].colour : defaultHotCueColour(static_cast<int>(i));
+        labels[i] = juce::String::fromUTF8(hotCues[deck][i].label.c_str());
+    }
+    (deck == 0 ? deckA : deckB).setHotCueLooks(colours, labels);
+    (deck == 0 ? waveA : waveB).setHotCueColours(colours);
+}
+
+void MainComponent::setHotCuePage(int page)
+{
+    hotCuePage = std::clamp(page, 0, 1);
+    deckA.setHotCuePage(hotCuePage);
+    deckB.setHotCuePage(hotCuePage);
+}
+
+void MainComponent::showHotCueMenu(engine::DeckId deck, int pad)
+{
+    if (deck >= 2)
+        return;
+    const int slot = hotCuePage * 8 + pad;
+    const auto& h = hotCues[deck][static_cast<std::size_t>(slot)];
+    const auto& d = deckGrids[deck];
+    const double fileRate = d.fileRate > 0.0 ? d.fileRate : d.bufferRate;
+    juce::PopupMenu m;
+    const auto letter = juce::String::charToString(static_cast<juce::juce_wchar>(hotCueLetter(slot)));
+    m.addSectionHeader("Hot cue " + letter);
+    juce::PopupMenu colours;
+    for (const auto& c : ui::kTrackColours)
+        colours.addItem(c.name, h.set, h.set && h.colour == c.rgb,
+                        [this, deck, slot, rgb = c.rgb, fileRate]
+                        {
+                            hotCues[deck][static_cast<std::size_t>(slot)].colour = rgb;
+                            showHotCueLooks(deck);
+                            saveHotCues(deck, {changeFor(hotCues[deck], slot, fileRate, deckGrids[deck].bufferRate)});
+                        });
+    m.addSubMenu("Colour", colours, h.set);
+    m.addItem("Name...", h.set,  false,
+              [this, deck, slot, fileRate]
+              {
+                  auto* w = new juce::AlertWindow("Hot cue name", {}, juce::MessageBoxIconType::NoIcon);
+                  w->addTextEditor("name", juce::String::fromUTF8(hotCues[deck][static_cast<std::size_t>(slot)].label.c_str()));
+                  w->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
+                  w->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+                  w->enterModalState(true, juce::ModalCallbackFunction::create(
+                                               [this, w, deck, slot, fileRate](int result)
+                                               {
+                                                   if (result == 1)
+                                                   {
+                                                       auto& cue = hotCues[deck][static_cast<std::size_t>(slot)];
+                                                       cue.label = w->getTextEditorContents("name").trim().toStdString();
+                                                       showHotCueLooks(deck);
+                                                       saveHotCues(deck, {changeFor(hotCues[deck], slot, fileRate,
+                                                                                    deckGrids[deck].bufferRate)});
+                                                   }
+                                               }),
+                                     true);
+              });
+    m.addItem("Delete (Shift + pad)", h.set, false,
+              [this, deck, slot] { engine.send(engine::HotCue{deck, static_cast<std::uint8_t>(slot), engine::HotCueOp::Delete}); });
+    m.addSeparator();
+    m.addItem("Sort hot cues by time", true, false,
+              [this, deck, fileRate]
+              {
+                  hotCues[deck] = sortedByTime(hotCues[deck]);
+                  hotCuesInEngine[deck] = false; // until the engine shows the new order
+                  engine.send(toEngine(deck, hotCues[deck]));
+                  showHotCueLooks(deck);
+                  std::vector<HotCueChange> all;
+                  for (int i = 0; i < engine::kHotCues; ++i)
+                      all.push_back(changeFor(hotCues[deck], i, fileRate, deckGrids[deck].bufferRate));
+                  saveHotCues(deck, std::move(all));
+              });
+    m.addItem(hotCuePage == 0 ? "Show pads I-P (F1)" : "Show pads A-H (F1)", [this] { setHotCuePage(1 - hotCuePage); });
+    m.showMenuAsync(juce::PopupMenu::Options().withMousePosition());
+}
+
 void MainComponent::trackHistory()
 {
     const double now = juce::Time::getMillisecondCounterHiRes() / 1000.0;
@@ -703,6 +858,7 @@ void MainComponent::trackHistory()
     if (libraryDb == nullptr)
         return;
     const auto& s = engine.readState();
+    syncHotCues(); // P3-01: what the pads changed goes into the library
     for (engine::DeckId d = 0; d < 2; ++d)
     {
         const auto& deck = s.decks[d];
@@ -1209,6 +1365,7 @@ void MainComponent::loadGridFor(engine::DeckId deck, const juce::File& file, dou
             s->reset();
         }
     playTracker.loaded(deck, d.trackId); // P2-23: the history counts library tracks
+    loadHotCues(deck);                   // P3-01
     reloadGrid(deck);
     if (d.metronome)
         engine.send(engine::SetMetronome{deck, true});

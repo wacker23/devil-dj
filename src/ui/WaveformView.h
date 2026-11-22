@@ -33,6 +33,8 @@ public:
     // The deck's beatgrid (P2-14), in its buffer's samples: beats drawn as lines, downbeats brighter.
     using GridSource = std::function<util::Beatgrid()>;
     void setGridSource(GridSource source) { gridSource = std::move(source); }
+    // Hot cue colours (P3-01; positions come from the engine state).
+    void setHotCueColours(const std::array<std::uint32_t, 16>& colours) { hotCueColours = colours; }
 
     // A track being loaded (P2-17): its cached waveform, drawn from its start until the deck has the new buffer.
     void showPreview(std::shared_ptr<const analysis::Waveform> waveform);
@@ -79,6 +81,7 @@ private:
     engine::DeckId deck;
     TrackLookup lookup;
     GridSource gridSource;
+    std::array<std::uint32_t, 16> hotCueColours{};
     LatencySource latency;
     engine::BufferId shownBuffer = 0;
     std::shared_ptr<const engine::TrackBuffer> track;

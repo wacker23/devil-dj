@@ -19,6 +19,7 @@ Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / r
 | Pads 1–4 (current pad mode) | Q W E R | U I O P |
 | Pads 5–8 | A S D F | J K L ; |
 | Pad alternate function (hot cue mode: delete) | Shift + pad | Shift + pad |
+| Hot cues (P3-01): an empty pad sets one, a set pad jumps there (paused: plays while held); F1 switches A-H / I-P | pads | pads |
 | Pitch bend − / + (hold) | 1 / 2 | 7 / 8 |
 | Loop halve / double | 3 / 4 | 9 / 0 |
 | Beat jump back / forward (current jump size) | 5 / 6 | - / = |

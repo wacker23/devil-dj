@@ -124,6 +124,28 @@ DeckView::DeckView(engine::AudioEngine& audioEngine, engine::DeckId deckId, Trac
         if (onJumpSizeMenu)
             onJumpSizeMenu();
     };
+    for (int i = 0; i < 8; ++i)
+    {
+        auto& p = pads[static_cast<std::size_t>(i)];
+        p = std::make_unique<PadButton>();
+        p->setColour(juce::TextButton::buttonColourId, kPanel);
+        p->setColour(juce::TextButton::textColourOffId, kText);
+        p->setWantsKeyboardFocus(false);
+        p->setTooltip("Hot cue: press to set (empty pad) or jump / play from it; right-click for colour, name, "
+                      "delete, sort. Keys: Q W E R A S D F (deck A), U I O P J K L ; (deck B); Shift deletes; F1 "
+                      "switches A-H / I-P.");
+        p->onHold = [this, i](bool down)
+        {
+            if (onHotCuePad)
+                onHotCuePad(i, down);
+        };
+        p->onMenu = [this, i]
+        {
+            if (onHotCueMenu)
+                onHotCueMenu(i);
+        };
+        addAndMakeVisible(*p);
+    }
     jumpBack.setTooltip("Beat jump back by the jump size (5 / - keys)");
     jumpForward.setTooltip("Beat jump forward by the jump size (6 / = keys)");
     jumpSize.setTooltip("Beat jump size in beats (larger / smaller: Shift+6 / Ctrl+Shift+6, Shift+= / Ctrl+Shift+=)");
@@ -181,6 +203,7 @@ void DeckView::refresh()
         b->setEnabled(state.loaded);
     grid.setToggleState(state.metronome || state.gridLocked, juce::dontSendNotification);
     sync.setToggleState(state.synced, juce::dontSendNotification);
+    refreshPads();
     for (auto* b : {&jumpBack, &jumpForward})
         b->setEnabled(state.loaded && state.hasGrid); // beats need a beatgrid
     sync.setEnabled(state.loaded && state.hasGrid); // sync needs a beatgrid
@@ -210,6 +233,16 @@ void DeckView::resized()
     area.removeFromTop(4);
     auto buttons = area.removeFromBottom(52);
     area.removeFromBottom(kMargin);
+    {
+        auto padRow = area.removeFromBottom(30); // hot cue pads (P3-01)
+        area.removeFromBottom(kMargin);
+        const int pw = (padRow.getWidth() - 7 * 4) / 8;
+        for (auto& p : pads)
+        {
+            p->setBounds(padRow.removeFromLeft(pw));
+            padRow.removeFromLeft(4);
+        }
+    }
     overviewView->setBounds(area);
 
     const int w = std::min(96, (buttons.getWidth() - 3 * kMargin) / 4);
@@ -366,6 +399,42 @@ void DeckView::paintOverChildren(juce::Graphics& g)
 
 // ---- overview ----
 
+void DeckView::setHotCuePage(int page)
+{
+    padPage = std::clamp(page, 0, 1);
+    refreshPads();
+}
+
+void DeckView::setHotCueLooks(const std::array<std::uint32_t, 16>& colours, const std::array<juce::String, 16>& labels)
+{
+    hotCueColours = colours;
+    hotCueLabels = labels;
+    refreshPads();
+    overviewView->repaint();
+}
+
+void DeckView::refreshPads()
+{
+    for (int i = 0; i < 8; ++i)
+    {
+        const int slot = padPage * 8 + i;
+        auto& p = *pads[static_cast<std::size_t>(i)];
+        const bool set = state.loaded && state.hotCueStart[static_cast<std::size_t>(slot)] >= 0.0;
+        juce::String text = juce::String::charToString(static_cast<juce::juce_wchar>('A' + slot));
+        if (set && hotCueLabels[static_cast<std::size_t>(slot)].isNotEmpty())
+            text << " " << hotCueLabels[static_cast<std::size_t>(slot)];
+        if (p.getButtonText() != text)
+            p.setButtonText(text);
+        const auto colour = set ? juce::Colour(0xff000000u | hotCueColours[static_cast<std::size_t>(slot)]) : kPanel;
+        if (p.findColour(juce::TextButton::buttonColourId) != colour)
+        {
+            p.setColour(juce::TextButton::buttonColourId, colour);
+            p.setColour(juce::TextButton::textColourOffId, set ? juce::Colours::black : kDim);
+        }
+        p.setEnabled(state.loaded);
+    }
+}
+
 void DeckView::Overview::paint(juce::Graphics& g)
 {
     const auto area = getLocalBounds().toFloat();
@@ -399,6 +468,21 @@ void DeckView::Overview::paint(juce::Graphics& g)
 
     if (loading)
         return; // no cue or playhead until the track is on the deck
+    // Hot cue markers (P3-01): a coloured tick with its letter.
+    g.setFont(juce::FontOptions(9.0f, juce::Font::bold));
+    for (int c = 0; c < 16; ++c)
+    {
+        const double at = s.hotCueStart[static_cast<std::size_t>(c)];
+        if (at < 0.0)
+            continue;
+        const float x = area.getX() + area.getWidth() * static_cast<float>(at / s.lengthSamples);
+        g.setColour(juce::Colour(0xff000000u | deckView.hotCueColours[static_cast<std::size_t>(c)]));
+        g.fillRect(x - 0.5f, area.getY(), 1.5f, area.getHeight());
+        g.fillRect(x, area.getBottom() - 10.0f, 9.0f, 10.0f);
+        g.setColour(juce::Colours::black);
+        g.drawText(juce::String::charToString(static_cast<juce::juce_wchar>('A' + c)),
+                   juce::Rectangle<float>(x, area.getBottom() - 10.0f, 9.0f, 10.0f), juce::Justification::centred);
+    }
     // Cue marker and playhead.
     const float cueX = area.getX() + area.getWidth() * static_cast<float>(s.cuePointSamples / s.lengthSamples);
     g.setColour(kCueColour);

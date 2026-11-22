@@ -40,6 +40,9 @@ constexpr int kChannelParamCount = static_cast<int>(ChannelParam::Count);
 
 // Flat id of every continuous parameter (ARCHITECTURE 3.2) so MIDI Learn and the keymap address them the same
 // way: channel 0 Trim, EqLow, ... then channel 1 ... Later tasks append (crossfader, master, FX, ...).
+// Hot cues per deck (P3-01): two pages of 8 pads (A-H, I-P).
+constexpr int kHotCues = 16;
+
 enum class ParamId : std::uint16_t
 {
     ChannelFirst = 0,

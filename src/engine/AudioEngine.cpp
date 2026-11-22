@@ -414,6 +414,8 @@ void AudioEngine::requestTrack(DeckId deckId, const TrackBuffer* buffer, BufferI
     auto& slot = decks[deckId];
     slot.grid = {};
     slot.queuedCount = 0;
+    slot.hotCues = {}; // the app sends the new track's
+    slot.hotCuePreview = -1;
     slot.clickActive = false;
     if (slot.hasPending && slot.pendingId != id)
         releaseBuffer(slot.pendingId); // superseded before it was ever used
@@ -445,6 +447,11 @@ void AudioEngine::apply(const Play& command) noexcept
     if (command.deck >= kMaxDecks || decks[command.deck].hasPending)
         return;
     auto& slot = decks[command.deck];
+    if (slot.hotCuePreview >= 0) // playing from a held hot cue: Play keeps it playing (P3-01)
+    {
+        slot.hotCuePreview = -1;
+        return;
+    }
     // Quantized, with a deck leading the clock: start on the clock's next grid point (in time with it).
     const bool quantized = (quantizeOn || command.quantized) && clock.sourceDeck() >= 0 &&
                            clock.sourceDeck() != static_cast<int>(command.deck) && !slot.deck.isPlaying();
@@ -511,6 +518,73 @@ void AudioEngine::apply(const BeatJump& command) noexcept
     slot.deck.seek(clampToTrack(g.sampleAt(beat + command.beats)));
 }
 
+void AudioEngine::apply(const SetHotCues& command) noexcept
+{
+    if (command.deck < kMaxDecks)
+        decks[command.deck].hotCues = command.cues;
+}
+
+void AudioEngine::apply(const HotCue& command) noexcept
+{
+    if (command.deck >= kMaxDecks || command.slot >= kHotCues || decks[command.deck].hasPending)
+        return;
+    auto& slot = decks[command.deck];
+    auto& deck = slot.deck;
+    auto& cue = slot.hotCues[command.slot];
+    if (deck.track() == nullptr)
+        return;
+    switch (command.op)
+    {
+        case HotCueOp::Delete:
+            cue = {};
+            if (slot.hotCuePreview == command.slot)
+                slot.hotCuePreview = -1;
+            return;
+
+        case HotCueOp::Release:
+            // Held from pause and not taken over by Play: back to the cue, paused.
+            if (slot.hotCuePreview == command.slot)
+            {
+                slot.hotCuePreview = -1;
+                deck.pause();
+                deck.seek(cue.start);
+            }
+            return;
+
+        case HotCueOp::Press:
+            break;
+    }
+    if (!cue.set)
+    {
+        // Set it here (quantize: on the nearest grid point).
+        double at = deck.position();
+        if (quantizeOn && !slot.grid.empty())
+            at = slot.grid.sampleAt(std::round(slot.grid.beatAt(at) / quantizeBeats) * quantizeBeats);
+        cue = {true, std::clamp(at, 0.0, static_cast<double>(deck.length())), 0.0};
+        return;
+    }
+    if (deck.transport() == Deck::Transport::Playing)
+    {
+        if (quantizeOn && !slot.grid.empty() && deck.rate() > 0.0)
+        {
+            const double next =
+                (std::floor(slot.grid.beatAt(deck.position()) / quantizeBeats + 1e-9) + 1.0) * quantizeBeats;
+            queue(slot, {DeckSlot::QueuedAction::Kind::Jump, slot.grid.sampleAt(next), cue.start});
+        }
+        else
+        {
+            deck.seek(cue.start);
+        }
+        return;
+    }
+    // Paused (or the CUE button held): play from the hot cue while the pad is held.
+    if (deck.transport() == Deck::Transport::CuePreview)
+        deck.cueRelease();
+    deck.seek(cue.start);
+    startPlaying(slot);
+    slot.hotCuePreview = command.slot;
+}
+
 void AudioEngine::apply(const JumpBy& command) noexcept
 {
     if (command.deck >= kMaxDecks || decks[command.deck].hasPending)
@@ -537,9 +611,9 @@ void AudioEngine::renderDeckWithActions(DeckSlot& slot, float* l, float* r, int 
         else
         {
             const double rate = slot.deck.rate();
-            if (!slot.deck.isPlaying() || rate <= 0.0)
+            if (!slot.deck.isPlaying() || rate <= 0.0 || a.at < slot.deck.position())
             {
-                due = done; // not moving forward: nothing to wait for
+                due = done; // not moving forward, or its grid point is already behind (an earlier jump): now
             }
             else
             {
@@ -574,6 +648,7 @@ void AudioEngine::apply(const Pause& command) noexcept
         return;
     auto& slot = decks[command.deck];
     slot.deck.pause();
+    slot.hotCuePreview = -1;
     // A quantized play still waiting is called off.
     int kept = 0;
     for (int k = 0; k < slot.queuedCount; ++k)
@@ -989,6 +1064,12 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         s.master = clock.sourceDeck() == static_cast<int>(i);
         s.phaseErrorMs = slot.phaseErrorMs;
         s.queuedActions = slot.queuedCount;
+        for (std::size_t c = 0; c < kHotCues; ++c)
+        {
+            s.hotCueStart[c] = slot.hotCues[c].set ? slot.hotCues[c].start : -1.0;
+            s.hotCueLength[c] = slot.hotCues[c].set ? slot.hotCues[c].length : 0.0;
+        }
+        s.hotCuePreview = slot.hotCuePreview;
         if (s.hasGrid)
         {
             s.beat = slot.grid.beatAt(s.positionSamples);

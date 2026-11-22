@@ -118,6 +118,8 @@ private:
     void apply(const SetQuantize& command) noexcept;
     void apply(const BeatJump& command) noexcept;
     void apply(const JumpBy& command) noexcept;
+    void apply(const SetHotCues& command) noexcept;
+    void apply(const HotCue& command) noexcept;
     void followMaster() noexcept;                              // P2-19: every synced deck that doesn't lead
     bool tempoToMaster(DeckId deck, double percent) noexcept; // sync lock: a follower's fader moves the master
     void advanceClock(int numSamples) noexcept;
@@ -174,6 +176,8 @@ private:
         static constexpr int kMaxQueued = 16;
         std::array<QueuedAction, kMaxQueued> queued{};
         int queuedCount = 0;
+        std::array<HotCueSlot, kHotCues> hotCues{}; // P3-01, in buffer samples
+        int hotCuePreview = -1;                     // held from pause
         bool metronome = false;
         float metronomeGain = 0.5f;
         // The click being played: a short decaying sine, continued across chunks.
