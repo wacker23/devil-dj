@@ -33,6 +33,15 @@ public:
     double getDefault() const noexcept { return defaultValue; }
     bool isBeingChanged() const noexcept { return dragging; }
     void setAccent(juce::Colour c) { accent = c; }
+    void setLabel(const juce::String& text)
+    {
+        if (text != label)
+        {
+            label = text;
+            repaint();
+        }
+    }
+    const juce::String& getLabel() const noexcept { return label; }
 
     static constexpr float kKnobPixelsPerRange = 180.0f;
     static constexpr double kFineFactor = 0.1;

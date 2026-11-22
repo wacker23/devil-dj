@@ -5,6 +5,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <functional>
+
 #include <array>
 #include <memory>
 
@@ -46,6 +48,10 @@ public:
     };
     Channel& channel(int index) noexcept { return channels[static_cast<std::size_t>(index)]; }
     ValueControl& crossfader() noexcept { return *xfader; }
+    // Color FX (P3-10): what the FILTER knobs do; the button opens the choice. onColorFx: the user chose one.
+    juce::TextButton& colorFxButton() noexcept { return colorButton; }
+    std::function<void(int type)> onColorFx;
+    static juce::String colorKnobText(int type, double knob);
     ValueControl& master() noexcept { return *masterLevel; }
     ValueControl& headphoneMix() noexcept { return *cueMix; }
     ValueControl& headphoneLevel() noexcept { return *phonesLevel; }
@@ -58,6 +64,8 @@ private:
     std::array<Channel, kChannels> channels;
     std::unique_ptr<ValueControl> xfader, masterLevel, cueMix, phonesLevel;
     std::unique_ptr<LevelMeterView> masterMeter;
+    juce::TextButton colorButton{"FILTER"};
+    int shownColor = -1;
     std::array<juce::Rectangle<int>, kChannels> headers;
     juce::VBlankAttachment vblank;
 

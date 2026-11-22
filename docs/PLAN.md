@@ -361,7 +361,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
   Echo (tempo-synced delay, feedback, LP in feedback), Ping-Pong delay, Reverb (FDN 8-line), Flanger, Phaser, Filter LFO, Roll (quantized buffer repeat), Trans (beat-synced gate), Spiral (feedback delay with shortening time), Bit Crush, Noise sweep, Pitch (via stretcher transpose), Vinyl brake (release FX), Helix/Freeze (hold buffer). Beat lengths 1/16…16 beats; manual tap BPM option.
   Done when: each effect has a parameter-sweep test (no NaN/Inf, no output > +6 dBFS on 0 dBFS input) and a manual listening note.
 
-- [ ] **P3-10 Color FX (one knob per channel)**
+- [x] **P3-10 Color FX (one knob per channel)**
   Selector shared across channels: Filter (default), Space (reverb send), Dub Echo, Noise, Crush, Pitch. Knob centre = off, left/right = two characters.
   Done when: manual listening test; parameter smoothing verified.
 

@@ -55,6 +55,8 @@ inline const SettingKey<int> quantizeEighths{"quantizeEighths", 8};
 inline const SettingKey<bool> keySyncCompatible{"keySyncCompatible", false};
 // P3-05: how PAUSE stops a playing deck (0 instantly, 1 vinyl brake, 2 spin-back) and the stop times in seconds.
 inline const SettingKey<int> pauseStyle{"pauseStyle", 0};
+// P3-10: what the FILTER knobs do (dsp::fx::ColorFx::Type: 0 filter, 1 space, 2 dub echo, 3 noise, 4 crush, 5 pitch).
+inline const SettingKey<int> colorFx{"colorFx", 0};
 inline const SettingKey<double> brakeSeconds{"brakeSeconds", 1.0};
 inline const SettingKey<double> spinBackSeconds{"spinBackSeconds", 1.0};
 

@@ -246,6 +246,11 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     // FX (P3-09): FX1 on deck A, FX2 on deck B, three effects each to start.
     addAndMakeVisible(fxPanel);
     fxPanel.onEffect = [this](int unit, int slot, int type) { chooseEffect(unit, slot, type); };
+    mixer.onColorFx = [this](int type)
+    {
+        if (onColorFxChanged)
+            onColorFxChanged(type);
+    };
     {
         using T = dsp::fx::EffectType;
         const std::array<std::array<T, 3>, 2> start{{{T::Echo, T::Reverb, T::Flanger}, {T::Roll, T::Trans, T::FilterLfo}}};
@@ -773,6 +778,11 @@ void MainComponent::setStopStyle(int style, double brakeSeconds, double spinBack
     const auto kind = style == 1 ? engine::StopKind::Brake : style == 2 ? engine::StopKind::SpinBack
                                                                         : engine::StopKind::Instant;
     engine.send(engine::SetStopStyle{kind, static_cast<float>(brakeSeconds), static_cast<float>(spinBackSeconds)});
+}
+
+void MainComponent::setColorFx(int type)
+{
+    engine.send(engine::SetColorFx{static_cast<std::uint8_t>(std::clamp(type, 0, dsp::fx::ColorFx::kTypeCount - 1))});
 }
 
 void MainComponent::toggleKeyLock(engine::DeckId deck)

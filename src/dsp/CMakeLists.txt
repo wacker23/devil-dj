@@ -3,6 +3,7 @@ add_library(devildj_dsp STATIC
     DriftBuffer.cpp
     Limiter.cpp
     fx/BeatFx.cpp
+    fx/ColorFx.cpp
     fx/FxSlot.cpp
     fx/FxUnit.cpp
     Resampler.cpp
@@ -17,6 +18,7 @@ target_sources(devildj_dsp PUBLIC
         Biquad.h
         DriftBuffer.h
         fx/BeatFx.h
+        fx/ColorFx.h
         fx/Effect.h
         fx/FxSlot.h
         fx/FxUnit.h

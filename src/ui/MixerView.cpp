@@ -1,5 +1,7 @@
 #include "MixerView.h"
 
+#include "dsp/fx/ColorFx.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -103,14 +105,7 @@ MixerView::MixerView(engine::AudioEngine& audioEngine)
         c.filter = std::make_unique<ValueControl>("FILTER", S::Knob, 0.5);
         c.filter->setAccent(juce::Colour(0xff4aa8e0));
         c.filter->onChange = [this, param](double v) { send(param(P::Filter), v); };
-        c.filter->valueText = [](double v)
-        {
-            const auto t = engine::ChannelStrip::filterTarget(v);
-            if (t.dry >= 1.0)
-                return juce::String("off");
-            return t.lowPass > 0.0 ? "LP " + juce::String(juce::roundToInt(t.lowPassHz)) + " Hz"
-                                   : "HP " + juce::String(juce::roundToInt(t.highPassHz)) + " Hz";
-        };
+        c.filter->valueText = [this](double v) { return colorKnobText(engine.readState().colorFx, v); };
 
         c.fader = std::make_unique<ValueControl>(juce::String::charToString(static_cast<juce::juce_wchar>(
                                                      engine::deckLetter(static_cast<engine::DeckId>(ch)))),
@@ -146,6 +141,28 @@ MixerView::MixerView(engine::AudioEngine& audioEngine)
 
     xfader = std::make_unique<ValueControl>("", S::HorizontalFader, 0.5);
     xfader->onChange = [this](double v) { send(engine::ParamId::Crossfader, v); };
+    // Color FX (P3-10): what the FILTER knobs do.
+    colorButton.setColour(juce::TextButton::buttonColourId, kPanel);
+    colorButton.setColour(juce::TextButton::textColourOffId, juce::Colour(0xff4aa8e0));
+    colorButton.setWantsKeyboardFocus(false);
+    colorButton.setTooltip("Color FX: what the channels' FILTER knobs do - filter, space, dub echo, noise, crush, "
+                           "pitch (centre = off, left / right two characters)");
+    colorButton.onClick = [this]
+    {
+        juce::PopupMenu m;
+        m.addSectionHeader("Color FX (the FILTER knobs)");
+        const int now = engine.readState().colorFx;
+        for (int t = 0; t < dsp::fx::ColorFx::kTypeCount; ++t)
+            m.addItem(dsp::fx::ColorFx::typeName(static_cast<dsp::fx::ColorFx::Type>(t)), true, now == t,
+                      [this, t]
+                      {
+                          engine.send(engine::SetColorFx{static_cast<std::uint8_t>(t)});
+                          if (onColorFx)
+                              onColorFx(t);
+                      });
+        m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&colorButton));
+    };
+    addAndMakeVisible(colorButton);
     masterLevel = std::make_unique<ValueControl>("MASTER", S::Knob, 0.5);
     masterLevel->onChange = [this](double v) { send(engine::ParamId::MasterGain, levelDb(v)); };
     masterLevel->valueText = [](double v) { return dbText(levelDb(v)); };
@@ -185,6 +202,38 @@ void MixerView::show(ValueControl& c, double v)
         c.setValue(v, false);
 }
 
+juce::String MixerView::colorKnobText(int type, double knob)
+{
+    using T = dsp::fx::ColorFx::Type;
+    const double s = dsp::fx::ColorFx::signedAmount(knob);
+    if (static_cast<T>(type) == T::Filter)
+    {
+        const auto t = engine::ChannelStrip::filterTarget(knob);
+        if (t.dry >= 1.0)
+            return "off";
+        return t.lowPass > 0.0 ? "LP " + juce::String(juce::roundToInt(t.lowPassHz)) + " Hz"
+                               : "HP " + juce::String(juce::roundToInt(t.highPassHz)) + " Hz";
+    }
+    if (s == 0.0)
+        return "off";
+    const auto percent = juce::String(juce::roundToInt(std::abs(s) * 100.0)) + " %";
+    switch (static_cast<T>(type))
+    {
+        case T::Space:
+            return (s < 0.0 ? "dark " : "airy ") + percent;
+        case T::DubEcho:
+            return (s < 0.0 ? "dark " : "bright ") + percent;
+        case T::Noise:
+            return (s < 0.0 ? "low-pass " : "high-pass ") + percent;
+        case T::Crush:
+            return (s < 0.0 ? "bits " : "rate ") + percent;
+        case T::Pitch:
+            return (s > 0.0 ? "+" : "") + juce::String(12.0 * s, 1) + " st";
+        default:
+            return percent;
+    }
+}
+
 void MixerView::refresh()
 {
     const auto& s = engine.readState();
@@ -201,6 +250,14 @@ void MixerView::refresh()
         show(*c.fader, st.fader);
         c.cue->setToggleState(st.cue, juce::dontSendNotification);
         c.meter->repaint();
+    }
+    if (s.colorFx != shownColor) // the FILTER knobs' label follows the color FX
+    {
+        shownColor = s.colorFx;
+        const auto name = juce::String(dsp::fx::ColorFx::typeName(static_cast<dsp::fx::ColorFx::Type>(s.colorFx)));
+        colorButton.setButtonText(name.toUpperCase());
+        for (auto& c : channels)
+            c.filter->setLabel(name.toUpperCase());
     }
     show(*xfader, s.crossfader);
     show(*masterLevel, levelKnob(s.masterGainDb));
@@ -243,6 +300,8 @@ void MixerView::resized()
     centre.removeFromTop(14);
     const int centreKnob = std::clamp((centre.getHeight() - 80) / 3, 36, 48);
     masterLevel->setBounds(centre.removeFromTop(centreKnob).withSizeKeepingCentre(56, centreKnob));
+    centre.removeFromTop(2);
+    colorButton.setBounds(centre.removeFromTop(20).reduced(2, 0)); // Color FX (P3-10)
     auto knobsBottom = centre.removeFromBottom(2 * centreKnob + 4);
     phonesLevel->setBounds(knobsBottom.removeFromBottom(centreKnob).withSizeKeepingCentre(56, centreKnob));
     cueMix->setBounds(knobsBottom.removeFromBottom(centreKnob).withSizeKeepingCentre(56, centreKnob));

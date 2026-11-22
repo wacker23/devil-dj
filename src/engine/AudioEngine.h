@@ -3,6 +3,7 @@
 #include "dsp/DriftBuffer.h"
 #include "dsp/LevelMeter.h"
 #include "dsp/Limiter.h"
+#include "dsp/fx/ColorFx.h"
 #include "dsp/fx/FxUnit.h"
 #include "engine/ChannelStrip.h"
 #include "engine/Crossfader.h"
@@ -141,6 +142,8 @@ private:
     void apply(const SlicerPad& command) noexcept;
     void apply(const FxSetEffect& command) noexcept;
     void apply(const FxCommand& command) noexcept;
+    void apply(const SetColorFx& command) noexcept;
+    dsp::fx::BeatContext beatContext() const noexcept;
     void processFx(FxTarget target, float* left, float* right, int numSamples) noexcept;
     void retireEffect(dsp::fx::Effect* effect) noexcept;
     void followMaster() noexcept;                              // P2-19: every synced deck that doesn't lead
@@ -242,6 +245,11 @@ private:
     double brakeSeconds = 1.0, spinBackSeconds = 1.0;
     juce::AudioBuffer<float> deckScratch;            // 2 x capacity, one deck at a time
     std::array<ChannelStrip, kMaxChannels> strips{}; // channel i = deck i
+    // Color FX (P3-10): one per channel, after the strip's filter; the FILTER knob drives the strip's filter
+    // or, with another character chosen, the color FX (the strip's filter then stays at its centre).
+    std::array<dsp::fx::ColorFx, kMaxChannels> colorFx;
+    std::array<double, kMaxChannels> filterKnob{0.5, 0.5, 0.5, 0.5};
+    dsp::fx::ColorFx::Type colorType = dsp::fx::ColorFx::Type::Filter;
     struct MixerChannel
     {
         CrossfaderAssign assign = CrossfaderAssign::Thru;

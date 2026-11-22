@@ -40,6 +40,8 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
         slot.deck.prepare(sampleRate, capacity);
     clock.prepare(sampleRate);
     cueOutput.setWriter(sampleRate, capacity);
+    for (auto& c : colorFx) // P3-10
+        c.prepare(sampleRate, capacity);
     for (auto& strip : strips)
         strip.prepare(sampleRate, capacity);
     for (std::size_t i = 0; i < mixer.size(); ++i)
@@ -1029,12 +1031,35 @@ void AudioEngine::apply(const FxCommand& command) noexcept
     }
 }
 
-void AudioEngine::processFx(FxTarget target, float* left, float* right, int numSamples) noexcept
+dsp::fx::BeatContext AudioEngine::beatContext() const noexcept
 {
     dsp::fx::BeatContext beat;
     beat.bpm = clock.bpm();
     beat.beatAtBlockStart = clock.beatAtBlockStart();
     beat.beatsPerSample = clock.beatsPerSample();
+    return beat;
+}
+
+void AudioEngine::apply(const SetColorFx& command) noexcept
+{
+    if (command.type >= dsp::fx::ColorFx::kTypeCount)
+        return;
+    const auto type = static_cast<dsp::fx::ColorFx::Type>(command.type);
+    if (type == colorType)
+        return;
+    colorType = type;
+    for (std::size_t ch = 0; ch < strips.size(); ++ch)
+    {
+        // The knob moves over to its new job; the old one goes back to its centre (both over 20 ms).
+        strips[ch].setFilter(type == dsp::fx::ColorFx::Type::Filter ? filterKnob[ch] : 0.5);
+        colorFx[ch].setType(type);
+        colorFx[ch].setKnob(filterKnob[ch]);
+    }
+}
+
+void AudioEngine::processFx(FxTarget target, float* left, float* right, int numSamples) noexcept
+{
+    const auto beat = beatContext();
     for (std::size_t u = 0; u < static_cast<std::size_t>(kFxUnits); ++u)
     {
         if (fxTargets[u] != target)
@@ -1378,9 +1403,16 @@ void AudioEngine::apply(const SetParam& command) noexcept
         case ChannelParam::EqHigh:
             strip.setBandDb(ChannelStrip::High, v);
             break;
-        case ChannelParam::Filter:
-            strip.setFilter(v);
+        case ChannelParam::Filter: // the strip's filter, or the color FX (P3-10)
+        {
+            const auto ch = static_cast<std::size_t>(index / kChannelParamCount);
+            filterKnob[ch] = std::clamp(v, 0.0, 1.0);
+            if (colorType == dsp::fx::ColorFx::Type::Filter)
+                strip.setFilter(filterKnob[ch]);
+            else
+                colorFx[ch].setKnob(filterKnob[ch]);
             break;
+        }
         case ChannelParam::FilterResonance:
             strip.setFilterResonance(v);
             break;
@@ -1435,6 +1467,7 @@ void AudioEngine::renderDecks(int numSamples) noexcept
         updateSlicer(slot);
         renderMetronome(i, before, slot.deck.position(), numSamples);
         strips[i].processPreFader(l, r, numSamples);
+        colorFx[i].process(l, r, numSamples, beatContext());      // Color FX (P3-10)
         processFx(static_cast<FxTarget>(i), l, r, numSamples); // FX units on this channel (P3-08)
         m.meter.process(l, r, numSamples);
         if (m.cueSend.isRamping() || m.cueSend.value() > 0.0)
@@ -1537,6 +1570,7 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
             fs.target = fxTargets[static_cast<std::size_t>(u)];
             fs.mode = unit.mode() == dsp::fx::FxUnit::Mode::Single ? 1 : 0;
             fs.manualBpm = static_cast<float>(fxManualBpm[static_cast<std::size_t>(u)]);
+            current.colorFx = static_cast<std::uint8_t>(colorType);
             for (int s = 0; s < kFxSlots; ++s)
             {
                 const auto& slot = unit.slot(s);
@@ -1623,7 +1657,7 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         c.trimDb = static_cast<float>(strip.trimDb());
         for (int b = 0; b < ChannelStrip::kBands; ++b)
             c.eqDb[static_cast<std::size_t>(b)] = static_cast<float>(strip.bandDb(b));
-        c.filter = static_cast<float>(strip.filter());
+        c.filter = static_cast<float>(filterKnob[i]); // the knob (it drives the strip's filter or the color FX)
         c.filterResonance = static_cast<float>(strip.filterResonance());
         c.fader = static_cast<float>(strip.fader());
         c.eqMode = static_cast<std::uint8_t>(strip.eqMode());

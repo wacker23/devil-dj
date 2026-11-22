@@ -142,6 +142,8 @@ public:
             settings->set(keys::spinBackSeconds, spin);
             mainComponent->setStopStyle(style, brake, spin);
         };
+        mainComponent->setColorFx(settings->get(keys::colorFx)); // P3-10
+        mainComponent->onColorFxChanged = [this](int type) { settings->set(keys::colorFx, type); };
         menu->setKeySyncCompatible(settings->get(keys::keySyncCompatible));
         mainComponent->setKeySyncCompatible(settings->get(keys::keySyncCompatible));
         menu->onKeySyncCompatible = [this](bool on)

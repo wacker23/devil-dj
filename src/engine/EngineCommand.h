@@ -384,6 +384,12 @@ struct FxCommand
     float value = 0.0f;
 };
 
+// Color FX (P3-10): what every channel's FILTER knob does (dsp::fx::ColorFx::Type; 0 = the filter).
+struct SetColorFx
+{
+    std::uint8_t type = 0;
+};
+
 // Beat sync (P2-19): the deck follows the master clock's tempo (half / double aware) and phase.
 struct SetSync
 {
@@ -396,7 +402,7 @@ using EngineCommand =
                  Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo, PitchBend, SetInterpolationQuality, SetKeyLock,
                  SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge, SetParam, SetBeatgrid, SetMetronome,
                  SetClockSource, SetInternalTempo, SetSync, SetQuantize, BeatJump, JumpBy, SetHotCues, HotCue,
-                 SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle, SetSlicer, SlicerPad, FxSetEffect, FxCommand>;
+                 SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle, SetSlicer, SlicerPad, FxSetEffect, FxCommand, SetColorFx>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

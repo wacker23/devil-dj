@@ -204,6 +204,8 @@ Cue bus = Σ (pre-fader channels with CUE on) mixed with master (after master ga
 
 Strip = trim → EQ/Isolator → Color FX (filter etc.) → [FX unit insert if targeted] → fader. FX units targeting "master" process the master bus before the limiter.
 
+Color FX as built (P3-10): `dsp::fx::ColorFx` per channel, right after the strip's filter (before the FX units); the engine routes each channel's FILTER parameter to the strip's filter (character Filter) or to its color FX (the strip's filter then goes to its centre over 20 ms); `SetColorFx{type}` chooses for all channels; the state's channel `filter` is the knob either way.
+
 FX as built (P3-08): `dsp::fx::Effect` (prepare / reset / process the wet signal in place with a `BeatContext` from the master clock / `hasTail` / beats / normalised parameters); `dsp::fx::FxSlot` wraps one: out = (1 - wet x m) in + wet x g x fx(m x in), the send m ramped over 20 ms, g = 1 with a tail (it rings out after the send closes, until 50 ms below -100 dBFS or 30 s) and g = m without; an Off slot doesn't touch the signal (bit-exact). `dsp::fx::FxUnit`: 3 slots in series (multi) or slot 0 alone (single). The engine has 2 units with a target each (deck 1-4 after the strip's filter and before the fader - the meter and the headphone cue hear it - the sampler and code deck once they exist, the master before master gain); changing the target resets the unit. Effects are created and prepared on the message thread (`AudioEngine::installEffect`, which owns them), handed over by pointer, and the replaced one comes back through `releasedEffects` for `collectEffects()` to delete; `prepare` prepares them again for a new device.
 
 ### 3.9 Recorder

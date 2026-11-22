@@ -165,6 +165,9 @@ struct EngineState
     // FX units (P3-08).
     std::array<FxUnitState, kFxUnits> fx{};
     std::uint32_t effectsAwaitingRelease = 0; // replaced effects not yet handed back (queue was full)
+
+    // Color FX (P3-10): the character of every channel's FILTER knob (0 = the filter itself).
+    std::uint8_t colorFx = 0;
 };
 
 static_assert(std::is_trivially_copyable_v<EngineState>, "EngineState must stay trivially copyable");
