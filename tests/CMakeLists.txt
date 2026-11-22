@@ -43,6 +43,7 @@ target_sources(DevilDJTests PRIVATE
     engine/HeadphoneCueTests.cpp
     engine/HotCueTests.cpp
     engine/LoopTests.cpp
+    engine/SlipTests.cpp
     engine/KeyShiftTests.cpp
     engine/MasterClockTests.cpp
     engine/DeckTempoTests.cpp

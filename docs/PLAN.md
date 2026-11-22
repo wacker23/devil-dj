@@ -333,7 +333,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
   Auto beat loop 1/64…512 beats, manual loop in/out, halve/double, reloop, loop exit, loop move (beat jump while looping). Sample-accurate wrap with 2 ms crossfade. Loop export to WAV (to sampler or file).
   Done when: engine tests for loop wrap accuracy; no clicks on a sine test.
 
-- [ ] **P3-04 Slip mode**
+- [x] **P3-04 Slip mode**
   Shadow playhead keeps running during loops, hot-cue holds, scratching, reverse and pause; releasing returns to the shadow position.
   Done when: engine test: slip loop of 1 beat for 4 beats returns to exactly +4 beats.
 

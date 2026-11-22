@@ -446,6 +446,7 @@ void MainComponent::registerActions()
                         engine.send(engine::SetParam{engine::channelParam(d, param), kill ? -1000.0f : 0.0f});
                     });
         onPress(cmd(DA::KeyLock), [this, d] { toggleKeyLock(d); });
+        onPress(cmd(DA::Slip), [this, d] { engine.send(engine::SetSlip{d, !engine.readState().decks[d].slip}); });
         onPress(cmd(DA::Sync), [this, d] { engine.send(engine::SetSync{d, !engine.readState().decks[d].synced}); });
         // Hot cue pads (P3-01): pad 1-8 on the current page, Shift + pad deletes.
         for (int pad = 0; pad < 8; ++pad)
@@ -1375,7 +1376,7 @@ juce::StringArray MainComponent::statusLines()
             if (s.synced)
                 lines.add("   SYNC" + juce::String(s.master ? " (master)" : "") + "  phase " +
                           juce::String(s.phaseErrorMs, 2) + " ms");
-            lines.add(juce::String("   ") + (s.scratching ? "SCRATCH  " : "") + (s.keyLock ? "KEY LOCK  " : "") +
+            lines.add(juce::String("   ") + (s.scratching ? "SCRATCH  " : "") + (s.keyLock ? "KEY LOCK  " : "") + (s.slip ? (s.slipping ? "SLIPPING  " : "SLIP  ") : "") +
                       "tempo " + juce::String(s.tempoPercent >= 0 ? "+" : "") + juce::String(s.tempoPercent, 1) +
                       " % (range +-" + juce::String(juce::roundToInt(s.tempoRangePercent)) + ")  bend " +
                       juce::String(s.pitchBendPercent, 1) + " %  rate " + juce::String(s.rate, 4));

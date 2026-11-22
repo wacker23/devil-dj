@@ -204,6 +204,21 @@ void WaveformView::paint(juce::Graphics& g)
             }
         }
 
+        // Slip (P3-04): where the track would be - a ghost playhead the deck returns to.
+        if (preview == nullptr && s.slipping)
+        {
+            const auto ghostX = static_cast<float>((s.slipPositionSamples + (pos - s.positionSamples) - leftSample) / spp);
+            if (ghostX >= area.getX() - 2.0f && ghostX <= area.getRight() + 2.0f)
+            {
+                g.setColour(juce::Colour(0xffe0a030).withAlpha(0.9f));
+                g.fillRect(ghostX - 1.0f, area.getY(), 2.0f, area.getHeight());
+                juce::Path marker;
+                marker.addTriangle(ghostX - 5.0f, area.getBottom(), ghostX + 5.0f, area.getBottom(), ghostX,
+                                   area.getBottom() - 7.0f);
+                g.fillPath(marker);
+            }
+        }
+
         // Cue point (the loading track's comes with it).
         const auto cueX = static_cast<float>((s.cuePointSamples - leftSample) / spp);
         if (preview == nullptr && cueX >= area.getX() - 6.0f && cueX <= area.getRight() + 6.0f)

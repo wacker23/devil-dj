@@ -47,6 +47,7 @@ public:
     juce::TextButton& playButton() noexcept { return play; }
     juce::TextButton& syncButton() noexcept { return sync; }
     juce::TextButton& keyLockButton() noexcept { return keyLock; }
+    juce::TextButton& slipButton() noexcept { return slip; }
     juce::TextButton& gridButton() noexcept { return grid; }
     juce::TextButton& tapButton() noexcept { return tap; }
     std::function<void()> onGridMenu; // GRID: the beatgrid tools (P2-14)
@@ -112,7 +113,7 @@ private:
     juce::String shownKey;
 
     std::unique_ptr<HoldButton> cue;
-    juce::TextButton play{"PLAY"}, sync{"SYNC"}, keyLock{"KEY LOCK"}, grid{"GRID"}, tap{"TAP"}, mem{"MEM"};
+    juce::TextButton play{"PLAY"}, sync{"SYNC"}, keyLock{"KEY LOCK"}, slip{"SLIP"}, grid{"GRID"}, tap{"TAP"}, mem{"MEM"};
     juce::TextButton jumpBack{juce::CharPointer_UTF8("\xe2\x97\x80")}, jumpForward{juce::CharPointer_UTF8("\xe2\x96\xb6")},
         jumpSize{"4"};
     juce::Slider tempo{juce::Slider::LinearVertical, juce::Slider::NoTextBox};

@@ -300,6 +300,13 @@ struct JumpBy
     double seconds = 0.0;
 };
 
+// Slip mode (P3-04): loops, held hot cues, scratching and pause run a shadow playhead; ending them returns to it.
+struct SetSlip
+{
+    DeckId deck = 0;
+    bool on = false;
+};
+
 // Beat sync (P2-19): the deck follows the master clock's tempo (half / double aware) and phase.
 struct SetSync
 {
@@ -312,7 +319,7 @@ using EngineCommand =
                  Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo, PitchBend, SetInterpolationQuality, SetKeyLock,
                  SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge, SetParam, SetBeatgrid, SetMetronome,
                  SetClockSource, SetInternalTempo, SetSync, SetQuantize, BeatJump, JumpBy, SetHotCues, HotCue,
-                 SetCuePoint, Loop>;
+                 SetCuePoint, Loop, SetSlip>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

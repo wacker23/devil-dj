@@ -416,6 +416,7 @@ void AudioEngine::requestTrack(DeckId deckId, const TrackBuffer* buffer, BufferI
     slot.queuedCount = 0;
     slot.hotCues = {}; // the app sends the new track's
     slot.hotCuePreview = -1;
+    slot.slipHoldPad = -1;
     slot.loopInPending = false;
     slot.haveLastLoop = false;
     slot.clickActive = false;
@@ -680,6 +681,19 @@ void AudioEngine::apply(const HotCue& command) noexcept
                 deck.pause();
                 deck.seek(cue.start);
             }
+            if (slot.slipHoldPad == command.slot) // slip: back to where the track would be (P3-04)
+            {
+                slot.slipHoldPad = -1;
+                int kept = 0; // a quantized jump to it that hasn't happened yet is called off
+                for (int k = 0; k < slot.queuedCount; ++k)
+                {
+                    const auto& a = slot.queued[static_cast<std::size_t>(k)];
+                    if (a.kind == DeckSlot::QueuedAction::Kind::Play || a.loopLength > 0.0)
+                        slot.queued[static_cast<std::size_t>(kept++)] = a;
+                }
+                slot.queuedCount = kept;
+                deck.endSlipHold();
+            }
             return;
 
         case HotCueOp::Press:
@@ -713,6 +727,11 @@ void AudioEngine::apply(const HotCue& command) noexcept
     }
     if (deck.transport() == Deck::Transport::Playing)
     {
+        if (deck.slipOn() && cue.length <= 0.0) // slip: the pad plays from the cue while held (P3-04)
+        {
+            deck.beginSlipHold();
+            slot.slipHoldPad = command.slot;
+        }
         if (quantizeOn && !slot.grid.empty() && deck.rate() > 0.0)
         {
             const double next =
@@ -731,6 +750,15 @@ void AudioEngine::apply(const HotCue& command) noexcept
     deck.seek(cue.start);
     startPlaying(slot);
     slot.hotCuePreview = command.slot;
+}
+
+void AudioEngine::apply(const SetSlip& command) noexcept
+{
+    if (command.deck >= kMaxDecks)
+        return;
+    decks[command.deck].deck.setSlip(command.on);
+    if (!command.on)
+        decks[command.deck].slipHoldPad = -1;
 }
 
 void AudioEngine::apply(const JumpBy& command) noexcept
@@ -787,12 +815,9 @@ void AudioEngine::renderDeckWithActions(DeckSlot& slot, float* l, float* r, int 
         }
         else
         {
-            slot.deck.seek(action.to + std::max(0.0, overshoot));
             if (action.loopLength > 0.0) // a hot loop: looping from its start, now that the jump is there
-            {
-                slot.deck.setLoop(action.to, action.to + action.loopLength);
-                slot.deck.seek(action.to + std::max(0.0, overshoot));
-            }
+                slot.deck.setLoop(action.to, action.to + action.loopLength); // first: slip's shadow starts here
+            slot.deck.seek(action.to + std::max(0.0, overshoot));
         }
     }
     if (done < numSamples)
@@ -1236,6 +1261,9 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
         s.loopInSet = slot.loopInPending;
         s.loopIn = slot.loopInPoint;
         s.autoLoopBeats = slot.autoLoopBeats;
+        s.slip = d.slipOn();
+        s.slipping = d.isSlipping();
+        s.slipPositionSamples = d.slipPosition();
         if (s.hasGrid)
         {
             s.beat = slot.grid.beatAt(s.positionSamples);

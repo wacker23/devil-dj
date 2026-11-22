@@ -82,6 +82,16 @@ public:
     void setLoop(double start, double end) noexcept; // activates it (end > start, within the track)
     void exitLoop() noexcept;                         // the loop stays known (for reloop), playback goes on
     bool loopActive() const noexcept { return loopOn; }
+    // Slip (P3-04): with slip on, a shadow playhead keeps going at the normal rate while the deck loops, plays a
+    // held hot cue, is scratched or is paused (from playing). When the last of these ends (loop exit, pad
+    // released, hand off the jog, play), the playhead jumps to the shadow (2 ms crossfade), as if the track had
+    // played on. A seek (or back cue) while slipping keeps you where you went: the shadow is dropped.
+    void setSlip(bool on) noexcept;
+    bool slipOn() const noexcept { return slipEnabled; }
+    bool isSlipping() const noexcept { return slipReasons != 0; }
+    double slipPosition() const noexcept { return slipReasons != 0 ? shadow : playhead; }
+    void beginSlipHold() noexcept { beginSlip(kSlipHold); } // a hot cue held while playing (call before the jump)
+    void endSlipHold() noexcept { endSlip(kSlipHold); }
     double loopStart() const noexcept { return loopIn; }
     double loopEnd() const noexcept { return loopOut; }
 
@@ -201,6 +211,14 @@ private:
     bool loopOn = false;
     double loopIn = 0.0, loopOut = 0.0;
     void wrapLoop() noexcept;
+    // Slip (P3-04): why the shadow runs (a set of reasons; it returns when the last one ends).
+    static constexpr std::uint8_t kSlipLoop = 1, kSlipHold = 2, kSlipScratch = 4, kSlipPause = 8;
+    bool slipEnabled = false;
+    std::uint8_t slipReasons = 0;
+    double shadow = 0.0;
+    void beginSlip(std::uint8_t reason) noexcept;
+    void endSlip(std::uint8_t reason) noexcept;
+    void slipReturn() noexcept;
     void renderPart(float* left, float* right, int numSamples) noexcept;
 
     int mainFadeRemaining = 0; // > 0 while the main head fades in

@@ -132,6 +132,9 @@ DeckView::DeckView(engine::AudioEngine& audioEngine, engine::DeckId deckId, Trac
     grid.setTooltip("Beatgrid tools: set downbeat, shift, BPM x2 / /2, metronome, lock (Ctrl+Shift keys)");
     tap.setTooltip("Tap tempo: tap 4 times or more in time with the track");
     keyLock.onClick = [this] { engine.send(engine::SetKeyLock{deck, !state.keyLock}); };
+    slip.onClick = [this] { engine.send(engine::SetSlip{deck, !state.slip}); };
+    slip.setTooltip("Slip: loops, held hot cues, scratching and pause run on silently; letting go returns to "
+                    "where the track would be (Ctrl+Q / Ctrl+U)");
     sync.onClick = [this] { engine.send(engine::SetSync{deck, !state.synced}); };
     sync.setTooltip("Sync: match the master's tempo and beat (C / . keys); the master is the deck marked MASTER");
     keyLock.setTooltip("Key lock: tempo changes keep the pitch");
@@ -186,8 +189,8 @@ DeckView::DeckView(engine::AudioEngine& audioEngine, engine::DeckId deckId, Trac
     jumpSize.setTooltip("Beat jump size in beats (larger / smaller: Shift+6 / Ctrl+Shift+6, Shift+= / Ctrl+Shift+=)");
     for (auto* b : {static_cast<juce::Button*>(cue.get()), static_cast<juce::Button*>(&play),
                     static_cast<juce::Button*>(&sync), static_cast<juce::Button*>(&keyLock),
-                    static_cast<juce::Button*>(&grid), static_cast<juce::Button*>(&tap),
-                    static_cast<juce::Button*>(&jumpBack), static_cast<juce::Button*>(&jumpForward),
+                    static_cast<juce::Button*>(&slip), static_cast<juce::Button*>(&grid),
+                    static_cast<juce::Button*>(&tap), static_cast<juce::Button*>(&jumpBack), static_cast<juce::Button*>(&jumpForward),
                     static_cast<juce::Button*>(&jumpSize), static_cast<juce::Button*>(&mem)})
     {
         b->setColour(juce::TextButton::buttonColourId, kPanel);
@@ -232,8 +235,11 @@ void DeckView::refresh()
     play.setToggleState(state.playing && !state.cuePreview, juce::dontSendNotification);
     cue->setToggleState(state.cuePreview, juce::dontSendNotification);
     keyLock.setToggleState(state.keyLock, juce::dontSendNotification);
+    slip.setToggleState(state.slip, juce::dontSendNotification);
+    slip.setColour(juce::TextButton::buttonOnColourId, state.slipping ? juce::Colour(0xffe0a030) : kAccent);
     for (auto* b : {static_cast<juce::Button*>(cue.get()), static_cast<juce::Button*>(&play),
-                    static_cast<juce::Button*>(&keyLock), static_cast<juce::Button*>(&grid),
+                    static_cast<juce::Button*>(&keyLock), static_cast<juce::Button*>(&slip),
+                    static_cast<juce::Button*>(&grid),
                     static_cast<juce::Button*>(&tap), static_cast<juce::Button*>(&mem)})
         b->setEnabled(state.loaded);
     grid.setToggleState(state.metronome || state.gridLocked, juce::dontSendNotification);
@@ -310,12 +316,14 @@ void DeckView::resized()
     }
     overviewView->setBounds(area);
 
-    const int w = std::min(96, (buttons.getWidth() - 3 * kMargin) / 4);
+    const int w = std::min(96, (buttons.getWidth() - 6 * kMargin - 120) / 5);
     cue->setBounds(buttons.removeFromLeft(w));
     buttons.removeFromLeft(kMargin);
     play.setBounds(buttons.removeFromLeft(w));
     buttons.removeFromLeft(kMargin);
     sync.setBounds(buttons.removeFromLeft(w));
+    slip.setBounds(buttons.removeFromRight(w));
+    buttons.removeFromRight(kMargin);
     keyLock.setBounds(buttons.removeFromRight(w + 16));
     // Beat jump between them: < size >.
     buttons.removeFromLeft(kMargin);
@@ -587,6 +595,12 @@ void DeckView::Overview::paint(juce::Graphics& g)
     marker.addTriangle(cueX - 5.0f, area.getY(), cueX + 5.0f, area.getY(), cueX, area.getY() + 7.0f);
     g.fillPath(marker);
     g.fillRect(cueX - 0.5f, area.getY(), 1.0f, area.getHeight());
+    if (s.slipping) // slip (P3-04): the shadow playhead
+    {
+        const float x = area.getX() + area.getWidth() * static_cast<float>(s.slipPositionSamples / s.lengthSamples);
+        g.setColour(juce::Colour(0xffe0a030));
+        g.fillRect(x - 1.0f, area.getY(), 2.0f, area.getHeight());
+    }
     g.setColour(juce::Colours::white);
     g.fillRect(playedX - 1.0f, area.getY(), 2.0f, area.getHeight());
 }

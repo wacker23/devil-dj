@@ -56,6 +56,11 @@ struct DeckState
     bool loopInSet = false;  // an in point waits for its out point
     double loopIn = 0.0;
     double autoLoopBeats = 4.0;
+
+    // Slip (P3-04).
+    bool slip = false;                // slip mode on
+    bool slipping = false;            // the shadow playhead runs (the deck will return to it)
+    double slipPositionSamples = 0.0; // the shadow (= the playhead when not slipping)
 };
 
 // Mixer channel settings as the audio thread has them (targets; the sound follows within 20 ms).

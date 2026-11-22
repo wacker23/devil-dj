@@ -42,6 +42,8 @@ void Deck::scratchBegin(double timeSeconds) noexcept
     if (buffer == nullptr || scratch == Scratch::Holding)
         return;
     const bool sounding = state != Transport::Paused || scratch == Scratch::Releasing;
+    if (state == Transport::Playing && scratch == Scratch::None)
+        beginSlip(kSlipScratch);
     if (!sounding)
         startSounding(); // scrub from pause: fade in
     else if (keyLockOn && scratch == Scratch::None)
@@ -94,6 +96,16 @@ void Deck::scratchEnd() noexcept
 {
     if (scratch != Scratch::Holding)
         return;
+    if ((slipReasons & kSlipScratch) != 0)
+    {
+        slipReasons = static_cast<std::uint8_t>(slipReasons & ~kSlipScratch);
+        if (slipReasons == 0 && state != Transport::Paused) // slip: back to where the track would be
+        {
+            scratch = Scratch::None;
+            slipReturn(); // the jump's crossfade also takes key lock back to the stretcher
+            return;
+        }
+    }
     if (state != Transport::Paused) // playing: ease back to the normal rate
     {
         scratch = Scratch::Releasing;
@@ -231,6 +243,7 @@ void Deck::setTrack(const TrackBuffer* track) noexcept
     nudgeRemaining = 0.0;
     loopOn = false;
     loopIn = loopOut = 0.0;
+    slipReasons = 0;
 }
 
 bool Deck::isSilent() const noexcept
@@ -253,6 +266,12 @@ void Deck::play() noexcept
     }
     if (state == Transport::Playing)
         return;
+    if ((slipReasons & kSlipPause) != 0) // slip pause: on from where the track would be now
+    {
+        slipReasons = static_cast<std::uint8_t>(slipReasons & ~kSlipPause);
+        if (slipReasons == 0)
+            slipReturn();
+    }
     if (atEnd)
         return; // nothing left to play; seek or cue first
     state = Transport::Playing;
@@ -263,6 +282,8 @@ void Deck::pause() noexcept
 {
     if (state == Transport::Paused)
         return;
+    if (state == Transport::Playing)
+        beginSlip(kSlipPause);
     state = Transport::Paused;
     stopSounding();
 }
@@ -283,6 +304,7 @@ void Deck::cuePress() noexcept
     switch (state)
     {
         case Transport::Playing: // back cue: return to the cue point and pause
+            slipReasons = 0;
             state = Transport::Paused;
             stopSounding();
             playhead = cue;
@@ -334,6 +356,8 @@ void Deck::setLoop(double start, double end) noexcept
     end = std::clamp(end, 0.0, len);
     if (end - start < 1.0)
         return;
+    if (state == Transport::Playing)
+        beginSlip(kSlipLoop); // the shadow starts where the playhead is now (before any jump into the loop)
     loopIn = start;
     loopOut = end;
     loopOn = true;
@@ -342,6 +366,53 @@ void Deck::setLoop(double start, double end) noexcept
 void Deck::exitLoop() noexcept
 {
     loopOn = false;
+    endSlip(kSlipLoop);
+}
+
+void Deck::setSlip(bool on) noexcept
+{
+    slipEnabled = on;
+    if (!on)
+        slipReasons = 0; // slip off while slipping: stay where you are
+}
+
+void Deck::beginSlip(std::uint8_t reason) noexcept
+{
+    if (!slipEnabled || buffer == nullptr)
+        return;
+    if (slipReasons == 0)
+    {
+        if (state != Transport::Playing)
+            return;
+        shadow = playhead;
+    }
+    slipReasons = static_cast<std::uint8_t>(slipReasons | reason);
+}
+
+void Deck::endSlip(std::uint8_t reason) noexcept
+{
+    if ((slipReasons & reason) == 0)
+        return;
+    slipReasons = static_cast<std::uint8_t>(slipReasons & ~reason);
+    if (slipReasons == 0)
+        slipReturn();
+}
+
+void Deck::slipReturn() noexcept
+{
+    const double target = std::min(shadow, static_cast<double>(length()));
+    if (loopOn && (target < loopIn || target >= loopOut))
+        loopOn = false; // a loop set while not slipping doesn't pull the shadow back into it
+    if (state != Transport::Paused)
+    {
+        jumpTo(target);
+    }
+    else
+    {
+        playhead = target;
+        atEnd = target >= length();
+        stretcherPrimed = false;
+    }
 }
 
 void Deck::wrapLoop() noexcept
@@ -359,7 +430,11 @@ void Deck::seek(double samplePosition) noexcept
         return;
     // Out of a playing loop: the loop ends (P3-03).
     if (loopOn && (samplePosition < loopIn || samplePosition >= loopOut))
+    {
         loopOn = false;
+        slipReasons = static_cast<std::uint8_t>(slipReasons & ~kSlipLoop);
+    }
+    slipReasons = static_cast<std::uint8_t>(slipReasons & ~kSlipPause); // a seek while paused: play from there
     jumpTo(std::clamp(samplePosition, 0.0, static_cast<double>(length())));
 }
 
@@ -516,12 +591,14 @@ void Deck::renderPart(float* left, float* right, int numSamples) noexcept
     // Rates for this block (bend slews, scratch follows the hand, nudges add an offset), so key lock knows
     // how far the playhead will move.
     double playheadEnd = playhead;
+    double shadowEnd = shadow; // slip (P3-04): the normal rate, whatever the playhead does
     bool releaseFinished = false;
     for (int i = 0; i < numSamples; ++i)
     {
         if (bend != bendTarget)
             bend = bend < bendTarget ? std::min(bendTarget, bend + bendStep) : std::max(bendTarget, bend - bendStep);
         double r = this->rate();
+        shadowEnd += r;
         if (scratch != Scratch::None && !releaseFinished)
         {
             r = nextScratchRate(playheadEnd, r);
@@ -537,6 +614,8 @@ void Deck::renderPart(float* left, float* right, int numSamples) noexcept
         blockRates[static_cast<std::size_t>(i)] = r;
         playheadEnd += r;
     }
+    if (slipReasons != 0)
+        shadow = std::min(shadowEnd, len);
 
     const bool sounding = state != Transport::Paused || scratch != Scratch::None;
     const bool stretched =
