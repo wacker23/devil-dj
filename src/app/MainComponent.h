@@ -17,7 +17,9 @@
 #include "ui/DebugOverlay.h"
 #include "ui/DeckView.h"
 #include "ui/FxPanel.h"
+#include "ui/RecorderPanel.h"
 #include "ui/SamplerPanel.h"
+#include "engine/Recorder.h"
 #include "PadFxPresets.h"
 #include "SequenceStore.h"
 #include "ui/LibraryBrowser.h"
@@ -135,9 +137,15 @@ private:
     ui::FxPanel fxPanel{engine}; // P3-09, between the waveforms and the browser
     // The sampler (P3-13) in the same place: FX / SAMPLER tabs.
     ui::SamplerPanel samplerPanel{engine};
-    juce::TextButton fxTab{"FX"}, samplerTab{"SAMPLER"};
-    bool showSampler = false;
-    void showPanel(bool sampler);
+    juce::TextButton fxTab{"FX"}, samplerTab{"SAMPLER"}, recordTab{"REC"};
+    int shownPanel = 0; // 0 FX, 1 sampler, 2 recorder
+    void showPanel(int which);
+    // Mix recording (P3-16): the recorder, its panel (the third tab), F9; a tracklist and a cue sheet per file.
+    engine::Recorder recorder{engine.recordTap()};
+    ui::RecorderPanel recorderPanel{engine, recorder};
+    void toggleRecording();
+    void writeRecordingSheets(const engine::Recorder::FileInfo& file);
+    static juce::File recordingsFolder();
     void loadSample(int slot, const juce::File& file, double bpm, const juce::String& name);
     // The sequencer's sequences (P3-15): the store, which one is in the engine, saving it when it changes.
     app::SequenceStore sequences;
@@ -282,6 +290,9 @@ public:
     // P3-15: the sequences as JSON (from the settings), and their changes (to save).
     void setSequences(const juce::String& json);
     std::function<void(const juce::String& json)> onSequencesChanged;
+    // P3-16: the recorder's options (from the settings), and their changes.
+    void setRecorderSettings(const ui::RecorderPanel::Settings& s) { recorderPanel.setSettings(s); }
+    std::function<void(const ui::RecorderPanel::Settings&)> onRecorderSettingsChanged;
     std::function<void(const juce::String& json)> onPadFxPresetsChanged;
     void setIsolator(bool on);
     void setCrossfaderCurve(int curve);

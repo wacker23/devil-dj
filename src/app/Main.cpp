@@ -146,6 +146,15 @@ public:
         mainComponent->onColorFxChanged = [this](int type) { settings->set(keys::colorFx, type); };
         mainComponent->setPadFxPresets(settings->get(keys::padFxPresets)); // P3-12
         mainComponent->setSequences(settings->get(keys::sequences));       // P3-15
+        mainComponent->setRecorderSettings({settings->get(keys::recordFlac), settings->get(keys::recordHeadphones),
+                                            settings->get(keys::recordAutoStart), settings->get(keys::recordAutoSplit)});
+        mainComponent->onRecorderSettingsChanged = [this](const ui::RecorderPanel::Settings& s)
+        {
+            settings->set(keys::recordFlac, s.flac);
+            settings->set(keys::recordHeadphones, s.headphones);
+            settings->set(keys::recordAutoStart, s.autoStart);
+            settings->set(keys::recordAutoSplit, s.autoSplit);
+        };
         mainComponent->onSequencesChanged = [this](const juce::String& json) { settings->set(keys::sequences, json); };
         mainComponent->onPadFxPresetsChanged = [this](const juce::String& json)
         { settings->set(keys::padFxPresets, json); };

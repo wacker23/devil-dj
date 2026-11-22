@@ -220,6 +220,8 @@ FX as built (P3-08): `dsp::fx::Effect` (prepare / reset / process the wet signal
 
 Record tap copies the master (post-limiter) into a lock-free FIFO sized for 2 s; a writer thread writes WAV 24-bit or FLAC with `juce::AudioFormatWriter::ThreadedWriter`. Overflow is counted and reported (never blocks the audio thread).
 
+As built (P3-16): `engine::RecordTap` (a lock-free SPSC ring of stereo frames, 2 s at 192 kHz, allocated once; dropped frames counted) is filled after the limiters with the master or the headphones; `engine::Recorder` is its own writer thread (not ThreadedWriter: it reads the tap directly) writing 24-bit WAV or FLAC, with auto start at the first sample above -60 dBFS and auto split after 20 s below it (at the exact sample). The app writes a `.txt` tracklist and a `.cue` sheet next to each finished file from the session's history (`app/RecordingSheets`).
+
 ## 4. DSP design notes
 
 | Block | Design |

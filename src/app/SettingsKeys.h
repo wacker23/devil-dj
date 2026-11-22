@@ -61,6 +61,11 @@ inline const SettingKey<int> colorFx{"colorFx", 0};
 inline const SettingKey<juce::String> padFxPresets{"padFxPresets", {}};
 // P3-15: the sampler's sequences (JSON).
 inline const SettingKey<juce::String> sequences{"sequences", {}};
+// P3-16: the recorder's options.
+inline const SettingKey<bool> recordFlac{"recordFlac", false};
+inline const SettingKey<bool> recordHeadphones{"recordHeadphones", false};
+inline const SettingKey<bool> recordAutoStart{"recordAutoStart", false};
+inline const SettingKey<bool> recordAutoSplit{"recordAutoSplit", false};
 inline const SettingKey<double> brakeSeconds{"brakeSeconds", 1.0};
 inline const SettingKey<double> spinBackSeconds{"spinBackSeconds", 1.0};
 

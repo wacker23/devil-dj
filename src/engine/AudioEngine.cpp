@@ -51,6 +51,11 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
         strip.prepare(sampleRate, capacity);
     sampler.prepare(sampleRate, capacity); // P3-13
     sequencer.reset();                      // P3-15
+    if (!tapPrepared) // P3-16: once, for the fastest rate (the recorder thread may be reading it later)
+    {
+        tap.prepare(192000.0, 2.0);
+        tapPrepared = true;
+    }
     samplerPendingBeat.fill(-1.0);
     samplerPending = false;
     for (std::size_t i = 0; i < mixer.size(); ++i)
@@ -157,6 +162,12 @@ void AudioEngine::renderChunk(float* const* outputs, int numChannels, int offset
     mixHeadphones(numSamples);  // cue bus + master -> headphone level
     renderTestTone(numSamples); // straight onto its bus (not into the headphone mix)
     finishBuses(numSamples);    // limiters and meters
+    if (tap.isEnabled()) // the mix recording (P3-16): what goes out, after the limiters
+    {
+        const bool phones = tap.getSource() == RecordTap::Source::Headphones;
+        tap.write((phones ? cueBus : masterBus).getReadPointer(0), (phones ? cueBus : masterBus).getReadPointer(1),
+                  numSamples);
+    }
     swapPendingTracks();        // decks that finished fading out can take their new track now
     if (layout == OutputLayout::SeparateCueDevice) // P2-25: the headphones are on another device
         cueOutput.write(cueBus.getReadPointer(0), cueBus.getReadPointer(1), numSamples);

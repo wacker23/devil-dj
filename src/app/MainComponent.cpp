@@ -12,6 +12,7 @@
 #include "library/MissingFiles.h"
 #include "library/PlaylistFiles.h"
 #include "library/TrackRepository.h"
+#include "RecordingSheets.h"
 #include "util/Log.h"
 #include "util/ProcessStats.h"
 
@@ -249,16 +250,29 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     fxPanel.onEffect = [this](int unit, int slot, int type) { chooseEffect(unit, slot, type); };
     // Sampler (P3-13): its panel shares the FX panel's place.
     addChildComponent(samplerPanel);
-    for (auto* tab : {&fxTab, &samplerTab})
+    addChildComponent(recorderPanel); // P3-16
+    recorderPanel.onRecord = [this](bool) { toggleRecording(); };
+    recorderPanel.onOpenFolder = [] { recordingsFolder().createDirectory(); recordingsFolder().startAsProcess(); };
+    recorderPanel.onSettingsChanged = [this](const ui::RecorderPanel::Settings& s)
+    {
+        if (onRecorderSettingsChanged)
+            onRecorderSettingsChanged(s);
+    };
+    recorder.onFileClosed = [safe = juce::Component::SafePointer<MainComponent>(this)](const engine::Recorder::FileInfo& f)
+    {
+        juce::MessageManager::callAsync([safe, f] { if (safe != nullptr) safe->writeRecordingSheets(f); });
+    };
+    for (auto* tab : {&fxTab, &samplerTab, &recordTab})
     {
         tab->setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1f1f26));
         tab->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff3a3a46));
         tab->setWantsKeyboardFocus(false);
         addAndMakeVisible(*tab);
     }
-    fxTab.onClick = [this] { showPanel(false); };
-    samplerTab.onClick = [this] { showPanel(true); };
-    showPanel(false);
+    fxTab.onClick = [this] { showPanel(0); };
+    samplerTab.onClick = [this] { showPanel(1); };
+    recordTab.onClick = [this] { showPanel(2); };
+    showPanel(0);
     samplerPanel.onLoadFile = [this](int slot) { chooseSampleFile(slot); };
     samplerPanel.onLoadSelected = [this](int slot)
     {
@@ -639,6 +653,7 @@ void MainComponent::registerActions()
                     sendCrossfader();
                 });
     onPress(ui::globalCommand(GA::DebugOverlay), [this] { toggleDebugOverlay(); });
+    onPress(ui::globalCommand(GA::Record), [this] { toggleRecording(); }); // F9 (P3-16)
     // FX (P3-09): F5 / F7 the unit on / off, F6 / F8 slot 1's next effect, Shift+F5 / Shift+F7 the target.
     onPress(ui::globalCommand(GA::Fx1Toggle), [this] { fxPanel.toggleUnit(0); });
     onPress(ui::globalCommand(GA::Fx2Toggle), [this] { fxPanel.toggleUnit(1); });
@@ -1389,12 +1404,70 @@ void MainComponent::showSequenceLooks()
     deckB.setSequenceLooks(filled, current);
 }
 
-void MainComponent::showPanel(bool sampler)
+void MainComponent::showPanel(int which)
 {
-    showSampler = sampler;
-    fxTab.setToggleState(!sampler, juce::dontSendNotification);
-    samplerTab.setToggleState(sampler, juce::dontSendNotification);
+    shownPanel = std::clamp(which, 0, 2);
+    fxTab.setToggleState(shownPanel == 0, juce::dontSendNotification);
+    samplerTab.setToggleState(shownPanel == 1, juce::dontSendNotification);
+    recordTab.setToggleState(shownPanel == 2, juce::dontSendNotification);
     resized();
+}
+
+juce::File MainComponent::recordingsFolder()
+{
+    return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("Devil-DJ/Recordings");
+}
+
+void MainComponent::toggleRecording()
+{
+    if (recorder.isRunning())
+    {
+        recorder.stop(); // writes what is left, closes the file (its sheets follow on the message thread)
+        return;
+    }
+    const auto& s = recorderPanel.settings();
+    engine::Recorder::Options options;
+    options.folder = recordingsFolder();
+    options.format = s.flac ? engine::Recorder::Format::Flac24 : engine::Recorder::Format::Wav24;
+    options.sampleRate = engine.readState().sampleRate > 0.0 ? engine.readState().sampleRate : 48000.0;
+    options.autoStart = s.autoStart;
+    options.autoSplit = s.autoSplit;
+    engine.recordTap().setSource(s.headphones ? engine::RecordTap::Source::Headphones : engine::RecordTap::Source::Master);
+    if (!recorder.start(options))
+        util::logWarning("Recording: could not start in {}", options.folder.getFullPathName().toStdString());
+    else
+        util::logInfo("Recording started ({})", s.flac ? "FLAC" : "WAV");
+    showPanel(2);
+}
+
+void MainComponent::writeRecordingSheets(const engine::Recorder::FileInfo& f)
+{
+    util::logInfo("Recording: {} ({} s)", f.file.getFullPathName().toStdString(),
+                  static_cast<double>(f.frames) / std::max(1.0, engine.readState().sampleRate));
+    if (gridReader == nullptr)
+        return;
+    std::vector<app::PlayedAt> plays;
+    library::HistoryRepository history(*gridReader);
+    library::TrackRepository tracks(*gridReader);
+    for (const auto& e : history.entries(historySession->load()))
+    {
+        app::PlayedAt p;
+        p.playedAt = e.playedAt;
+        if (const auto t = tracks.get(e.trackId))
+        {
+            p.artist = t->artist;
+            p.title = t->title.empty() ? juce::File(juce::String::fromUTF8(t->path.c_str())).getFileNameWithoutExtension().toStdString()
+                                       : t->title;
+        }
+        plays.push_back(std::move(p));
+    }
+    const double start = static_cast<double>(f.started.toMilliseconds()) / 1000.0;
+    const double seconds = static_cast<double>(f.frames) / std::max(1.0, engine.readState().sampleRate);
+    const auto list = app::tracksInRecording(plays, start, seconds);
+    const auto base = f.file.withFileExtension("");
+    base.withFileExtension(".txt").replaceWithText(juce::String::fromUTF8(app::tracklistText(list).c_str()));
+    base.withFileExtension(".cue").replaceWithText(juce::String::fromUTF8(
+        app::cueSheet(f.file.getFileName().toStdString(), f.file.hasFileExtension(".flac"), list).c_str()));
 }
 
 void MainComponent::chooseSampleFile(int slot)
@@ -2158,10 +2231,12 @@ void MainComponent::resized()
 
     waveA.setVisible(!browserBig);
     waveB.setVisible(!browserBig);
-    fxPanel.setVisible(!browserBig && !showSampler);
-    samplerPanel.setVisible(!browserBig && showSampler);
+    fxPanel.setVisible(!browserBig && shownPanel == 0);
+    samplerPanel.setVisible(!browserBig && shownPanel == 1);
+    recorderPanel.setVisible(!browserBig && shownPanel == 2);
     fxTab.setVisible(!browserBig);
     samplerTab.setVisible(!browserBig);
+    recordTab.setVisible(!browserBig);
     if (browserBig) // Ctrl+B: the browser gets the waveforms' room too
     {
         libraryBrowser->setBounds(area);
@@ -2176,13 +2251,17 @@ void MainComponent::resized()
     {
         auto panel = area.removeFromBottom(ui::FxPanel::kPreferredHeight); // P3-09 / P3-13
         auto tabs = panel.removeFromLeft(64);
-        fxTab.setBounds(tabs.removeFromTop(tabs.getHeight() / 2).reduced(0, 2));
-        samplerTab.setBounds(tabs.reduced(0, 2));
+        const int th = tabs.getHeight() / 3;
+        fxTab.setBounds(tabs.removeFromTop(th).reduced(0, 1));
+        samplerTab.setBounds(tabs.removeFromTop(th).reduced(0, 1));
+        recordTab.setBounds(tabs.reduced(0, 1));
         panel.removeFromLeft(4);
         fxPanel.setBounds(panel);
         samplerPanel.setBounds(panel);
-        fxPanel.setVisible(!browserBig && !showSampler);
-        samplerPanel.setVisible(!browserBig && showSampler);
+        recorderPanel.setBounds(panel);
+        fxPanel.setVisible(!browserBig && shownPanel == 0);
+        samplerPanel.setVisible(!browserBig && shownPanel == 1);
+        recorderPanel.setVisible(!browserBig && shownPanel == 2);
     }
     area.removeFromBottom(6);
     const int waveHeight = (area.getHeight() - 6) / 2;

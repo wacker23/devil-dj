@@ -389,7 +389,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
 
 ### Recording and auto-mixing
 
-- [ ] **P3-16 Mix recording**
+- [x] **P3-16 Mix recording**
   Record master (or a chosen bus) to WAV 24-bit or FLAC via a writer thread; level meter; auto start on signal / auto split after 20 s of silence; writes a tracklist `.txt` and `.cue` with timestamps from history.
   Done when: 60-min recording has no gaps (compare sample count with wall clock); file opens in other software.
 

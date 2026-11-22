@@ -13,6 +13,7 @@
 #include "engine/EngineCommand.h"
 #include "engine/EngineState.h"
 #include "engine/OutputRouter.h"
+#include "engine/RecordTap.h"
 #include "engine/Sampler.h"
 #include "engine/Sequencer.h"
 #include "engine/TrackBuffer.h"
@@ -61,6 +62,9 @@ public:
     // Ids of buffers the engine no longer uses; the owner pops them (10 Hz housekeeping) and releases them from
     // the BufferRegistry. Message thread.
     bool popReleasedBuffer(BufferId& id) noexcept { return releasedBuffers.tryPop(id); }
+    // Mix recording (P3-16): the tap the recorder's writer thread reads (the master after its limiter, or the
+    // headphones), filled by the audio thread while enabled.
+    RecordTap& recordTap() noexcept { return tap; }
 
     // FX (P3-08), message thread: prepares the effect for the current device, keeps it, and hands it to the audio
     // thread for that unit / slot (nullptr empties the slot). False if the command queue is full (the effect is
@@ -273,6 +277,8 @@ private:
     bool samplerPending = false;
     // The sequencer (P3-15) and its metronome click (into the headphones while recording).
     Sequencer sequencer;
+    RecordTap tap; // P3-16
+    bool tapPrepared = false;
     bool sequencerMetronome = false;
     int seqClickPosition = 0, seqClickLength = 0, seqClickDelay = -1;
     double seqClickIncrement = 0.0;
