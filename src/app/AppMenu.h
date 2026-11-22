@@ -79,6 +79,9 @@ public:
     std::function<void(int deck)> onResetTempo;
     std::function<void(double rangePercent)> onTempoRange;
     std::function<void(bool on)> onHighQualityResampling;
+    // P3-21: touch mode - everything drawn larger (bigger targets for fingers).
+    std::function<void(bool on)> onTouchMode;
+    void setTouchMode(bool on) noexcept { touchMode = on; }
     std::function<void()> onReloadKeymap;
     std::function<void()> onEditKeymap; // P3-20
     std::function<void()> onOpenKeymapFolder;
@@ -128,6 +131,7 @@ private:
         TempoRange16,
         TempoRange50,
         HighQualityResampling,
+        TouchMode,
         ReloadKeymap,
         EditKeymap,
         OpenKeymapFolder,
@@ -165,6 +169,7 @@ private:
     bool showDebugMenu;
     double tempoRange = 10.0;
     bool highQuality = false;
+    bool touchMode = false;
     int keyNotation = 0;
     bool autoGain = true;
     int autoGainTarget = -10;

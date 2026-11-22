@@ -23,6 +23,8 @@
 
 namespace devildj::app
 {
+constexpr float kTouchScale = 1.25f; // P3-21: touch mode's scale
+
 
 namespace
 {
@@ -222,6 +224,17 @@ public:
         menu->onResetTempo = [this](int deck) { mainComponent->resetTempo(static_cast<engine::DeckId>(deck)); };
         menu->onTempoRange = [this](double range) { mainComponent->setTempoRange(range); };
         menu->onHighQualityResampling = [this](bool on) { mainComponent->setHighQualityResampling(on); };
+        // Touch mode (P3-21): the whole UI scaled up, so every control is a bigger target.
+        {
+            const bool touch = settings->get(keys::touchMode);
+            menu->setTouchMode(touch);
+            juce::Desktop::getInstance().setGlobalScaleFactor(touch ? kTouchScale : 1.0f);
+        }
+        menu->onTouchMode = [this](bool on)
+        {
+            settings->set(keys::touchMode, on);
+            juce::Desktop::getInstance().setGlobalScaleFactor(on ? kTouchScale : 1.0f);
+        };
         menu->onReloadKeymap = [this] { mainComponent->reloadKeymap(); };
         menu->onEditKeymap = [this] { mainComponent->editKeymap(); };
         menu->onSoakTest = [this](double minutes)

@@ -74,6 +74,8 @@ inline const SettingKey<bool> automixRepeat{"automixRepeat", false};
 inline const SettingKey<bool> automixRandom{"automixRandom", false};
 inline const SettingKey<int> automixBeats{"automixBeats", 16};
 inline const SettingKey<int> automixStyle{"automixStyle", 0};
+// P3-21: touch mode (everything 1.25x: larger targets for fingers).
+inline const SettingKey<bool> touchMode{"touchMode", false};
 inline const SettingKey<double> brakeSeconds{"brakeSeconds", 1.0};
 inline const SettingKey<double> spinBackSeconds{"spinBackSeconds", 1.0};
 

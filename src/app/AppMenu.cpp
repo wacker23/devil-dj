@@ -123,6 +123,7 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
         menu.addItem(OpenBackups, "Open backups folder");
         menu.addSeparator();
         menu.addItem(HighQualityResampling, "High-quality resampling (sinc)", true, highQuality);
+        menu.addItem(TouchMode, "Touch mode (larger controls)", true, touchMode);
         menu.addSeparator();
         juce::PopupMenu keyMenu;
         keyMenu.addItem(KeyMusical, "Musical (Am, F#)", true, keyNotation == 0);
@@ -356,6 +357,12 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
             highQuality = !highQuality;
             if (onHighQualityResampling)
                 onHighQualityResampling(highQuality);
+            break;
+
+        case TouchMode:
+            touchMode = !touchMode;
+            if (onTouchMode)
+                onTouchMode(touchMode);
             break;
 
         case TestTone:

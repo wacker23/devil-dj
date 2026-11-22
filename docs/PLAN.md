@@ -411,7 +411,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
   All Phase 1–3 actions bound per `docs/KEYMAP.md`; keymap editor (click action → press key; conflicts shown); import/export keymap JSON; presets "Default", "Laptop compact".
   Done when: every action in `Actions.h` is bindable; export/import round-trip test.
 
-- [ ] **P3-21 Touch mode**
+- [x] **P3-21 Touch mode**
   Larger hit targets option, multi-touch (two faders at once), touch-drag jog.
   Done when: manual test on a Windows touchscreen (or simulated pointer events).
 

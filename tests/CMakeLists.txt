@@ -93,6 +93,7 @@ target_sources(DevilDJTests PRIVATE
     ui/SearchFilterTests.cpp
     ui/SmartPlaylistTests.cpp
     ui/TagsRatingsTests.cpp
+    ui/TouchTests.cpp
     ui/WaveformViewTests.cpp
     util/BeatgridTests.cpp
     util/CrashHandlerTests.cpp
