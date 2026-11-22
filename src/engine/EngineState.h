@@ -48,6 +48,14 @@ struct DeckState
                                              -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0};
     std::array<double, kHotCues> hotCueLength{};
     int hotCuePreview = -1; // the slot held from pause (playing from it until released)
+
+    // Loop (P3-03), in buffer samples.
+    bool loopActive = false;
+    double loopStart = 0.0, loopEnd = 0.0;
+    double loopBeats = 0.0;  // its length in grid beats (0 without a grid)
+    bool loopInSet = false;  // an in point waits for its out point
+    double loopIn = 0.0;
+    double autoLoopBeats = 4.0;
 };
 
 // Mixer channel settings as the audio thread has them (targets; the sound follows within 20 ms).

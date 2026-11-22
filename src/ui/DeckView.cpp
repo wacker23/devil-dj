@@ -94,6 +94,41 @@ DeckView::DeckView(engine::AudioEngine& audioEngine, engine::DeckId deckId, Trac
         if (onTap)
             onTap();
     };
+    mem.onClick = [this]
+    {
+        if (onMemoryPanel)
+            onMemoryPanel();
+    };
+    {
+        // UTF-8: one half, "x2" with the times sign, an ellipsis.
+        static const char* const texts[] = {"IN", "OUT", "LOOP 4", "\xc2\xbd", "\xc3\x97" "2", "RELOOP",
+                                            "\xe2\x80\xa6"};
+        static const char* const tips[] = {"Loop in (Ctrl+X / Ctrl+,)",
+                                           "Loop out: loop from the in point (Ctrl+C / Ctrl+.)",
+                                           "Auto loop on / off (V / /)",
+                                           "Loop half as long; no loop: a smaller auto loop (3 / 9)",
+                                           "Loop twice as long; no loop: a bigger auto loop (4 / 0)",
+                                           "Looping: exit; else the last loop again (Shift+V / Shift+/)",
+                                           "Loop: save as a memory loop, export as WAV"};
+        for (int i = 0; i < 7; ++i)
+        {
+            auto& b = loopButtons[static_cast<std::size_t>(i)];
+            b.setButtonText(juce::String::fromUTF8(texts[i]));
+            b.setTooltip(tips[i]);
+            b.onClick = [this, i]
+            {
+                if (onLoopButton)
+                    onLoopButton(static_cast<LoopButton>(i));
+            };
+            b.setColour(juce::TextButton::buttonColourId, kPanel);
+            b.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff3cc46a));
+            b.setColour(juce::TextButton::textColourOffId, kText);
+            b.setColour(juce::TextButton::textColourOnId, juce::Colours::black);
+            b.setWantsKeyboardFocus(false);
+            addAndMakeVisible(b);
+        }
+    }
+    mem.setTooltip("Memory cues and loops: the list (store: Ctrl+Z / Ctrl+M; call: Ctrl+3 / Ctrl+4, Ctrl+9 / Ctrl+0)");
     grid.setTooltip("Beatgrid tools: set downbeat, shift, BPM x2 / /2, metronome, lock (Ctrl+Shift keys)");
     tap.setTooltip("Tap tempo: tap 4 times or more in time with the track");
     keyLock.onClick = [this] { engine.send(engine::SetKeyLock{deck, !state.keyLock}); };
@@ -153,7 +188,7 @@ DeckView::DeckView(engine::AudioEngine& audioEngine, engine::DeckId deckId, Trac
                     static_cast<juce::Button*>(&sync), static_cast<juce::Button*>(&keyLock),
                     static_cast<juce::Button*>(&grid), static_cast<juce::Button*>(&tap),
                     static_cast<juce::Button*>(&jumpBack), static_cast<juce::Button*>(&jumpForward),
-                    static_cast<juce::Button*>(&jumpSize)})
+                    static_cast<juce::Button*>(&jumpSize), static_cast<juce::Button*>(&mem)})
     {
         b->setColour(juce::TextButton::buttonColourId, kPanel);
         b->setColour(juce::TextButton::buttonOnColourId, kAccent);
@@ -199,11 +234,25 @@ void DeckView::refresh()
     keyLock.setToggleState(state.keyLock, juce::dontSendNotification);
     for (auto* b : {static_cast<juce::Button*>(cue.get()), static_cast<juce::Button*>(&play),
                     static_cast<juce::Button*>(&keyLock), static_cast<juce::Button*>(&grid),
-                    static_cast<juce::Button*>(&tap)})
+                    static_cast<juce::Button*>(&tap), static_cast<juce::Button*>(&mem)})
         b->setEnabled(state.loaded);
     grid.setToggleState(state.metronome || state.gridLocked, juce::dontSendNotification);
     sync.setToggleState(state.synced, juce::dontSendNotification);
     refreshPads();
+    // The loop row: the auto-loop size, on while a loop plays; IN lit while it waits for OUT.
+    {
+        auto& autoLoop = loopButton(LoopButton::Auto);
+        const auto text = "LOOP " + beatsText(state.loopActive && state.loopBeats > 0.0 ? state.loopBeats
+                                                                                       : state.autoLoopBeats);
+        if (autoLoop.getButtonText() != text)
+            autoLoop.setButtonText(text);
+        autoLoop.setToggleState(state.loopActive, juce::dontSendNotification);
+        loopButton(LoopButton::In).setToggleState(state.loopInSet, juce::dontSendNotification);
+        loopButton(LoopButton::Reloop).setButtonText(state.loopActive ? "EXIT" : "RELOOP");
+        for (auto& b : loopButtons)
+            b.setEnabled(state.loaded);
+        autoLoop.setEnabled(state.loaded && state.hasGrid);
+    }
     for (auto* b : {&jumpBack, &jumpForward})
         b->setEnabled(state.loaded && state.hasGrid); // beats need a beatgrid
     sync.setEnabled(state.loaded && state.hasGrid); // sync needs a beatgrid
@@ -229,10 +278,26 @@ void DeckView::resized()
         tap.setBounds(tools.removeFromRight(48).reduced(0, 2));
         tools.removeFromRight(4);
         grid.setBounds(tools.removeFromRight(56).reduced(0, 2));
+        tools.removeFromRight(4);
+        mem.setBounds(tools.removeFromRight(52).reduced(0, 2));
     }
     area.removeFromTop(4);
     auto buttons = area.removeFromBottom(52);
     area.removeFromBottom(kMargin);
+    {
+        auto loopRow = area.removeFromBottom(28); // loops (P3-03)
+        area.removeFromBottom(kMargin);
+        const int widths[] = {46, 52, 0, 34, 34, 70, 30}; // 0: the rest (LOOP n)
+        int fixed = 0;
+        for (const int w : widths)
+            fixed += w + 4;
+        const int flexible = std::max(60, loopRow.getWidth() - fixed);
+        for (int i = 0; i < 7; ++i)
+        {
+            loopButtons[static_cast<std::size_t>(i)].setBounds(loopRow.removeFromLeft(widths[i] > 0 ? widths[i] : flexible));
+            loopRow.removeFromLeft(4);
+        }
+    }
     {
         auto padRow = area.removeFromBottom(30); // hot cue pads (P3-01)
         area.removeFromBottom(kMargin);
@@ -329,7 +394,7 @@ void DeckView::paint(juce::Graphics& g)
     g.setColour(nearEnd ? kAccent : kDim);
     g.drawText(track ? formatTime(length - position, true) : juce::String(), info.removeFromLeft(110),
                juce::Justification::centredLeft);
-    info.removeFromRight(112); // GRID / TAP
+    info.removeFromRight(168); // MEM / GRID / TAP
     juce::StringArray badges;
     if (state.master)
         badges.add("MASTER");
@@ -413,6 +478,21 @@ void DeckView::setHotCueLooks(const std::array<std::uint32_t, 16>& colours, cons
     overviewView->repaint();
 }
 
+juce::String DeckView::beatsText(double beats)
+{
+    if (beats <= 0.0)
+        return "-";
+    if (beats < 1.0)
+        return "1/" + juce::String(juce::roundToInt(1.0 / beats));
+    return juce::String(juce::roundToInt(beats));
+}
+
+void DeckView::setMemoryCues(std::vector<std::pair<double, std::uint32_t>> cues)
+{
+    memoryCues = std::move(cues);
+    overviewView->repaint();
+}
+
 void DeckView::refreshPads()
 {
     for (int i = 0; i < 8; ++i)
@@ -468,6 +548,23 @@ void DeckView::Overview::paint(juce::Graphics& g)
 
     if (loading)
         return; // no cue or playhead until the track is on the deck
+    // The loop (P3-03): a green band over its span.
+    if (s.loopActive && s.loopEnd > s.loopStart)
+    {
+        const float x0 = area.getX() + area.getWidth() * static_cast<float>(s.loopStart / s.lengthSamples);
+        const float x1 = area.getX() + area.getWidth() * static_cast<float>(s.loopEnd / s.lengthSamples);
+        g.setColour(juce::Colour(0xff3cc46a).withAlpha(0.35f));
+        g.fillRect(juce::Rectangle<float>(x0, area.getY(), std::max(2.0f, x1 - x0), area.getHeight()));
+    }
+    // Memory cues (P3-02): small triangles along the top.
+    for (const auto& [at, rgb] : deckView.memoryCues)
+    {
+        const float x = area.getX() + area.getWidth() * static_cast<float>(at / s.lengthSamples);
+        g.setColour(rgb != 0 ? juce::Colour(0xff000000u | rgb) : juce::Colours::white.withAlpha(0.85f));
+        juce::Path tri;
+        tri.addTriangle(x - 4.0f, area.getY(), x + 4.0f, area.getY(), x, area.getY() + 6.0f);
+        g.fillPath(tri);
+    }
     // Hot cue markers (P3-01): a coloured tick with its letter.
     g.setFont(juce::FontOptions(9.0f, juce::Font::bold));
     for (int c = 0; c < 16; ++c)

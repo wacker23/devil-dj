@@ -10,6 +10,7 @@
 
 #include <array>
 #include <functional>
+#include <vector>
 #include <memory>
 
 namespace devildj::ui
@@ -35,6 +36,8 @@ public:
     void setGridSource(GridSource source) { gridSource = std::move(source); }
     // Hot cue colours (P3-01; positions come from the engine state).
     void setHotCueColours(const std::array<std::uint32_t, 16>& colours) { hotCueColours = colours; }
+    // Memory cues (P3-02): positions in buffer samples and colours (0 = white).
+    void setMemoryCues(std::vector<std::pair<double, std::uint32_t>> cues) { memoryCues = std::move(cues); }
 
     // A track being loaded (P2-17): its cached waveform, drawn from its start until the deck has the new buffer.
     void showPreview(std::shared_ptr<const analysis::Waveform> waveform);
@@ -82,6 +85,7 @@ private:
     TrackLookup lookup;
     GridSource gridSource;
     std::array<std::uint32_t, 16> hotCueColours{};
+    std::vector<std::pair<double, std::uint32_t>> memoryCues;
     LatencySource latency;
     engine::BufferId shownBuffer = 0;
     std::shared_ptr<const engine::TrackBuffer> track;

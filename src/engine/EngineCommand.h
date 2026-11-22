@@ -234,6 +234,36 @@ struct HotCueSlot
     double length = 0.0;
 };
 
+// Loops (P3-03). Lengths in grid beats (1/64 ... 512); positions in buffer samples. With quantize on, a loop's
+// in point (auto loop, loop in) lands on the grid point at or before the playhead and its out point on a grid
+// point; without a grid, auto loops need one (manual in / out works anywhere).
+enum class LoopOp : std::uint8_t
+{
+    Auto,   // toggle: a loop of `beats` from here, or exit the one that plays
+    In,     // the in point here (the next Out closes the loop)
+    Out,    // the out point here: loop from the in point
+    Halve,  // the loop half as long (or the auto-loop size, when no loop plays)
+    Double, // twice as long
+    Reloop, // the last loop again, from its start
+    Exit,   // stop looping, play on
+    Set,    // a stored loop (hot / memory loop): `start` .. `end`, and jump to its start
+};
+
+struct Loop
+{
+    DeckId deck = 0;
+    LoopOp op = LoopOp::Auto;
+    double beats = 4.0;
+    double start = 0.0, end = 0.0; // Set
+};
+
+// P3-02: the deck's CUE point (a memory cue called), in buffer samples. The playhead doesn't move (send a Seek).
+struct SetCuePoint
+{
+    DeckId deck = 0;
+    double samplePos = 0.0;
+};
+
 struct SetHotCues
 {
     DeckId deck = 0;
@@ -256,7 +286,7 @@ struct HotCue
 
 // Beat jump (P2-21): exactly `beats` grid beats forward (+) or back (-), so the phase is kept. With quantize on
 // and the deck playing it happens on the next grid point (see SetQuantize); another jump pressed while one waits
-// adds to it. No beatgrid: nothing happens. (Moving a loop with it comes with loops, P3-03.)
+// adds to it. No beatgrid: nothing happens. (While a loop plays it moves the loop: P3-03.)
 struct BeatJump
 {
     DeckId deck = 0;
@@ -281,7 +311,8 @@ using EngineCommand =
     std::variant<SetTestTone, SetOutputLayout, LoadTrack, UnloadTrack, Play, Pause, TogglePlay, CuePress, CueRelease,
                  Seek, SetTempo, NudgeTempo, SetTempoRange, ResetTempo, PitchBend, SetInterpolationQuality, SetKeyLock,
                  SetKeyShift, ScratchBegin, ScratchMove, ScratchEnd, Nudge, SetParam, SetBeatgrid, SetMetronome,
-                 SetClockSource, SetInternalTempo, SetSync, SetQuantize, BeatJump, JumpBy, SetHotCues, HotCue>;
+                 SetClockSource, SetInternalTempo, SetSync, SetQuantize, BeatJump, JumpBy, SetHotCues, HotCue,
+                 SetCuePoint, Loop>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

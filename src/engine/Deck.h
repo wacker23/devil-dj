@@ -73,6 +73,17 @@ public:
     void cuePress() noexcept;
     void cueRelease() noexcept;
     void seek(double samplePosition) noexcept; // clamped to [0, length]
+    void setCuePoint(double samplePosition) noexcept; // P3-02: a memory cue called; clamped to [0, length]
+
+    // Loop (P3-03): while active and playing forward, the playhead wraps from `end` back to `start` at the exact
+    // sample it reaches the end (the overshoot carried, so the timing stays sample-accurate), through the usual
+    // 2 ms crossfade. A playhead before the start plays into the loop; one past the end wraps at once (by the
+    // overshoot modulo the loop length). Works with key lock too (the block is split at the wrap).
+    void setLoop(double start, double end) noexcept; // activates it (end > start, within the track)
+    void exitLoop() noexcept;                         // the loop stays known (for reloop), playback goes on
+    bool loopActive() const noexcept { return loopOn; }
+    double loopStart() const noexcept { return loopIn; }
+    double loopEnd() const noexcept { return loopOut; }
 
     // Tempo fader in percent; clamped to +-tempoRange().
     void setTempoPercent(double percent) noexcept;
@@ -187,6 +198,10 @@ private:
     double cue = 0.0;
     bool atEnd = false;
     bool cueHeldAfterBackCue = false; // cue pressed while playing: its release must not do anything
+    bool loopOn = false;
+    double loopIn = 0.0, loopOut = 0.0;
+    void wrapLoop() noexcept;
+    void renderPart(float* left, float* right, int numSamples) noexcept;
 
     int mainFadeRemaining = 0; // > 0 while the main head fades in
 

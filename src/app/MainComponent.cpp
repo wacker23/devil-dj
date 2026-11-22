@@ -260,6 +260,8 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
         view.onHotCuePad = [this, d](int pad, bool down)
         { engine.send(hotCueForPad(d, pad, hotCuePage, false, !down)); };
         view.onHotCueMenu = [this, d](int pad) { showHotCueMenu(d, pad); };
+        view.onMemoryPanel = [this, d] { openMemoryPanel(d); };
+        view.onLoopButton = [this, d](ui::DeckView::LoopButton b) { loopButton(d, b); };
     }
     deckB.onBeatJump = [this](int direction) { beatJump(1, direction); };
     deckA.onJumpSizeMenu = [this] { showJumpSizeMenu(0); };
@@ -459,6 +461,21 @@ void MainComponent::registerActions()
         }
         // Beat jump (P2-21).
         onPress(cmd(DA::KeySync), [this, d] { keySync(d); }); // P2-22
+        onPress(cmd(DA::MemoryAdd), [this, d] { addMemoryCue(d); }); // P3-02
+        // Loops (P3-03).
+        onPress(cmd(DA::AutoLoop), [this, d] { engine.send(engine::Loop{d, engine::LoopOp::Auto, 0.0}); });
+        onPress(cmd(DA::LoopIn), [this, d] { engine.send(engine::Loop{d, engine::LoopOp::In}); });
+        onPress(cmd(DA::LoopOut), [this, d] { engine.send(engine::Loop{d, engine::LoopOp::Out}); });
+        onPress(cmd(DA::LoopHalve), [this, d] { engine.send(engine::Loop{d, engine::LoopOp::Halve}); });
+        onPress(cmd(DA::LoopDouble), [this, d] { engine.send(engine::Loop{d, engine::LoopOp::Double}); });
+        onPress(cmd(DA::Reloop),
+                [this, d]
+                {
+                    const bool looping = engine.readState().decks[d].loopActive;
+                    engine.send(engine::Loop{d, looping ? engine::LoopOp::Exit : engine::LoopOp::Reloop});
+                });
+        onPress(cmd(DA::CallPrevious), [this, d] { callAdjacentMemoryCue(d, -1); });
+        onPress(cmd(DA::CallNext), [this, d] { callAdjacentMemoryCue(d, 1); });
         onPress(cmd(DA::KeyShiftDown), [this, d] { shiftKey(d, -1); });
         onPress(cmd(DA::KeyShiftUp), [this, d] { shiftKey(d, 1); });
         onPress(cmd(DA::BeatJumpBack), [this, d] { beatJump(d, -1); });
@@ -714,6 +731,244 @@ juce::File MainComponent::artworkFolder()
 juce::File MainComponent::cacheFolder()
 {
     return juce::File::getSpecialLocation(juce::File::windowsLocalAppData).getChildFile("Devil-DJ/cache");
+}
+
+void MainComponent::loopButton(engine::DeckId deck, ui::DeckView::LoopButton button)
+{
+    using B = ui::DeckView::LoopButton;
+    switch (button)
+    {
+        case B::In:
+            engine.send(engine::Loop{deck, engine::LoopOp::In});
+            break;
+        case B::Out:
+            engine.send(engine::Loop{deck, engine::LoopOp::Out});
+            break;
+        case B::Auto:
+            engine.send(engine::Loop{deck, engine::LoopOp::Auto, 0.0});
+            break;
+        case B::Halve:
+            engine.send(engine::Loop{deck, engine::LoopOp::Halve});
+            break;
+        case B::Double:
+            engine.send(engine::Loop{deck, engine::LoopOp::Double});
+            break;
+        case B::Reloop:
+            engine.send(engine::Loop{deck, engine.readState().decks[deck].loopActive ? engine::LoopOp::Exit
+                                                                                       : engine::LoopOp::Reloop});
+            break;
+        case B::Menu:
+            showLoopMenu(deck);
+            break;
+    }
+}
+
+void MainComponent::showLoopMenu(engine::DeckId deck)
+{
+    const auto& s = engine.readState().decks[deck];
+    juce::PopupMenu m;
+    m.addSectionHeader("Loop");
+    juce::PopupMenu sizes;
+    for (const double beats : {1.0 / 64, 1.0 / 32, 1.0 / 16, 1.0 / 8, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0,
+                               128.0, 256.0, 512.0})
+        sizes.addItem(beats < 1.0 ? "1/" + juce::String(juce::roundToInt(1.0 / beats)) : juce::String(juce::roundToInt(beats)),
+                      s.hasGrid, std::abs(beats - s.autoLoopBeats) < 1e-9,
+                      [this, deck, beats]
+                      {
+                          if (engine.readState().decks[deck].loopActive)
+                              engine.send(engine::Loop{deck, engine::LoopOp::Exit});
+                          engine.send(engine::Loop{deck, engine::LoopOp::Auto, beats});
+                      });
+    m.addSubMenu("Auto loop of ... beats", sizes, s.hasGrid);
+    m.addItem("Save as a memory loop (Ctrl+Z / Ctrl+M)", s.loopActive && deckGrids[deck].trackId != 0, false,
+              [this, deck] { addMemoryCue(deck); });
+    m.addItem("Export the loop as WAV...", s.loopActive, false, [this, deck] { exportLoop(deck); });
+    m.addItem("Exit the loop", s.loopActive, false, [this, deck] { engine.send(engine::Loop{deck, engine::LoopOp::Exit}); });
+    m.showMenuAsync(juce::PopupMenu::Options().withMousePosition());
+}
+
+void MainComponent::exportLoop(engine::DeckId deck)
+{
+    const auto& s = engine.readState().decks[deck];
+    const auto track = registry.get(s.bufferId);
+    if (!s.loopActive || track == nullptr)
+        return;
+    const auto start = static_cast<int>(std::llround(s.loopStart)), end = static_cast<int>(std::llround(s.loopEnd));
+    const auto name = juce::File::createLegalFileName(track->file.getFileNameWithoutExtension() + " loop " +
+                                                      juce::String(s.loopBeats > 0.0 ? juce::String(s.loopBeats, 2) + " beats"
+                                                                                     : juce::String("")));
+    loopChooser = std::make_unique<juce::FileChooser>(
+        "Export the loop as WAV", juce::File::getSpecialLocation(juce::File::userMusicDirectory).getChildFile(name + ".wav"),
+        "*.wav");
+    loopChooser->launchAsync(
+        juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
+        [this, track, start, end](const juce::FileChooser& chooser)
+        {
+            const auto file = chooser.getResult();
+            if (file == juce::File())
+                return;
+            const auto error = app::writeLoopWav(*track, start, end, file);
+            util::logInfo("Loop export {}: {}", file.getFullPathName().toStdString(),
+                          error.isEmpty() ? std::string("ok") : error.toStdString());
+        });
+}
+
+void MainComponent::loadMemoryCues(engine::DeckId deck)
+{
+    if (deck >= 2)
+        return;
+    const auto& d = deckGrids[deck];
+    const double fileRate = d.fileRate > 0.0 ? d.fileRate : d.bufferRate;
+    memoryCues[deck] =
+        gridReader != nullptr ? app::loadMemoryCues(*gridReader, d.trackId, fileRate, d.bufferRate) : std::vector<MemoryCue>{};
+    showMemoryCues(deck);
+}
+
+void MainComponent::showMemoryCues(engine::DeckId deck)
+{
+    std::vector<std::pair<double, std::uint32_t>> markers;
+    std::vector<ui::MemoryCuePanel::Row> rows;
+    const double rate = deckGrids[deck].bufferRate > 0.0 ? deckGrids[deck].bufferRate : 48000.0;
+    for (const auto& c : memoryCues[deck])
+    {
+        markers.push_back({c.start, c.colour.value_or(0)});
+        const double seconds = c.start / rate;
+        const int minutes = static_cast<int>(seconds / 60.0);
+        juce::String time = juce::String(minutes) + ":" + juce::String(seconds - 60.0 * minutes, 1).paddedLeft('0', 4);
+        juce::String label = juce::String::fromUTF8(c.label.c_str());
+        if (c.loop && label.isEmpty())
+            label = juce::String(c.length / rate, 2) + " s";
+        rows.push_back({time, c.loop, label, c.colour});
+    }
+    (deck == 0 ? deckA : deckB).setMemoryCues(markers);
+    (deck == 0 ? waveA : waveB).setMemoryCues(markers);
+    if (auto* panel = memoryPanels[deck].getComponent())
+        panel->setRows(std::move(rows), juce::String("Deck ") + engine::deckLetter(deck) + ": memory cues and loops");
+}
+
+void MainComponent::editMemoryCue(engine::DeckId deck, std::function<void(library::Connection&)> change)
+{
+    if (libraryDb == nullptr || deckGrids[deck].trackId == 0)
+        return;
+    const auto trackId = deckGrids[deck].trackId;
+    libraryDb->write(
+        [change = std::move(change), safe = juce::Component::SafePointer<MainComponent>(this), deck,
+         trackId](library::Connection& c)
+        {
+            change(c);
+            juce::MessageManager::callAsync(
+                [safe, deck, trackId]
+                {
+                    if (safe != nullptr && safe->deckGrids[deck].trackId == trackId) // still the same track
+                        safe->loadMemoryCues(deck);
+                });
+        });
+}
+
+void MainComponent::addMemoryCue(engine::DeckId deck)
+{
+    if (deck >= 2 || !engine.readState().decks[deck].loaded)
+        return;
+    const auto& d = deckGrids[deck];
+    if (d.trackId == 0)
+    {
+        deckStatus[deck] = "memory cues need the track in the library";
+        return;
+    }
+    const auto& st = engine.readState().decks[deck];
+    if (st.loopActive) // a loop plays: store it as a memory loop (P3-03)
+    {
+        const double fileRate0 = d.fileRate > 0.0 ? d.fileRate : d.bufferRate;
+        editMemoryCue(deck,
+                      [start = st.loopStart, length = st.loopEnd - st.loopStart, fileRate0, bufferRate = d.bufferRate,
+                       trackId = d.trackId](library::Connection& c)
+                      {
+                          if (const auto r = app::addMemoryCue(c, trackId, true, start, length, fileRate0, bufferRate); !r)
+                              util::logInfo("Memory loop: {}", r.error());
+                      });
+        return;
+    }
+    // At the playhead; with quantize on, the nearest grid point.
+    double at = engine.readState().decks[deck].positionSamples;
+    if (quantize && !d.grid.empty())
+        at = d.grid.sampleAt(std::round(d.grid.beatAt(at) / quantizeBeats) * quantizeBeats);
+    const double fileRate = d.fileRate > 0.0 ? d.fileRate : d.bufferRate;
+    const double bufferRate = d.bufferRate;
+    editMemoryCue(deck,
+                  [at, fileRate, bufferRate, trackId = d.trackId](library::Connection& c)
+                  {
+                      if (const auto r = app::addMemoryCue(c, trackId, false, at, 0.0, fileRate, bufferRate); !r)
+                          util::logInfo("Memory cue: {}", r.error());
+                  });
+}
+
+void MainComponent::callMemoryCue(engine::DeckId deck, const MemoryCue& cue)
+{
+    // It becomes the CUE point, and the playhead goes there (quantized while playing, like any jump); a memory
+    // loop loops (P3-03).
+    engine.send(engine::SetCuePoint{deck, cue.start});
+    if (cue.loop && cue.length > 0.0)
+        engine.send(engine::Loop{deck, engine::LoopOp::Set, 0.0, cue.start, cue.start + cue.length});
+    else
+        engine.send(engine::Seek{deck, cue.start});
+}
+
+void MainComponent::callAdjacentMemoryCue(engine::DeckId deck, int direction)
+{
+    if (deck >= 2)
+        return;
+    const auto& s = engine.readState().decks[deck];
+    if (!s.loaded)
+        return;
+    // "Previous" skips one just behind the playhead (within 0.3 s), so pressing it twice goes further back.
+    const double rate = deckGrids[deck].bufferRate > 0.0 ? deckGrids[deck].bufferRate : 48000.0;
+    const auto cue = direction > 0 ? nextMemoryCue(memoryCues[deck], s.positionSamples)
+                                   : previousMemoryCue(memoryCues[deck], s.positionSamples - 0.3 * rate);
+    if (cue)
+        callMemoryCue(deck, *cue);
+}
+
+void MainComponent::openMemoryPanel(engine::DeckId deck)
+{
+    if (deck >= 2)
+        return;
+    auto panel = std::make_unique<ui::MemoryCuePanel>();
+    panel->onCall = [this, deck](int row)
+    {
+        if (row >= 0 && row < static_cast<int>(memoryCues[deck].size()))
+            callMemoryCue(deck, memoryCues[deck][static_cast<std::size_t>(row)]);
+    };
+    panel->onAdd = [this, deck] { addMemoryCue(deck); };
+    panel->onDelete = [this, deck](int row)
+    {
+        if (row < 0 || row >= static_cast<int>(memoryCues[deck].size()))
+            return;
+        const auto id = memoryCues[deck][static_cast<std::size_t>(row)].id;
+        editMemoryCue(deck, [id](library::Connection& c) { removeMemoryCue(c, id); });
+    };
+    panel->onRename = [this, deck](int row)
+    {
+        if (row < 0 || row >= static_cast<int>(memoryCues[deck].size()))
+            return;
+        const auto cue = memoryCues[deck][static_cast<std::size_t>(row)];
+        auto* w = new juce::AlertWindow("Memory cue name", {}, juce::MessageBoxIconType::NoIcon);
+        w->addTextEditor("name", juce::String::fromUTF8(cue.label.c_str()));
+        w->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
+        w->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+        w->enterModalState(true, juce::ModalCallbackFunction::create(
+                                     [this, w, deck, id = cue.id](int result)
+                                     {
+                                         if (result != 1)
+                                             return;
+                                         const auto name = w->getTextEditorContents("name").trim().toStdString();
+                                         editMemoryCue(deck, [id, name](library::Connection& c) { renameMemoryCue(c, id, name); });
+                                     }),
+                           true);
+    };
+    memoryPanels[deck] = panel.get();
+    auto& view = deck == 0 ? deckA : deckB;
+    juce::CallOutBox::launchAsynchronously(std::move(panel), view.memButton().getScreenBounds(), nullptr);
+    showMemoryCues(deck);
 }
 
 void MainComponent::loadHotCues(engine::DeckId deck)
@@ -1297,7 +1552,7 @@ void MainComponent::resized()
     auto top = area.removeFromTop(topHeight);
     area.removeFromTop(8);
     const int deckWidth = (top.getWidth() - ui::MixerView::kPreferredWidth - 12) / 2;
-    const int deckHeight = std::min(250, top.getHeight());
+    const int deckHeight = std::min(300, top.getHeight()); // with the pad and loop rows (P3-01, P3-03)
     deckA.setBounds(top.removeFromLeft(deckWidth).withHeight(deckHeight));
     top.removeFromLeft(6);
     deckB.setBounds(top.removeFromRight(deckWidth).withHeight(deckHeight));
@@ -1366,6 +1621,7 @@ void MainComponent::loadGridFor(engine::DeckId deck, const juce::File& file, dou
         }
     playTracker.loaded(deck, d.trackId); // P2-23: the history counts library tracks
     loadHotCues(deck);                   // P3-01
+    loadMemoryCues(deck);                // P3-02
     reloadGrid(deck);
     if (d.metronome)
         engine.send(engine::SetMetronome{deck, true});

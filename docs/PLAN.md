@@ -325,11 +325,11 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
   16 hot cues per track (two pages of 8 pads), set/trigger/delete, colours, labels, quantized, stored in DB. Loop hot cues (store a loop). Sorting by time option.
   Done when: persist across restarts; keyboard pads trigger them.
 
-- [ ] **P3-02 Memory cues and loops**
+- [x] **P3-02 Memory cues and loops**
   Up to 10 memory cues + 10 memory loops per track, list panel, call previous/next.
   Done when: CRUD + call tested.
 
-- [ ] **P3-03 Loops**
+- [x] **P3-03 Loops**
   Auto beat loop 1/64…512 beats, manual loop in/out, halve/double, reloop, loop exit, loop move (beat jump while looping). Sample-accurate wrap with 2 ms crossfade. Loop export to WAV (to sampler or file).
   Done when: engine tests for loop wrap accuracy; no clicks on a sine test.
 

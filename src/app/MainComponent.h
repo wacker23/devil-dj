@@ -1,6 +1,8 @@
 #pragma once
 
 #include "HotCueStore.h"
+#include "LoopExport.h"
+#include "MemoryCues.h"
 #include "PlayTracker.h"
 #include "SoakTest.h"
 #include "engine/AudioDeviceService.h"
@@ -15,6 +17,7 @@
 #include "ui/DebugOverlay.h"
 #include "ui/DeckView.h"
 #include "ui/LibraryBrowser.h"
+#include "ui/MemoryCuePanel.h"
 #include "ui/KeyboardController.h"
 #include "ui/KeymapOverlay.h"
 #include "ui/MixerView.h"
@@ -183,6 +186,21 @@ private:
     void showHotCueLooks(engine::DeckId deck);
     void showHotCueMenu(engine::DeckId deck, int pad);
     void setHotCuePage(int page);
+    // Memory cues and loops (P3-02).
+    std::array<std::vector<MemoryCue>, 2> memoryCues;
+    std::array<juce::Component::SafePointer<ui::MemoryCuePanel>, 2> memoryPanels;
+    void loadMemoryCues(engine::DeckId deck);
+    void showMemoryCues(engine::DeckId deck); // markers and the open list
+    void addMemoryCue(engine::DeckId deck);
+    void callMemoryCue(engine::DeckId deck, const MemoryCue& cue);
+    void callAdjacentMemoryCue(engine::DeckId deck, int direction);
+    void openMemoryPanel(engine::DeckId deck);
+    void editMemoryCue(engine::DeckId deck, std::function<void(library::Connection&)> change);
+    // Loops (P3-03).
+    void loopButton(engine::DeckId deck, ui::DeckView::LoopButton button);
+    void showLoopMenu(engine::DeckId deck);
+    void exportLoop(engine::DeckId deck);
+    std::unique_ptr<juce::FileChooser> loopChooser;
     void showAnalysisProgress();
     int analysisTotal = 0;
     std::unique_ptr<juce::FileChooser> importChooser;

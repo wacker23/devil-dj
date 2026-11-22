@@ -416,6 +416,8 @@ void AudioEngine::requestTrack(DeckId deckId, const TrackBuffer* buffer, BufferI
     slot.queuedCount = 0;
     slot.hotCues = {}; // the app sends the new track's
     slot.hotCuePreview = -1;
+    slot.loopInPending = false;
+    slot.haveLastLoop = false;
     slot.clickActive = false;
     if (slot.hasPending && slot.pendingId != id)
         releaseBuffer(slot.pendingId); // superseded before it was ever used
@@ -497,6 +499,21 @@ void AudioEngine::apply(const BeatJump& command) noexcept
         return;
     const double length = static_cast<double>(slot.deck.length());
     const auto clampToTrack = [&](double sample) { return std::clamp(sample, 0.0, length); };
+    // Looping: the loop moves by the beats, and the playhead with it (P3-03).
+    if (slot.deck.loopActive())
+    {
+        const double a = g.sampleAt(g.beatAt(slot.deck.loopStart()) + command.beats);
+        const double b = g.sampleAt(g.beatAt(slot.deck.loopEnd()) + command.beats);
+        if (a < 0.0 || b > length)
+            return; // it would leave the track
+        const double into = slot.deck.position() - slot.deck.loopStart();
+        slot.deck.setLoop(a, b);
+        slot.haveLastLoop = true;
+        slot.lastLoopStart = a;
+        slot.lastLoopEnd = b;
+        slot.deck.seek(a + std::max(0.0, into));
+        return;
+    }
     // A jump already waiting for its grid point: this one adds to it.
     if (slot.queuedCount > 0)
     {
@@ -516,6 +533,120 @@ void AudioEngine::apply(const BeatJump& command) noexcept
         return;
     }
     slot.deck.seek(clampToTrack(g.sampleAt(beat + command.beats)));
+}
+
+void AudioEngine::apply(const Loop& command) noexcept
+{
+    if (command.deck >= kMaxDecks || decks[command.deck].hasPending)
+        return;
+    auto& slot = decks[command.deck];
+    auto& deck = slot.deck;
+    if (deck.track() == nullptr)
+        return;
+    const auto& g = slot.grid;
+    const auto clampBeats = [](double b) { return std::clamp(b, 1.0 / 64.0, 512.0); };
+    // With quantize on: the grid point at or before a position (in points), the nearest one (out points).
+    const auto floorToGrid = [&](double at)
+    {
+        if (!quantizeOn || g.empty())
+            return at;
+        return g.sampleAt(std::floor(g.beatAt(at) / quantizeBeats + 1e-6) * quantizeBeats);
+    };
+    const auto roundToGrid = [&](double at)
+    {
+        if (!quantizeOn || g.empty())
+            return at;
+        return g.sampleAt(std::round(g.beatAt(at) / quantizeBeats) * quantizeBeats);
+    };
+    const auto start = [&](double a, double b)
+    {
+        deck.setLoop(a, b);
+        if (deck.loopActive())
+        {
+            slot.haveLastLoop = true;
+            slot.lastLoopStart = deck.loopStart();
+            slot.lastLoopEnd = deck.loopEnd();
+        }
+    };
+    // A loop of `beats` from a grid position (beats count on the grid, so a tempo change in it is followed).
+    const auto beatsFrom = [&](double at, double beats) { return g.sampleAt(g.beatAt(at) + beats); };
+
+    switch (command.op)
+    {
+        case LoopOp::Auto:
+        {
+            if (deck.loopActive())
+            {
+                deck.exitLoop();
+                return;
+            }
+            if (g.empty())
+                return;
+            const double beats = clampBeats(command.beats > 0.0 ? command.beats : slot.autoLoopBeats);
+            slot.autoLoopBeats = beats;
+            double from = deck.position();
+            if (quantizeOn)
+                from = g.sampleAt(std::floor(g.beatAt(from) / std::min(quantizeBeats, beats) + 1e-6) *
+                                  std::min(quantizeBeats, beats));
+            start(from, beatsFrom(from, beats));
+            return;
+        }
+        case LoopOp::In:
+            slot.loopInPending = true;
+            slot.loopInPoint = floorToGrid(deck.position());
+            return;
+        case LoopOp::Out:
+        {
+            if (!slot.loopInPending)
+                return;
+            const double out = roundToGrid(deck.position());
+            if (out > slot.loopInPoint + 1.0)
+            {
+                start(slot.loopInPoint, out);
+                slot.loopInPending = false;
+            }
+            return;
+        }
+        case LoopOp::Halve:
+        case LoopOp::Double:
+        {
+            const double factor = command.op == LoopOp::Halve ? 0.5 : 2.0;
+            if (!deck.loopActive())
+            {
+                slot.autoLoopBeats = clampBeats(slot.autoLoopBeats * factor);
+                return;
+            }
+            const double a = deck.loopStart();
+            double b = a + (deck.loopEnd() - a) * factor;
+            if (!g.empty())
+            {
+                const double beats = clampBeats((g.beatAt(deck.loopEnd()) - g.beatAt(a)) * factor);
+                b = beatsFrom(a, beats);
+            }
+            start(a, b); // past the new end: the deck wraps at once
+            return;
+        }
+        case LoopOp::Reloop:
+            if (!slot.haveLastLoop)
+                return;
+            start(slot.lastLoopStart, slot.lastLoopEnd);
+            deck.seek(slot.lastLoopStart);
+            return;
+        case LoopOp::Exit:
+            deck.exitLoop();
+            return;
+        case LoopOp::Set:
+            start(command.start, command.end);
+            if (deck.loopActive())
+                deck.seek(command.start);
+            return;
+    }
+}
+
+void AudioEngine::apply(const SetCuePoint& command) noexcept
+{
+    if (command.deck < kMaxDecks && decks[command.deck].deck.track() != nullptr)
+        decks[command.deck].deck.setCuePoint(command.samplePos);
 }
 
 void AudioEngine::apply(const SetHotCues& command) noexcept
@@ -554,6 +685,23 @@ void AudioEngine::apply(const HotCue& command) noexcept
         case HotCueOp::Press:
             break;
     }
+    if (!cue.set && deck.loopActive())
+    {
+        // A loop plays: the pad stores it (a hot loop).
+        cue = {true, deck.loopStart(), deck.loopEnd() - deck.loopStart()};
+        return;
+    }
+    const bool quantizedJump = deck.transport() == Deck::Transport::Playing && quantizeOn && !slot.grid.empty() &&
+                               deck.rate() > 0.0;
+    if (cue.set && cue.length > 0.0)
+    {
+        // A hot loop: loop it from its start (quantized while playing: once the jump is there).
+        slot.haveLastLoop = true;
+        slot.lastLoopStart = cue.start;
+        slot.lastLoopEnd = cue.start + cue.length;
+        if (!quantizedJump)
+            deck.setLoop(cue.start, cue.start + cue.length);
+    }
     if (!cue.set)
     {
         // Set it here (quantize: on the nearest grid point).
@@ -569,7 +717,7 @@ void AudioEngine::apply(const HotCue& command) noexcept
         {
             const double next =
                 (std::floor(slot.grid.beatAt(deck.position()) / quantizeBeats + 1e-9) + 1.0) * quantizeBeats;
-            queue(slot, {DeckSlot::QueuedAction::Kind::Jump, slot.grid.sampleAt(next), cue.start});
+            queue(slot, {DeckSlot::QueuedAction::Kind::Jump, slot.grid.sampleAt(next), cue.start, cue.length});
         }
         else
         {
@@ -634,9 +782,18 @@ void AudioEngine::renderDeckWithActions(DeckSlot& slot, float* l, float* r, int 
             slot.queued[static_cast<std::size_t>(k - 1)] = slot.queued[static_cast<std::size_t>(k)];
         --slot.queuedCount;
         if (action.kind == DeckSlot::QueuedAction::Kind::Play)
+        {
             startPlaying(slot);
+        }
         else
+        {
             slot.deck.seek(action.to + std::max(0.0, overshoot));
+            if (action.loopLength > 0.0) // a hot loop: looping from its start, now that the jump is there
+            {
+                slot.deck.setLoop(action.to, action.to + action.loopLength);
+                slot.deck.seek(action.to + std::max(0.0, overshoot));
+            }
+        }
     }
     if (done < numSamples)
         slot.deck.render(l + done, r + done, numSamples - done);
@@ -1070,6 +1227,15 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
             s.hotCueLength[c] = slot.hotCues[c].set ? slot.hotCues[c].length : 0.0;
         }
         s.hotCuePreview = slot.hotCuePreview;
+        s.loopActive = d.loopActive();
+        s.loopStart = d.loopStart();
+        s.loopEnd = d.loopEnd();
+        s.loopBeats = !slot.grid.empty() && d.loopEnd() > d.loopStart()
+                          ? slot.grid.beatAt(d.loopEnd()) - slot.grid.beatAt(d.loopStart())
+                          : 0.0;
+        s.loopInSet = slot.loopInPending;
+        s.loopIn = slot.loopInPoint;
+        s.autoLoopBeats = slot.autoLoopBeats;
         if (s.hasGrid)
         {
             s.beat = slot.grid.beatAt(s.positionSamples);

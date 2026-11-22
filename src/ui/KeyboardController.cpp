@@ -304,6 +304,11 @@ std::vector<KeyBinding> defaultKeymap()
         {Digit2, Digit8, mods::None, DA::BendUp},
         {Digit1, Digit7, mods::Ctrl, DA::KeyShiftDown}, // P2-22
         {Digit2, Digit8, mods::Ctrl, DA::KeyShiftUp},
+        {Digit3, Digit9, mods::Ctrl, DA::CallPrevious}, // P3-02 memory cues
+        {Digit4, Digit0, mods::Ctrl, DA::CallNext},
+        {Z, M, mods::Ctrl, DA::MemoryAdd},
+        {X, Comma, mods::Ctrl, DA::LoopIn}, // P3-03
+        {C, Period, mods::Ctrl, DA::LoopOut},
         {Digit3, Digit9, mods::None, DA::LoopHalve},
         {Digit4, Digit0, mods::None, DA::LoopDouble},
         {Digit5, Minus, mods::None, DA::BeatJumpBack},

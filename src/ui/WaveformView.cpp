@@ -154,6 +154,33 @@ void WaveformView::paint(juce::Graphics& g)
             drawBandColumn(g, static_cast<float>(x), 1.0f, mid, half, peaks, x < centreX ? 0.55f : 0.95f);
         }
 
+        // The loop (P3-03): its span shaded green, its ends as lines.
+        if (preview == nullptr && s.loopActive && s.loopEnd > s.loopStart)
+        {
+            const auto x0 = static_cast<float>((s.loopStart - leftSample) / spp);
+            const auto x1 = static_cast<float>((s.loopEnd - leftSample) / spp);
+            const auto green = juce::Colour(0xff3cc46a);
+            g.setColour(green.withAlpha(0.18f));
+            g.fillRect(juce::Rectangle<float>(x0, area.getY(), x1 - x0, area.getHeight()).getIntersection(area));
+            g.setColour(green);
+            g.fillRect(x0 - 1.0f, area.getY(), 2.0f, area.getHeight());
+            g.fillRect(x1 - 1.0f, area.getY(), 2.0f, area.getHeight());
+        }
+
+        // Memory cues (P3-02): a thin line and a triangle at the top.
+        if (preview == nullptr)
+            for (const auto& [at, rgb] : memoryCues)
+            {
+                const auto x = static_cast<float>((at - leftSample) / spp);
+                if (x < area.getX() - 8.0f || x > area.getRight() + 8.0f)
+                    continue;
+                g.setColour(rgb != 0 ? juce::Colour(0xff000000u | rgb) : juce::Colours::white.withAlpha(0.85f));
+                g.fillRect(x - 0.5f, area.getY(), 1.0f, area.getHeight());
+                juce::Path tri;
+                tri.addTriangle(x - 6.0f, area.getY(), x + 6.0f, area.getY(), x, area.getY() + 9.0f);
+                g.fillPath(tri);
+            }
+
         // Hot cues (P3-01): a line and a flag with the letter.
         if (preview == nullptr)
         {

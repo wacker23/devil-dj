@@ -20,6 +20,7 @@ target_sources(DevilDJTests PRIVATE
     app/AudioSettingsTests.cpp
     app/HotCueStoreTests.cpp
     app/LibraryBackupTests.cpp
+    app/MemoryCueTests.cpp
     app/SettingsTests.cpp
     app/SoakTestTests.cpp
     beatmaker/BeatMakerSmokeTests.cpp
@@ -41,6 +42,7 @@ target_sources(DevilDJTests PRIVATE
     engine/MixerMasterTests.cpp
     engine/HeadphoneCueTests.cpp
     engine/HotCueTests.cpp
+    engine/LoopTests.cpp
     engine/KeyShiftTests.cpp
     engine/MasterClockTests.cpp
     engine/DeckTempoTests.cpp

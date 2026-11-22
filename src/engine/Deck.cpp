@@ -229,6 +229,8 @@ void Deck::setTrack(const TrackBuffer* track) noexcept
     stretcherPrimed = false;
     scratch = Scratch::None;
     nudgeRemaining = 0.0;
+    loopOn = false;
+    loopIn = loopOut = 0.0;
 }
 
 bool Deck::isSilent() const noexcept
@@ -318,10 +320,46 @@ void Deck::cueRelease() noexcept
     atEnd = false;
 }
 
+void Deck::setCuePoint(double samplePosition) noexcept
+{
+    cue = std::clamp(samplePosition, 0.0, static_cast<double>(length()));
+}
+
+void Deck::setLoop(double start, double end) noexcept
+{
+    if (buffer == nullptr)
+        return;
+    const double len = length();
+    start = std::clamp(start, 0.0, len);
+    end = std::clamp(end, 0.0, len);
+    if (end - start < 1.0)
+        return;
+    loopIn = start;
+    loopOut = end;
+    loopOn = true;
+}
+
+void Deck::exitLoop() noexcept
+{
+    loopOn = false;
+}
+
+void Deck::wrapLoop() noexcept
+{
+    const double length = loopOut - loopIn;
+    if (length <= 0.0)
+        return;
+    const double over = std::fmod(std::max(0.0, playhead - loopOut), length);
+    jumpTo(loopIn + over); // the old head fades out past the end while the new one fades in from the start
+}
+
 void Deck::seek(double samplePosition) noexcept
 {
     if (buffer == nullptr)
         return;
+    // Out of a playing loop: the loop ends (P3-03).
+    if (loopOn && (samplePosition < loopIn || samplePosition >= loopOut))
+        loopOn = false;
     jumpTo(std::clamp(samplePosition, 0.0, static_cast<double>(length())));
 }
 
@@ -445,6 +483,33 @@ void Deck::render(float* left, float* right, int numSamples) noexcept
         return;
     }
 
+    // A loop (P3-03): split the block at the sample the playhead reaches its end, wrap, go on.
+    int done = 0;
+    while (loopOn && state != Transport::Paused && scratch == Scratch::None && done < numSamples)
+    {
+        if (playhead >= loopOut)
+        {
+            wrapLoop();
+            continue;
+        }
+        const double r = rate();
+        if (r <= 0.0)
+            break;
+        const double steps = std::ceil((loopOut - playhead) / r - 1e-9);
+        if (steps >= static_cast<double>(numSamples - done))
+            break;
+        const int n = std::max(1, static_cast<int>(steps));
+        renderPart(left + done, right + done, n);
+        done += n;
+        if (playhead >= loopOut)
+            wrapLoop();
+    }
+    if (done < numSamples)
+        renderPart(left + done, right + done, numSamples - done);
+}
+
+void Deck::renderPart(float* left, float* right, int numSamples) noexcept
+{
     const double len = length();
     const double bendStep = kPitchBendSlewPercentPerSecond / sampleRate;
 

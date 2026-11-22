@@ -15,13 +15,14 @@ Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / r
 | Cue (CDJ-style; hold to preview) | Z | M |
 | Play / pause | X | , |
 | Sync on/off | C | . |
-| Auto loop 4 beats on/off | V | / |
+| Auto loop on/off (the size: 4 beats to start; halve / double change it when no loop plays) | V | / |
 | Pads 1–4 (current pad mode) | Q W E R | U I O P |
 | Pads 5–8 | A S D F | J K L ; |
 | Pad alternate function (hot cue mode: delete) | Shift + pad | Shift + pad |
 | Hot cues (P3-01): an empty pad sets one, a set pad jumps there (paused: plays while held); F1 switches A-H / I-P | pads | pads |
 | Pitch bend − / + (hold) | 1 / 2 | 7 / 8 |
-| Loop halve / double | 3 / 4 | 9 / 0 |
+| Loop halve / double (looping: the loop; else the auto-loop size, 1/64 ... 512 beats) | 3 / 4 | 9 / 0 |
+| Loop in / loop out (manual loop) | Ctrl+X / Ctrl+C | Ctrl+, / Ctrl+. |
 | Beat jump back / forward (current jump size) | 5 / 6 | - / = |
 | Fine jump back / forward 5 ms (repeats while held) | Ctrl+5 / Ctrl+6 | Ctrl+- / Ctrl+= |
 | Beat jump size larger / smaller (1/8 ... 128 beats; also the size button on the deck) | Shift+6 / Ctrl+Shift+6 | Shift+= / Ctrl+Shift+= |
@@ -32,7 +33,9 @@ Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / r
 | Reverse (hold) | Shift+X | Shift+, |
 | Key Sync (transpose to the master's key; turns key lock on) | Shift+C | Shift+. |
 | Key shift -1 / +1 semitone (turns key lock on) | Ctrl+1 / Ctrl+2 | Ctrl+7 / Ctrl+8 |
-| Reloop / loop exit | Shift+V | Shift+/ |
+| Memory cue: store one at the playhead (the MEM button lists them) | Ctrl+Z | Ctrl+M |
+| Call the previous / next memory cue (it becomes the CUE point) | Ctrl+3 / Ctrl+4 | Ctrl+9 / Ctrl+0 |
+| Reloop / loop exit (looping: exit; else the last loop again from its start) | Shift+V | Shift+/ |
 | Low / mid / high EQ kill (toggle) | Ctrl+A / Ctrl+S / Ctrl+D | Ctrl+J / Ctrl+K / Ctrl+L |
 | Slip mode | Ctrl+Q | Ctrl+U |
 | Key lock | Ctrl+W | Ctrl+I |

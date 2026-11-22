@@ -9,6 +9,7 @@
 
 #include <functional>
 #include <memory>
+#include <vector>
 
 namespace devildj::ui
 {
@@ -63,6 +64,23 @@ public:
     class PadButton;
     std::function<void(int pad, bool down)> onHotCuePad;
     std::function<void(int pad)> onHotCueMenu;
+    // Memory cues (P3-02): MEM opens the list; their positions (buffer samples) and colours for the overview.
+    std::function<void()> onMemoryPanel;
+    // Loops (P3-03): the loop row's buttons; the app sends the engine commands (auto loop size, export, ...).
+    enum class LoopButton
+    {
+        In,
+        Out,
+        Auto,
+        Halve,
+        Double,
+        Reloop,
+        Menu,
+    };
+    std::function<void(LoopButton)> onLoopButton;
+    juce::TextButton& loopButton(LoopButton b) noexcept { return loopButtons[static_cast<std::size_t>(b)]; }
+    void setMemoryCues(std::vector<std::pair<double, std::uint32_t>> cues);
+    juce::TextButton& memButton() noexcept { return mem; }
     void setHotCuePage(int page);
     // The colours and labels of the 16 hot cues (positions and set / empty come from the engine).
     void setHotCueLooks(const std::array<std::uint32_t, 16>& colours, const std::array<juce::String, 16>& labels);
@@ -94,7 +112,7 @@ private:
     juce::String shownKey;
 
     std::unique_ptr<HoldButton> cue;
-    juce::TextButton play{"PLAY"}, sync{"SYNC"}, keyLock{"KEY LOCK"}, grid{"GRID"}, tap{"TAP"};
+    juce::TextButton play{"PLAY"}, sync{"SYNC"}, keyLock{"KEY LOCK"}, grid{"GRID"}, tap{"TAP"}, mem{"MEM"};
     juce::TextButton jumpBack{juce::CharPointer_UTF8("\xe2\x97\x80")}, jumpForward{juce::CharPointer_UTF8("\xe2\x96\xb6")},
         jumpSize{"4"};
     juce::Slider tempo{juce::Slider::LinearVertical, juce::Slider::NoTextBox};
@@ -106,6 +124,9 @@ private:
     int padPage = 0;
     std::array<std::uint32_t, 16> hotCueColours{};
     std::array<juce::String, 16> hotCueLabels;
+    std::vector<std::pair<double, std::uint32_t>> memoryCues;
+    std::array<juce::TextButton, 7> loopButtons;
+    static juce::String beatsText(double beats); // "1/4", "4", "32" 
     void refreshPads();
     void dropHoverChanged() override { repaint(); }
 

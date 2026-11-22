@@ -18,6 +18,8 @@ target_sources(devildj_ui INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/LibraryBrowser.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/MixerControls.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/MixerControls.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/MemoryCuePanel.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/MemoryCuePanel.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/MixerView.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/MixerView.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/SmartPlaylistEditor.cpp"

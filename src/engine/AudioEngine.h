@@ -119,6 +119,8 @@ private:
     void apply(const BeatJump& command) noexcept;
     void apply(const JumpBy& command) noexcept;
     void apply(const SetHotCues& command) noexcept;
+    void apply(const SetCuePoint& command) noexcept;
+    void apply(const Loop& command) noexcept;
     void apply(const HotCue& command) noexcept;
     void followMaster() noexcept;                              // P2-19: every synced deck that doesn't lead
     bool tempoToMaster(DeckId deck, double percent) noexcept; // sync lock: a follower's fader moves the master
@@ -172,12 +174,19 @@ private:
             };
             Kind kind = Kind::Play;
             double at = 0.0, to = 0.0;
+            double loopLength = 0.0; // Jump to a hot loop: loop from `to` for this long once there (P3-03)
         };
         static constexpr int kMaxQueued = 16;
         std::array<QueuedAction, kMaxQueued> queued{};
         int queuedCount = 0;
         std::array<HotCueSlot, kHotCues> hotCues{}; // P3-01, in buffer samples
         int hotCuePreview = -1;                     // held from pause
+        // Loops (P3-03).
+        double autoLoopBeats = 4.0;
+        bool loopInPending = false;
+        double loopInPoint = 0.0;
+        bool haveLastLoop = false; // for reloop
+        double lastLoopStart = 0.0, lastLoopEnd = 0.0;
         bool metronome = false;
         float metronomeGain = 0.5f;
         // The click being played: a short decaying sine, continued across chunks.

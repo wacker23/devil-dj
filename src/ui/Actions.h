@@ -73,7 +73,12 @@ namespace devildj::ui
     X(FineJumpBack, "Fine jump back 5 ms", true)                                                                       \
     X(FineJumpForward, "Fine jump forward 5 ms", true)                                                                 \
     X(KeyShiftDown, "Key shift -1 semitone", false)                                                                    \
-    X(KeyShiftUp, "Key shift +1 semitone", false)
+    X(KeyShiftUp, "Key shift +1 semitone", false)                                                                      \
+    X(MemoryAdd, "Store a memory cue here", false)                                                                     \
+    X(CallPrevious, "Call the previous memory cue", false)                                                             \
+    X(CallNext, "Call the next memory cue", false)                                                                     \
+    X(LoopIn, "Loop in", false)                                                                                        \
+    X(LoopOut, "Loop out", false)
 
 #define DEVILDJ_GLOBAL_ACTIONS(X)                                                                                      \
     X(CrossfaderLeft, "Crossfader left (hold to glide)", false)                                                        \
