@@ -86,6 +86,8 @@ BeatMakerPanel::BeatMakerPanel()
         // A pattern shown for the first time got its 8 rows: part of the state, not an edit of its own.
         if (project != nullptr)
             snapshot = *project;
+        if (onPatternShown)
+            onPatternShown(p);
     };
     stepGrid.onPlayStop = [this]
     {

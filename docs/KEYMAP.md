@@ -127,6 +127,9 @@ The same tools are on each deck's GRID button (and TAP); editing a grid locks it
 | Swing − / + (5 %) | - / = |
 
 | Drums / synth view | Tab |
+| Song mode on / off (play the song list) | B |
+| Add the pattern shown to the song / remove the song's last pattern | Shift+B / Alt+B |
+| Pattern switch while playing: on the next bar / at the playing pattern's end | E |
 
 In the synth view (piano roll) the same keys mean: arrows move the cursor (by the snap / a semitone, or a scale step with snap to scale on), Enter adds or removes the note (or chord) at the cursor, Shift+Up / Down its velocity, Alt+Left / Right shorter / longer, Shift+Left / Right the track's sound, 1–4 the synth track, Ctrl+C / V copy and paste the track's notes, Delete clears them. Also:
 

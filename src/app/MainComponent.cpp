@@ -363,20 +363,44 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     {
         // Until the Beat Maker has its channel (P4-10) this runs the grid's playhead on the master clock, from the
         // next bar.
-        beatPlaying = !beatPlaying;
-        beatStartBeat = std::ceil(engine.readState().masterBeat / 4.0) * 4.0;
+        if (beatPlaying)
+            beatPlaying = false;
+        else
+            startBeatMaker();
     };
+    beatPanel.onPatternShown = [this](int p)
+    {
+        if (beatPlaying && !beatSongMode)
+            queueBeatPattern(p);
+    };
+    beatPanel.grid().onSongMode = [this](bool on)
+    {
+        beatSongMode = on;
+        if (!beatPlaying)
+            return;
+        const auto now = util::Fraction::fromDouble(engine.readState().masterBeat, 96000);
+        const auto at = beatSwitchAtEnd ? beatSequencer.patternEnd(beatProject, now) : beatmaker::Sequencer::nextBar(now);
+        if (on)
+            beatSequencer.queueSong(at);
+        else
+            beatSequencer.queuePattern(beatPanel.grid().pattern(), at);
+    };
+    beatPanel.grid().onSwitchAt = [this](bool atEnd) { beatSwitchAtEnd = atEnd; };
     beatTimer = std::make_unique<juce::TimedCallback>(
         [this]
         {
-            if (!beatPanel.isVisible())
+            if (!beatPanel.isVisible() && padModes[0] != ui::PadMode::BeatPatterns && padModes[1] != ui::PadMode::BeatPatterns)
                 return;
-            const auto& pat = beatProject.patterns[static_cast<std::size_t>(beatPanel.grid().pattern())];
-            const double beat = engine.readState().masterBeat - beatStartBeat;
-            const int stepIndex = beatPlaying && beat >= 0.0
-                                      ? static_cast<int>(std::floor(beat * pat.stepsPerBeat)) % std::max(1, pat.lengthSteps)
-                                      : -1;
-            beatPanel.grid().setPlayback(beatPlaying, stepIndex);
+            // What the sequencer plays now: the shown pattern's step lit, the playing / queued patterns marked.
+            const auto now = util::Fraction::fromDouble(engine.readState().masterBeat, 96000);
+            beatSequencer.prune(now);
+            const auto pos = beatPlaying ? beatSequencer.position(beatProject, now) : beatmaker::Sequencer::Position{};
+            const auto queued = beatPlaying ? beatSequencer.queuedAfter(now) : std::nullopt;
+            const int queuedPattern = queued ? (queued->song ? -2 : queued->pattern) : -1;
+            beatPanel.grid().setPlayback(beatPlaying, pos.pattern == beatPanel.grid().pattern() ? pos.step : -1);
+            beatPanel.grid().setPatternStates(pos.pattern, queuedPattern);
+            for (auto* deck : {&deckA, &deckB})
+                deck->setBeatPatternLooks(pos.pattern, queuedPattern);
         });
     beatTimer->startTimerHz(30);
     {
@@ -647,7 +671,7 @@ void MainComponent::registerActions()
                            });
     };
     // The Beat Maker's grid (P4-06): every Beat Maker action goes to it (held keys repeat where they may).
-    for (int a = static_cast<int>(GA::BeatMakerStartStop); a <= static_cast<int>(GA::BeatMakerView); ++a)
+    for (int a = static_cast<int>(GA::BeatMakerStartStop); a <= static_cast<int>(GA::BeatMakerSwitchAt); ++a)
         if (a < static_cast<int>(GA::CodeEvaluate) || a > static_cast<int>(GA::BrowserBigger))
             actions.setHandler(ui::globalCommand(static_cast<GA>(a)),
                                [this, a](Phase p)
@@ -1432,6 +1456,15 @@ void MainComponent::padAction(engine::DeckId deck, int pad, bool alternate, bool
     if (deck >= 2)
         return;
     const auto& state = engine.readState().decks[deck];
+    if (padModes[deck] == ui::PadMode::BeatPatterns) // P4-09: the Beat Maker's patterns
+    {
+        if (release || alternate)
+            return;
+        beatPanel.grid().perform(static_cast<ui::GlobalAction>(static_cast<int>(ui::GlobalAction::BeatMakerPattern1) + pad));
+        if (!beatPlaying)
+            startBeatMaker();
+        return;
+    }
     if (padModes[deck] == ui::PadMode::SequenceCall) // P3-15: the bank's sequences
     {
         if (release || alternate)
@@ -1692,6 +1725,24 @@ std::optional<double> MainComponent::energyOf(std::int64_t trackId)
         return e;
     }
     return std::nullopt;
+}
+
+void MainComponent::startBeatMaker()
+{
+    // From the next bar: the song (song mode) or the pattern shown.
+    const auto start = beatmaker::Sequencer::nextBar(util::Fraction::fromDouble(engine.readState().masterBeat, 96000));
+    beatSequencer.playPattern(beatPanel.grid().pattern(), start);
+    if (beatSongMode)
+        beatSequencer.playSong(start);
+    beatStartBeat = start.toDouble();
+    beatPlaying = true;
+}
+
+void MainComponent::queueBeatPattern(int pattern)
+{
+    const auto now = util::Fraction::fromDouble(engine.readState().masterBeat, 96000);
+    beatSequencer.queuePattern(pattern, beatSwitchAtEnd ? beatSequencer.patternEnd(beatProject, now)
+                                                        : beatmaker::Sequencer::nextBar(now));
 }
 
 juce::File MainComponent::beatProjectFile()
@@ -2185,7 +2236,7 @@ void MainComponent::showPadModeMenu(engine::DeckId deck)
     if (deck >= 2)
         return;
     static constexpr const char* keys[] = {"F1",       "F2",       "F3",       "F4",      "Shift+F1",
-                                           "Shift+F2", "Shift+F3", "Shift+F4", "no key"};
+                                           "Shift+F2", "Shift+F3", "Shift+F4", "no key",   "no key"};
     juce::PopupMenu m;
     m.addSectionHeader(juce::String("Deck ") + engine::deckLetter(deck) + " pads");
     for (int i = 0; i < ui::kPadModeCount; ++i)

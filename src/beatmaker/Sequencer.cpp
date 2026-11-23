@@ -50,15 +50,122 @@ int Sequencer::chance(std::uint32_t seed, int pattern, int track, int step, std:
 
 void Sequencer::playPattern(int index, Fraction startBeat) noexcept
 {
-    pattern = std::clamp(index, 0, kPatternCount - 1);
-    song = false;
-    start = startBeat;
+    plan.assign(1, Placement{startBeat, std::clamp(index, 0, kPatternCount - 1), startBeat, false});
 }
 
 void Sequencer::playSong(Fraction startBeat) noexcept
 {
-    song = true;
-    start = startBeat;
+    plan.assign(1, Placement{startBeat, plan.back().pattern, startBeat, true});
+}
+
+void Sequencer::queuePattern(int index, Fraction atBeat)
+{
+    const int fallback = std::clamp(index, 0, kPatternCount - 1);
+    std::erase_if(plan, [&](const Placement& p) { return !(p.from < atBeat); });
+    plan.push_back(Placement{atBeat, fallback, atBeat, false});
+}
+
+void Sequencer::queueSong(Fraction atBeat)
+{
+    std::erase_if(plan, [&](const Placement& p) { return !(p.from < atBeat); });
+    const int fallback = plan.empty() ? 0 : plan.back().pattern;
+    plan.push_back(Placement{atBeat, fallback, atBeat, true});
+}
+
+Fraction Sequencer::nextBar(Fraction beat)
+{
+    return Fraction((beat / Fraction(4)).ceil() * 4);
+}
+
+std::vector<int> Sequencer::songList(const Project& project)
+{
+    std::vector<int> list;
+    for (const int i : project.song)
+        if (i >= 0 && i < kPatternCount)
+            list.push_back(i);
+    return list;
+}
+
+const Sequencer::Placement& Sequencer::at(Fraction beat) const
+{
+    const Placement* found = &plan.front();
+    for (const auto& p : plan)
+        if (!(beat < p.from))
+            found = &p;
+    return *found;
+}
+
+void Sequencer::prune(Fraction beat)
+{
+    while (plan.size() > 1 && !(beat < plan[1].from))
+        plan.erase(plan.begin());
+}
+
+std::optional<Sequencer::Queued> Sequencer::queuedAfter(Fraction beat) const
+{
+    for (const auto& p : plan)
+        if (beat < p.from && &p != &plan.front())
+            return Queued{p.song ? -1 : p.pattern, p.song, p.from};
+    return std::nullopt;
+}
+
+Fraction Sequencer::patternEnd(const Project& project, Fraction beat) const
+{
+    const auto& p = at(beat);
+    const auto list = p.song ? songList(project) : std::vector<int>{};
+    if (list.empty())
+    {
+        const auto len = patternBeats(project.patterns[static_cast<std::size_t>(p.pattern)]);
+        if (beat < p.start)
+            return p.start;
+        return p.start + len * Fraction(((beat - p.start) / len).ceil());
+    }
+    // In the song: the end of the song pattern playing at `beat`.
+    Fraction total = 0;
+    for (const int i : list)
+        total += patternBeats(project.patterns[static_cast<std::size_t>(i)]);
+    if (beat < p.start)
+        return p.start;
+    Fraction t = p.start + total * Fraction(((beat - p.start) / total).floor());
+    for (const int i : list)
+    {
+        t += patternBeats(project.patterns[static_cast<std::size_t>(i)]);
+        if (!(t < beat))
+            return t;
+    }
+    return t;
+}
+
+Sequencer::Position Sequencer::position(const Project& project, Fraction beat) const
+{
+    const auto& p = at(beat);
+    if (beat < p.start)
+        return {};
+    const auto list = p.song ? songList(project) : std::vector<int>{};
+    int index = p.pattern;
+    Fraction offset = beat - p.start;
+    if (list.empty())
+    {
+        const auto len = patternBeats(project.patterns[static_cast<std::size_t>(index)]);
+        offset = offset - len * Fraction((offset / len).floor());
+    }
+    else
+    {
+        Fraction total = 0;
+        for (const int i : list)
+            total += patternBeats(project.patterns[static_cast<std::size_t>(i)]);
+        offset = offset - total * Fraction((offset / total).floor());
+        for (const int i : list)
+        {
+            const auto len = patternBeats(project.patterns[static_cast<std::size_t>(i)]);
+            index = i;
+            if (offset < len)
+                break;
+            offset -= len;
+        }
+    }
+    const auto& pat = project.patterns[static_cast<std::size_t>(index)];
+    return {index, static_cast<int>((offset * Fraction(std::max(1, pat.stepsPerBeat))).floor())};
 }
 
 void Sequencer::emit(const Project& project, Fraction begin, Fraction end, std::vector<BeatEvent>& out) const
@@ -66,13 +173,26 @@ void Sequencer::emit(const Project& project, Fraction begin, Fraction end, std::
     if (!(begin < end))
         return;
     const auto first = out.size();
+    // Each placement over its part of the window: from its beat to the next one's.
+    for (std::size_t i = 0; i < plan.size(); ++i)
+    {
+        const Fraction from = i == 0 ? begin : std::max(begin, plan[i].from);
+        const Fraction to = i + 1 < plan.size() ? std::min(end, plan[i + 1].from) : end;
+        if (from < to)
+            emitPlacement(project, plan[i], from, to, out);
+    }
+    std::stable_sort(out.begin() + static_cast<std::ptrdiff_t>(first), out.end(),
+                     [](const BeatEvent& a, const BeatEvent& b) { return a.beat < b.beat; });
+}
+
+void Sequencer::emitPlacement(const Project& project, const Placement& placement, Fraction begin, Fraction end,
+                              std::vector<BeatEvent>& out) const
+{
     // An event can sit up to 0.5 step before its step (micro-timing) or up to 0.875 step after it (swing +
     // micro-timing), so the passes that touch the window are those starting within a pass of it.
-    std::vector<int> list;
-    if (song)
-        for (const int i : project.song)
-            if (i >= 0 && i < kPatternCount)
-                list.push_back(i);
+    const int pattern = placement.pattern;
+    const Fraction start = placement.start;
+    const auto list = placement.song ? songList(project) : std::vector<int>{};
     if (list.empty())
     {
         const auto& p = project.patterns[static_cast<std::size_t>(pattern)];
@@ -102,8 +222,6 @@ void Sequencer::emit(const Project& project, Fraction begin, Fraction end, std::
             }
         }
     }
-    std::stable_sort(out.begin() + static_cast<std::ptrdiff_t>(first), out.end(),
-                     [](const BeatEvent& a, const BeatEvent& b) { return a.beat < b.beat; });
 }
 
 void Sequencer::emitPass(const Project& project, int index, Fraction passStart, std::int64_t loop, Fraction begin,

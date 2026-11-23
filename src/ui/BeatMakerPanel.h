@@ -26,6 +26,7 @@ public:
     void setProject(beatmaker::Project* project);
     std::function<void()> onChanged; // any edit, undo or redo
     std::function<void()> onPlayStop;
+    std::function<void(int pattern)> onPatternShown; // the grid's pattern changed (a live switch while playing)
 
     bool perform(GlobalAction action);
     void showView(int view); // 0 drums, 1 synth

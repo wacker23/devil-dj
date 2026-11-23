@@ -21,6 +21,7 @@
 #include "ui/NextTrackPanel.h"
 #include "ui/BeatMakerPanel.h"
 #include "beatmaker/Model.h"
+#include "beatmaker/Sequencer.h"
 #include "ui/RecorderPanel.h"
 #include "ui/SamplerPanel.h"
 #include "engine/Recorder.h"
@@ -179,6 +180,10 @@ private:
     int bottomPanel = 0; // 0 the browser, 1 the Beat Maker
     bool beatPlaying = false;
     double beatStartBeat = 0.0;
+    beatmaker::Sequencer beatSequencer; // what plays when (P4-09: live switching, song mode)
+    bool beatSongMode = false, beatSwitchAtEnd = false;
+    void startBeatMaker();
+    void queueBeatPattern(int pattern);
     std::unique_ptr<juce::TimedCallback> beatTimer, beatSaveTimer;
     void switchBottomPanel();
     static juce::File beatProjectFile();

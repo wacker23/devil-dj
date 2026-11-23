@@ -107,11 +107,19 @@ const std::vector<StepGrid::SoundChoice>& StepGrid::soundChoices()
 StepGrid::StepGrid()
 {
     setWantsKeyboardFocus(true);
-    for (auto* b : {&play, &length, &pageButton})
+    for (auto* b : {&play, &length, &pageButton, &songToggle, &songAdd, &songRemove, &switchAt})
     {
         styleButton(*b);
         addAndMakeVisible(*b);
     }
+    songToggle.setTooltip("Song mode: play the song list round and round (B)");
+    songToggle.onClick = [this] { perform(GA::BeatMakerSongMode); };
+    songAdd.setTooltip("Add the pattern shown to the end of the song (Shift+B)");
+    songAdd.onClick = [this] { perform(GA::BeatMakerSongAdd); };
+    songRemove.setTooltip("Remove the song's last pattern (Alt+B)");
+    songRemove.onClick = [this] { perform(GA::BeatMakerSongRemove); };
+    switchAt.setTooltip("A pattern chosen while playing starts on the next bar, or when the playing one ends (E)");
+    switchAt.onClick = [this] { perform(GA::BeatMakerSwitchAt); };
     play.setTooltip("Start / stop the Beat Maker, on the bar (Space)");
     play.onClick = [this]
     {
@@ -254,7 +262,17 @@ void StepGrid::refresh()
     const bool have = project != nullptr;
     play.setToggleState(playing, juce::dontSendNotification);
     for (int i = 0; i < beatmaker::kPatternCount; ++i)
-        patternButtons[static_cast<std::size_t>(i)].setToggleState(i == patternIndex, juce::dontSendNotification);
+    {
+        auto& b = patternButtons[static_cast<std::size_t>(i)];
+        b.setToggleState(i == patternIndex, juce::dontSendNotification);
+        // Playing: green letters; queued: amber (P4-09).
+        const auto colour = i == playingPatternNow ? juce::Colour(0xff3cc46a) : i == queuedPatternNow ? kOn : kText;
+        b.setColour(juce::TextButton::textColourOffId, colour);
+        b.setColour(juce::TextButton::textColourOnId, i == playingPatternNow || i == queuedPatternNow ? colour : juce::Colours::white);
+    }
+    songToggle.setToggleState(song, juce::dontSendNotification);
+    songToggle.setColour(juce::TextButton::textColourOffId, queuedPatternNow == -2 ? kOn : kText);
+    switchAt.setButtonText(atEnd ? "AT END" : "ON BAR");
     if (have)
     {
         length.setButtonText(juce::String(shown().lengthSteps) + " STEPS");
@@ -289,6 +307,37 @@ void StepGrid::refresh()
         r.solo.setToggleState(t->solo, juce::dontSendNotification);
     }
     repaint();
+}
+
+juce::String StepGrid::songText() const
+{
+    if (project == nullptr || project->song.empty())
+        return "song: (empty - Shift+B adds the pattern shown)";
+    juce::String text = "song:";
+    for (const int i : project->song)
+        text << " " << juce::String::charToString(static_cast<juce::juce_wchar>('A' + i));
+    return text;
+}
+
+void StepGrid::setSongMode(bool on)
+{
+    song = on;
+    refresh();
+}
+
+void StepGrid::setSwitchAtEnd(bool on)
+{
+    atEnd = on;
+    refresh();
+}
+
+void StepGrid::setPatternStates(int playingPattern, int queuedPattern)
+{
+    if (playingPattern == playingPatternNow && queuedPattern == queuedPatternNow)
+        return;
+    playingPatternNow = playingPattern;
+    queuedPatternNow = queuedPattern;
+    refresh();
 }
 
 void StepGrid::modelChanged()
@@ -471,6 +520,32 @@ bool StepGrid::perform(GlobalAction a)
                                         beatmaker::kMaxSwing);
             edited();
             return true;
+        case GA::BeatMakerSongMode:
+            song = !song;
+            refresh();
+            if (onSongMode)
+                onSongMode(song);
+            return true;
+        case GA::BeatMakerSongAdd:
+            if (project->song.size() < 64)
+            {
+                project->song.push_back(patternIndex);
+                edited();
+            }
+            return true;
+        case GA::BeatMakerSongRemove:
+            if (!project->song.empty())
+            {
+                project->song.pop_back();
+                edited();
+            }
+            return true;
+        case GA::BeatMakerSwitchAt:
+            atEnd = !atEnd;
+            refresh();
+            if (onSwitchAt)
+                onSwitchAt(atEnd);
+            return true;
         case GA::BeatMakerStepEditor:
             openStepEditor(track, step);
             return true;
@@ -647,6 +722,12 @@ void StepGrid::resized()
     length.setBounds(bar.removeFromLeft(90).reduced(2));
     pageButton.setBounds(bar.removeFromLeft(90).reduced(2));
     swing.setBounds(bar.removeFromLeft(60));
+    bar.removeFromLeft(8);
+    switchAt.setBounds(bar.removeFromLeft(70).reduced(2));
+    songToggle.setBounds(bar.removeFromLeft(56).reduced(2));
+    songAdd.setBounds(bar.removeFromLeft(26).reduced(2));
+    songRemove.setBounds(bar.removeFromLeft(26).reduced(2));
+    songArea = bar.reduced(4, 0);
     area.removeFromTop(4);
     laneArea = area.removeFromBottom(std::min(56, area.getHeight() / 5));
     area.removeFromBottom(4);
@@ -710,6 +791,10 @@ void StepGrid::paint(juce::Graphics& g)
             }
         }
     }
+    // The song list (P4-09).
+    g.setColour(song ? kText : kDim);
+    g.setFont(juce::FontOptions(12.0f));
+    g.drawFittedText(songText(), songArea, juce::Justification::centredLeft, 1);
     // The cursor track's velocity lane.
     g.setColour(kPanel);
     g.fillRect(laneArea);

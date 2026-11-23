@@ -41,6 +41,19 @@ public:
 
     // The playing step of the shown pattern (-1: stopped), and whether the Beat Maker plays (the button's light).
     void setPlayback(bool playing, int step);
+    // P4-09: which pattern plays and which is queued (-1 none; the song: -2), for the pattern buttons.
+    void setPatternStates(int playingPattern, int queuedPattern);
+    std::function<void(bool on)> onSongMode;        // SONG: play the song list
+    std::function<void(bool atEnd)> onSwitchAt;     // ON BAR / AT END
+    bool songMode() const noexcept { return song; }
+    bool switchAtEnd() const noexcept { return atEnd; }
+    void setSongMode(bool on);
+    void setSwitchAtEnd(bool on);
+    juce::TextButton& songButton() { return songToggle; }
+    juce::TextButton& songAddButton() { return songAdd; }
+    juce::TextButton& songRemoveButton() { return songRemove; }
+    juce::TextButton& switchAtButton() { return switchAt; }
+    juce::String songText() const;
 
     // Keyboard: a Beat Maker action (false if it isn't one this grid handles).
     bool perform(GlobalAction action);
@@ -128,6 +141,10 @@ private:
     int dragTrack = 0;
 
     juce::TextButton play{"PLAY"}, length{"16 STEPS"}, pageButton{"PAGE 1/1"};
+    juce::TextButton songToggle{"SONG"}, songAdd{"+"}, songRemove{"-"}, switchAt{"ON BAR"};
+    bool song = false, atEnd = false;
+    int playingPatternNow = -1, queuedPatternNow = -1;
+    juce::Rectangle<int> songArea;
     std::array<juce::TextButton, beatmaker::kPatternCount> patternButtons;
     ValueControl swing{"SWING", ValueControl::Style::Knob, 0.0};
     std::array<Row, beatmaker::kMaxDrumTracks> rows;

@@ -51,6 +51,8 @@ const char* padModeName(PadMode mode) noexcept
             return "SAMPLER";
         case PadMode::SequenceCall:
             return "SEQ CALL";
+        case PadMode::BeatPatterns:
+            return "PATTERNS";
     }
     return "";
 }
@@ -127,6 +129,7 @@ PadLook padLook(PadMode mode, int pad, const engine::DeckState& deck, bool held)
         case PadMode::PadFx:
         case PadMode::Sampler:
         case PadMode::SequenceCall:
+        case PadMode::BeatPatterns:
             look.text = "-";
             look.enabled = false;
             break;
@@ -198,6 +201,7 @@ std::vector<engine::EngineCommand> padCommands(PadMode mode, engine::DeckId deck
         case PadMode::PadFx:
         case PadMode::Sampler:
         case PadMode::SequenceCall:
+        case PadMode::BeatPatterns:
             break;
     }
     return out;

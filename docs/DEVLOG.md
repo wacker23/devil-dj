@@ -11,6 +11,24 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-09 Song mode + live switching
+- What changed:
+  - `beatmaker::Sequencer` now keeps a plan of placements (a pattern or the song, from a beat on).
+    - `queuePattern` / `queueSong` switch at a given beat: `nextBar`, or `patternEnd` (the end of the pattern loop, or of the song pattern playing).
+    - The plan before that beat stays as it was, and `emit` splits each window at the switch.
+    - Also `position` (what plays at a beat), `queuedAfter` and `prune`.
+  - Step grid pattern bar:
+    - ON BAR / AT END (E) chooses when a switch happens.
+    - SONG (B) turns song mode on; + / − (Shift+B / Alt+B) edit the song list, shown as text. Song edits are undoable.
+    - The pattern buttons show the playing pattern (green) and the queued one (amber).
+  - A new pad mode, PATTERNS (from the pad mode menu): pads A–H pick a pattern. While playing it is queued; stopped, it starts on the next bar. The pads show the playing and queued patterns.
+  - In the app, choosing a pattern while playing queues it. PLAY starts on the next bar with the pattern shown, or with the song.
+- Tests: 3 cases.
+  - At 120 and 174 BPM, pattern B queued at beat 5.3 by a simulated producer (25 ms ticks, 100 ms look-ahead): its step 0 is exactly the beat-8 sample, nothing of A plays after it, A's last 16th is at 7.75, and no 16th is missing or doubled.
+  - Switching at the pattern's end, the song order round twice, position, queued, replacing a queue, prune.
+  - The grid's song and switch keys and buttons, and the pad mode.
+- Not yet: the events still have nothing to play them, and the switch beat comes from the master clock as the UI sees it. P4-10 hands the sequencer to the Beat Maker's producer, which uses the window cursor, as in the test.
+
 ## 2026-11-23 · P4-08 Undo / redo
 - Undo itself arrived in P4-07, as project snapshots in a juce::UndoManager. This task made it solid:
   - The snapshots of a drag coalesce into one, holding the first "before" and the last "after".
