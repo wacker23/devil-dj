@@ -58,6 +58,7 @@ struct LaneCurve
 struct TransitionCurves
 {
     float beats = 16.0f; // its length
+    float loopBeats = 0.0f; // P4-18: the outgoing deck loops its last this-many beats through it (0: no loop)
     std::array<LaneCurve, kLaneCount> from, to; // the outgoing deck's lanes, the incoming deck's
 
     LaneCurve& lane(bool incoming, Lane l) { return (incoming ? to : from)[static_cast<std::size_t>(l)]; }

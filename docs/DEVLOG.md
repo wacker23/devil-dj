@@ -11,6 +11,30 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-15 Transition presets
+- What changed: `app/TransitionPresets` holds 8 presets of our own, each drawn on a 0..1 timeline and stretched to the length chosen:
+
+  | Preset | Default length |
+  | --- | --- |
+  | Smooth blend | 8 bars |
+  | Bass swap | 8 bars |
+  | Filter rise | 8 bars |
+  | High-pass out | 8 bars |
+  | Echo out | 4 bars |
+  | Quick cut | 1 bar |
+  | Long blend | 32 bars |
+  | Loop out | 4 bars |
+
+  - `scaled` stretches a shape to any length and `unitShape` squeezes a transition back onto 0..1.
+  - User presets are saved as JSON (format "devil-dj transition", the 0..1 shape) in `Documents\Devil-DJ\Transitions`, so one saved preset works at any length. Files that aren't transitions are ignored.
+  - `TransitionCurves` gains `loopBeats`. Loop out loops one bar whatever its length; P4-18 plays it, and the Echo out FX lane.
+- Tests: 4 cases.
+  - Every preset hands over: the outgoing deck ends silent; the incoming deck ends at full level with EQ and filter neutral; nothing drops at the start.
+  - Each preset's shape (bass swap points, filter directions, the cut beat, the mid dip, the echo send, the loop length).
+  - The same shape at 4 and 128 beats, and the round trip back to 0..1.
+  - An edited preset saved, loaded and stretched to 24 and 48 beats equals the original. A preset without a name is refused, and other JSON files are ignored.
+- Not yet: the app still starts P3-17's styles. Presets reach the app with the editor (P4-17) and Automix (P4-19).
+
 ## 2026-11-23 · P4-14 Transition curves in the engine
 - What changed:
   - `engine/TransitionCurves`: per deck (outgoing / incoming), 6 lanes:

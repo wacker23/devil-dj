@@ -27,6 +27,7 @@ target_sources(DevilDJTests PRIVATE
     app/BeatMakerChannelTests.cpp
     app/BeatRenderTests.cpp
     app/SampleBankTests.cpp
+    app/TransitionPresetTests.cpp
     app/LayoutTests.cpp
     app/SettingsTests.cpp
     app/SoakTestTests.cpp
