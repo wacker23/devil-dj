@@ -81,6 +81,7 @@ public:
     // Sequence Call pads (P3-15): which of the bank's 8 sequences have something in them, and which is in the engine.
     void setSequenceLooks(const std::array<bool, 8>& filled, int current);
     void setBeatPatternLooks(int playing, int queued); // P4-09: the Beat Maker's patterns on the pads
+    void setBeatPadNames(const std::array<juce::String, 8>& names, bool recording); // P4-11
     juce::TextButton& padModeButton() noexcept { return modeButton; }
     // Memory cues (P3-02): MEM opens the list; their positions (buffer samples) and colours for the overview.
     std::function<void()> onMemoryPanel;
@@ -151,6 +152,8 @@ private:
     std::array<bool, 8> sequenceFilled{};
     int sequenceCurrent = -1;
     int beatPlaying = -1, beatQueued = -1;
+    std::array<juce::String, 8> beatPadNames;
+    bool beatRecording = false;
     std::array<std::uint32_t, 16> hotCueColours{};
     std::array<juce::String, 16> hotCueLabels;
     std::vector<std::pair<double, std::uint32_t>> memoryCues;

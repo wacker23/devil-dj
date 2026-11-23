@@ -45,6 +45,12 @@ public:
     void setPatternStates(int playingPattern, int queuedPattern);
     std::function<void(bool on)> onSongMode;        // SONG: play the song list
     std::function<void(bool atEnd)> onSwitchAt;     // ON BAR / AT END
+    // P4-11: a hit on a drum track - a click on its name, or 1-8 while REC is on (they select the track otherwise).
+    std::function<void(int track)> onHit;
+    std::function<void(bool on)> onRecord; // REC
+    bool recording() const noexcept { return recordOn; }
+    void setRecording(bool on);
+    juce::TextButton& recordButton() { return rec; }
     bool songMode() const noexcept { return song; }
     bool switchAtEnd() const noexcept { return atEnd; }
     void setSongMode(bool on);
@@ -142,7 +148,8 @@ private:
 
     juce::TextButton play{"PLAY"}, length{"16 STEPS"}, pageButton{"PAGE 1/1"};
     juce::TextButton songToggle{"SONG"}, songAdd{"+"}, songRemove{"-"}, switchAt{"ON BAR"};
-    bool song = false, atEnd = false;
+    bool song = false, atEnd = false, recordOn = false;
+    juce::TextButton rec{"REC"};
     int playingPatternNow = -1, queuedPatternNow = -1;
     juce::Rectangle<int> songArea;
     std::array<juce::TextButton, beatmaker::kPatternCount> patternButtons;

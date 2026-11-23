@@ -105,6 +105,10 @@ private:
     std::vector<Placement> plan{Placement{}};
 };
 
+// Live record (P4-11): a hit on drum track `track` at `at` (the nearest step of the pattern playing) turns that
+// step on with `velocity` (1..127) - overdub: nothing is ever turned off. False if there is no such track / step.
+bool recordHit(Project& project, const Sequencer::Position& at, int track, int velocity);
+
 // The event for the voices: its sample, the Beat Maker as its source.
 engine::ScheduledEvent toScheduled(const BeatEvent& e, const engine::ClockSnapshot& clock);
 

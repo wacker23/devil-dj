@@ -6,7 +6,8 @@
 //   [cursor, now + look-ahead); the cursor is an exact Fraction so consecutive windows neither overlap nor leave
 //   gaps. If the clock jumped (the cursor is more than a quarter beat from where it should be), it re-anchors.
 // - EventBuffer: the audio thread's sorted events (fixed capacity, insertion by time). Each block takes those
-//   due in it; those already in the past are dropped and counted as late.
+//   due in it; those already in the past are dropped and counted as late - except kNow ones (live hits), which
+//   start at the block's first sample.
 // - EventQueue: one per producer, producer thread -> audio thread.
 
 #include "engine/ScheduledEvent.h"
@@ -120,7 +121,9 @@ public:
         while (used < count && events[used].sampleTime < blockEnd)
         {
             const auto& e = events[used];
-            if (e.sampleTime < blockStart)
+            if (e.sampleTime == kNow) // a live hit: as soon as possible
+                f(e, 0);
+            else if (e.sampleTime < blockStart)
                 ++late;
             else
                 f(e, static_cast<int>(e.sampleTime - blockStart));

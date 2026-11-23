@@ -30,6 +30,7 @@ target_sources(DevilDJTests PRIVATE
     app/SoakTestTests.cpp
     beatmaker/BeatMakerSmokeTests.cpp
     beatmaker/ProjectFileTests.cpp
+    beatmaker/RecordTests.cpp
     beatmaker/SequencerTests.cpp
     beatmaker/SwitchTests.cpp
     codebeat/CodeBeatSmokeTests.cpp

@@ -3,6 +3,7 @@
 #include <juce_core/juce_core.h>
 
 #include <chrono>
+#include <cmath>
 
 namespace devildj::app
 {
@@ -137,6 +138,50 @@ void BeatMakerProducer::queueSong(bool on, int pattern, bool atEnd)
         sequencer.queueSong(at);
     else
         sequencer.queuePattern(pattern, at);
+}
+
+std::optional<beatmaker::Sequencer::Position> BeatMakerProducer::hit(int shownPattern, int track, int velocity)
+{
+    std::lock_guard<std::mutex> lock(mutex); // the queue has one producer at a time: tick() holds this lock too
+    if (project == nullptr)
+        return std::nullopt;
+    std::optional<beatmaker::Sequencer::Position> nearest;
+    int pattern = std::clamp(shownPattern, 0, beatmaker::kPatternCount - 1);
+    if (playing && clock)
+    {
+        // The nearest step: the step playing half a step from now.
+        const double t = now();
+        const auto map = timeline(t);
+        const double beat = map.beatAt(static_cast<double>(sampleNow(t)));
+        const auto here = sequencer.position(*project, Fraction::fromDouble(beat, 96000));
+        if (here.pattern >= 0)
+        {
+            const auto& pat = project->patterns[static_cast<std::size_t>(here.pattern)];
+            const double half = 0.5 / std::max(1, pat.stepsPerBeat);
+            nearest = sequencer.position(*project, Fraction::fromDouble(beat + half, 96000));
+            pattern = here.pattern;
+        }
+    }
+    const auto& pat = project->patterns[static_cast<std::size_t>(pattern)];
+    if (track < 0 || track >= static_cast<int>(pat.drums.size()))
+        return nearest;
+    const auto& d = pat.drums[static_cast<std::size_t>(track)];
+    engine::ScheduledEvent e;
+    e.sampleTime = engine::kNow;
+    e.kind = d.sound.kind == beatmaker::SoundRef::Kind::Sample ? engine::VoiceKind::Sample : engine::VoiceKind::DrumSynth;
+    e.soundIndex = static_cast<std::uint16_t>(pattern * 16 + track);
+    e.velocity = static_cast<float>(std::clamp(velocity, 1, 127)) / 127.0f;
+    e.gain = std::pow(10.0f, d.volumeDb / 20.0f);
+    e.pan = d.pan;
+    e.delaySend = d.delaySend;
+    e.roomSend = d.reverbSend;
+    e.chokeGroup = d.chokeGroup;
+    e.highlightToken = static_cast<std::uint32_t>(track) << 16;
+    if (push(e))
+        ++pushedCount;
+    else
+        ++droppedCount;
+    return nearest;
 }
 
 BeatMakerProducer::Status BeatMakerProducer::status()

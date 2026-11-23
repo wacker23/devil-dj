@@ -190,6 +190,7 @@ private:
     void startBeatMaker();
     void stopBeatMaker();
     void beatProjectChanged(); // the producer's copy and the voices' sounds follow the project
+    void beatHit(int track);   // P4-11: heard now; recorded into the nearest step while REC is on and playing
     std::unique_ptr<juce::TimedCallback> beatTimer, beatSaveTimer;
     void switchBottomPanel();
     static juce::File beatProjectFile();

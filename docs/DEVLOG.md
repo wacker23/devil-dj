@@ -11,6 +11,21 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-11 Live record
+- What changed: you can play hits on the drum tracks and have them recorded.
+  - Ways to hit a track: 1–8 while REC is on (otherwise they only select a track), a click on a track's name, or the deck pads in the new BEAT PADS mode (pads 1–8 = drum tracks 1–8, named after them, red while REC is on).
+  - Every hit sounds at once. While playing with REC on (Ctrl+R or the REC button), it also turns on the nearest step of the pattern playing. That is overdub: nothing gets turned off. Each recorded hit is one undo step.
+  - How it works:
+    - `BeatMakerProducer::hit` pushes the hit's event under the same lock as the producer's tick, so the queue keeps a single producer at a time.
+    - The event's time is `kNow`, which the engine starts at the next block's first sample instead of dropping it as late.
+    - The nearest step is the one playing half a step from now. `beatmaker::recordHit` writes it into the project.
+- Tests: 4 cases.
+  - Recording: overdub, velocity, bad positions refused, and the recorded step plays on the next pass.
+  - A live event plays at once and is never counted late.
+  - The producer: the shown pattern's sound when stopped and the playing pattern's when playing; the nearest step at 120 BPM (2.08 → 2, 2.56 → 3, just before the bar → step 0 of the next pass).
+  - The grid: REC, 1–8 hitting only while recording, a click on a name, and the pad mode.
+- Manual test (owner): Ctrl+Tab, PLAY, Ctrl+R, play 1–8 in time (or the BEAT PADS pads), and check the steps light up and play back on the next pass.
+
 ## 2026-11-23 · P4-10 Mixer integration
 - What changed: the Beat Maker can be heard.
   - Engine:

@@ -362,6 +362,22 @@ void Sequencer::emitPass(const Project& project, int index, Fraction passStart, 
     }
 }
 
+bool recordHit(Project& project, const Sequencer::Position& at, int track, int velocity)
+{
+    if (at.pattern < 0 || at.pattern >= kPatternCount)
+        return false;
+    auto& pat = project.patterns[static_cast<std::size_t>(at.pattern)];
+    if (track < 0 || track >= static_cast<int>(pat.drums.size()))
+        return false;
+    auto& steps = pat.drums[static_cast<std::size_t>(track)].steps;
+    if (at.step < 0 || at.step >= static_cast<int>(steps.size()))
+        return false;
+    auto& s = steps[static_cast<std::size_t>(at.step)];
+    s.on = true;
+    s.velocity = static_cast<std::uint8_t>(std::clamp(velocity, 1, 127));
+    return true;
+}
+
 engine::ScheduledEvent toScheduled(const BeatEvent& e, const engine::ClockSnapshot& clock)
 {
     engine::ScheduledEvent s;

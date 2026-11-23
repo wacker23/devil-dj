@@ -24,9 +24,11 @@ enum class VoiceKind : std::uint8_t
     Synth,
 };
 
+constexpr std::int64_t kNow = -1;
+
 struct ScheduledEvent
 {
-    std::int64_t sampleTime = 0; // absolute engine sample clock
+    std::int64_t sampleTime = 0; // absolute engine sample clock; kNow: at the start of the next block (live hits)
     SourceId source = SourceId::BeatMaker;
     VoiceKind kind = VoiceKind::DrumSynth;
     std::uint16_t soundIndex = 0; // the producer's sound (Beat Maker: the pattern's track), resolved off the audio thread

@@ -203,7 +203,7 @@ TEST_CASE("Step grid keys: every Beat Maker action has a key in the Beat Maker c
           "[ui][stepgrid][keys]")
 {
     const auto map = ui::defaultKeymap();
-    for (int a = static_cast<int>(GA::BeatMakerStartStop); a <= static_cast<int>(GA::BeatMakerSwitchAt); ++a)
+    for (int a = static_cast<int>(GA::BeatMakerStartStop); a <= static_cast<int>(GA::BeatMakerRecord); ++a)
     {
         const auto action = static_cast<GA>(a);
         if (action == GA::BeatMakerUndo || action == GA::BeatMakerRedo)

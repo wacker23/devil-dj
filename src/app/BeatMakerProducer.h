@@ -56,6 +56,10 @@ public:
     void queuePattern(int pattern, bool atEnd);
     void queueSong(bool on, int pattern, bool atEnd);
 
+    // A live hit on drum track `track` (P4-11): sounds now (the pattern playing, else `shownPattern`); while
+    // playing, returns the nearest step of the pattern playing (where a recording puts it).
+    std::optional<beatmaker::Sequencer::Position> hit(int shownPattern, int track, int velocity);
+
     struct Status
     {
         bool playing = false;

@@ -572,6 +572,10 @@ void DeckView::setPadMode(PadMode mode)
             tip = "Pad FX: each pad an effect preset - on while held (or latched: press on, press off); release "
                   "effects end the track when let go. Right-click a pad to edit it; Shift + pad 1 / 2: bank 1 / 2.";
             break;
+        case PadMode::BeatPads:
+            tip = "Beat pads: pad 1-8 plays the Beat Maker's drum track 1-8 of the pattern playing (shown); with its REC "
+                  "on and playing, the hit goes into the nearest step.";
+            break;
         case PadMode::BeatPatterns:
             tip = "Patterns: pad 1-8 plays the Beat Maker's pattern A-H - while it plays, from the next bar (or the "
                   "playing pattern's end, E in the Beat Maker); stopped, it starts on the next bar.";
@@ -628,6 +632,16 @@ void DeckView::setBeatPatternLooks(int playing, int queued)
         refreshPads();
 }
 
+void DeckView::setBeatPadNames(const std::array<juce::String, 8>& names, bool recording)
+{
+    if (names == beatPadNames && recording == beatRecording)
+        return;
+    beatPadNames = names;
+    beatRecording = recording;
+    if (padModeNow == PadMode::BeatPads)
+        refreshPads();
+}
+
 void DeckView::setSamplerBank(int bank)
 {
     samplerBank = std::clamp(bank, 0, engine::Sampler::kBanks - 1);
@@ -671,6 +685,14 @@ void DeckView::refreshPads()
                 look.colour = i == beatQueued ? 0xE8A23C : 0x3CC46A;
                 look.enabled = true;
                 look.lit = held || i == beatPlaying || i == beatQueued;
+            }
+            if (padModeNow == PadMode::BeatPads) // the Beat Maker's drum tracks (P4-11)
+            {
+                const auto& name = beatPadNames[static_cast<std::size_t>(i)];
+                look.text = name.isEmpty() ? juce::String("-") : name;
+                look.colour = beatRecording ? 0xE0483C : 0xE8A23C;
+                look.enabled = name.isNotEmpty();
+                look.lit = held;
             }
             if (padModeNow == PadMode::Sampler) // the sampler's bank
             {

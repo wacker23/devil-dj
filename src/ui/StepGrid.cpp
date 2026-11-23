@@ -107,11 +107,15 @@ const std::vector<StepGrid::SoundChoice>& StepGrid::soundChoices()
 StepGrid::StepGrid()
 {
     setWantsKeyboardFocus(true);
-    for (auto* b : {&play, &length, &pageButton, &songToggle, &songAdd, &songRemove, &switchAt})
+    for (auto* b : {&play, &rec, &length, &pageButton, &songToggle, &songAdd, &songRemove, &switchAt})
     {
         styleButton(*b);
         addAndMakeVisible(*b);
     }
+    rec.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xffe0483c));
+    rec.setTooltip("Record: while playing, hits (1-8, a click on a track's name, the BEAT PADS pads) go into the "
+                   "nearest step, on top of what is there (Ctrl+R)");
+    rec.onClick = [this] { perform(GA::BeatMakerRecord); };
     songToggle.setTooltip("Song mode: play the song list round and round (B)");
     songToggle.onClick = [this] { perform(GA::BeatMakerSongMode); };
     songAdd.setTooltip("Add the pattern shown to the end of the song (Shift+B)");
@@ -273,6 +277,7 @@ void StepGrid::refresh()
     songToggle.setToggleState(song, juce::dontSendNotification);
     songToggle.setColour(juce::TextButton::textColourOffId, queuedPatternNow == -2 ? kOn : kText);
     switchAt.setButtonText(atEnd ? "AT END" : "ON BAR");
+    rec.setToggleState(recordOn, juce::dontSendNotification);
     if (have)
     {
         length.setButtonText(juce::String(shown().lengthSteps) + " STEPS");
@@ -322,6 +327,12 @@ juce::String StepGrid::songText() const
 void StepGrid::setSongMode(bool on)
 {
     song = on;
+    refresh();
+}
+
+void StepGrid::setRecording(bool on)
+{
+    recordOn = on;
     refresh();
 }
 
@@ -420,6 +431,8 @@ bool StepGrid::perform(GlobalAction a)
         if (target < static_cast<int>(shown().drums.size()))
             track = target;
         refresh();
+        if (recordOn && onHit) // recording: 1-8 play the tracks
+            onHit(target);
         return true;
     }
     if (ai >= static_cast<int>(GA::BeatMakerPattern1) && ai <= static_cast<int>(GA::BeatMakerPattern8))
@@ -540,6 +553,12 @@ bool StepGrid::perform(GlobalAction a)
                 edited();
             }
             return true;
+        case GA::BeatMakerRecord:
+            recordOn = !recordOn;
+            refresh();
+            if (onRecord)
+                onRecord(recordOn);
+            return true;
         case GA::BeatMakerSwitchAt:
             atEnd = !atEnd;
             refresh();
@@ -615,6 +634,20 @@ void StepGrid::pressAt(juce::Point<int> p, juce::ModifierKeys mods)
     {
         drag = Drag::Lane;
         dragTo(p, mods);
+        return;
+    }
+    // A click on a track's name: a hit (heard; recorded while REC is on).
+    if (headerArea.contains(p) && project != nullptr && gridArea.getHeight() > 0)
+    {
+        const int row = (p.y - gridArea.getY()) / std::max(1, gridArea.getHeight() / beatmaker::kMaxDrumTracks);
+        const auto nameArea = rows[0].name.getBounds().withY(gridArea.getY()).withHeight(gridArea.getHeight());
+        if (row >= 0 && row < static_cast<int>(shown().drums.size()) && nameArea.contains(p))
+        {
+            track = row;
+            refresh();
+            if (onHit)
+                onHit(row);
+        }
         return;
     }
     const auto cell = cellAt(p);
@@ -715,6 +748,7 @@ void StepGrid::resized()
     auto area = getLocalBounds().reduced(4);
     auto bar = area.removeFromTop(30);
     play.setBounds(bar.removeFromLeft(70).reduced(2));
+    rec.setBounds(bar.removeFromLeft(50).reduced(2));
     bar.removeFromLeft(8);
     for (auto& b : patternButtons)
         b.setBounds(bar.removeFromLeft(30).reduced(2));
