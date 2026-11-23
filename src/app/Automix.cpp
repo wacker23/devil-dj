@@ -158,19 +158,38 @@ std::vector<engine::EngineCommand> Automix::tick(const engine::EngineState& stat
     if (grid.empty() || playing.lengthSamples <= 0)
         return out;
     const double endBeat = grid.beatAt(static_cast<double>(playing.lengthSamples));
-    const double mixOutTrack = std::floor((endBeat - settings.mixOutBeats) / 4.0) * 4.0;
+    // P4-19: the pair's own transition (saved, else Auto), asked once when both tracks are on their decks.
+    if (!planAsked)
+    {
+        planAsked = true;
+        plan = transitionFor ? transitionFor(playingDeck, other) : std::nullopt;
+        if (plan && plan->curves == nullptr)
+            plan.reset();
+    }
+    double mixOutTrack = std::floor((endBeat - settings.mixOutBeats) / 4.0) * 4.0;
+    if (plan && plan->outBeat >= 0.0 && plan->outBeat > playing.beat + 8.0 &&
+        plan->outBeat + plan->curves->beats <= endBeat + 1e-6)
+        mixOutTrack = plan->outBeat; // where it was planned (still ahead, and it fits before the end)
     const double toMaster = state.masterBeat - playing.beat; // the master clock = this deck's beats + an offset
     const double startMaster = std::round(mixOutTrack + toMaster);
     if (state.masterBeat < startMaster - 8.0)
         return out; // not yet: plan it 8 beats ahead
     // Cue the next one at its mix-in and hand the transition to the engine.
     const auto nextGrid = gridOf ? gridOf(other) : util::Beatgrid();
-    const double in = firstDownbeat(nextGrid);
+    const double in = plan && !nextGrid.empty() ? std::max(0.0, nextGrid.sampleAt(plan->inBeat)) : firstDownbeat(nextGrid);
     out.push_back(engine::SetCuePoint{other, in});
     out.push_back(engine::Seek{other, in});
     out.push_back(engine::SetSync{other, true});
-    out.push_back(engine::StartTransition{playingDeck, other, static_cast<float>(settings.transitionBeats),
-                                          settings.style, std::max(startMaster, std::ceil(state.masterBeat))});
+    engine::StartTransition start{playingDeck, other, static_cast<float>(settings.transitionBeats), settings.style,
+                                  std::max(startMaster, std::ceil(state.masterBeat))};
+    if (plan)
+    {
+        start.curves = plan->curves.get();
+        curvesToSend = plan->curves;
+    }
+    out.push_back(start);
+    plan.reset();
+    planAsked = false;
     transitionPlanned = true;
     ++transitions;
     lastStart = std::max(startMaster, std::ceil(state.masterBeat));

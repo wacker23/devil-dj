@@ -36,6 +36,7 @@ enum class TrackColumn
     Comment = 11,
     Album = 12,
     Tags = 13, // P2-08
+    Mix = 14,  // P4-19: a saved transition from this track into the next one in the list
 };
 
 // What the table shows: the whole collection or one playlist's tracks (smart playlists come in P2-07,

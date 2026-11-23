@@ -11,6 +11,19 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-19 Saved transitions in Automix
+- What changed:
+  - Library schema v3 adds the `transitions` table: one row per (outgoing track, incoming track), with the curves as JSON (a 0..1 shape plus its length), the start and in beats, and the preset.
+  - `app/TransitionStore` saves (upsert), loads and deletes them. `TransitionLabels` backs the browser's new **Mix** column (an arrow and the preset name on a row whose transition into the next row is saved).
+  - The MIX editor saves what the owner edits for the pair 0.6 s after the last change. AUTO deletes the saved one and plans again. Opening a pair shows its saved transition (with that as the reason), else Auto.
+  - **T** plays the editor's transition for the pair on the decks, else the pair's saved one, else Auto, else (tracks not analyzed) the Mixer menu's style as before.
+  - **Automix** asks `transitionFor` once per transition (the app returns saved, else Auto). It starts at the planned beat on the outgoing track if that is still ahead and fits before the end, else at its own mix-out. The incoming track is cued at its planned in beat. The curves are kept alive through `takeCurves` / `AudioEngine::startTransition`.
+- Tests: 2 cases.
+  - The store: saved and read back (curves equal at real length, beats, preset), the reverse pair separate, replaced, deleted, tracks without ids refused, and the labels.
+  - A 10-track Automix where every pair has its own transition (Quick cut 4, Bass swap 16, Smooth blend 32, Filter rise 8 beats). It runs unattended: 9 transitions, each with curves, each started on a master-clock beat, with the outgoing deck at beat 64 ± 0.05 as planned and each at its own length, in queue order.
+  - The database test now expects schema v3.
+- Note: while on battery the matcher timing test ran 33 ms against its 30 ms budget three times in a row (the voices perf test was 1.5x slower too, with no code change); the full ctest run afterwards passed it. A timing test, so the machine's power state matters.
+
 ## 2026-11-23 · P4-18 Effects and loops in transitions
 - What changed:
   - **FX lane:** each deck's FX lane sends into an effect of its own, chosen from the beat FX (`TransitionCurves.fx`, time `fxBeats`).

@@ -41,6 +41,7 @@ std::string sortExpression(TrackColumn c, util::KeyNotation notation)
         case TrackColumn::Genre: return "t.genre COLLATE NOCASE";
         case TrackColumn::DateAdded: return "t.date_added";
         case TrackColumn::Comment: return "t.comment COLLATE NOCASE";
+        case TrackColumn::Mix: return ""; // not sortable
         case TrackColumn::Tags:
             return "(SELECT group_concat(name, ', ') FROM (SELECT g.name FROM track_tags tt JOIN tags g ON g.id = "
                    "tt.tag_id WHERE tt.track_id = t.id ORDER BY g.name COLLATE NOCASE))";

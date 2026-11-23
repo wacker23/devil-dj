@@ -79,7 +79,7 @@ TEST_CASE("Migrations: an empty database gets schema v1", "[library][db]")
     auto db = Database::open(tmp.file());
     REQUIRE(db.isOk());
     CHECK(db.value()->schemaVersion() == latestSchemaVersion());
-    CHECK(latestSchemaVersion() == 2); // v2: the Track Matcher's tables (P2-24)
+    CHECK(latestSchemaVersion() == 3); // v2: the Track Matcher's tables (P2-24); v3: saved transitions (P4-19)
 
     auto reader = db.value()->openReader();
     REQUIRE(reader.isOk());

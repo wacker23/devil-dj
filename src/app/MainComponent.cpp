@@ -8,6 +8,7 @@
 #include "app/BeatRender.h"
 #include "app/AutoTransition.h"
 #include "app/TransitionPresets.h"
+#include "app/TransitionStore.h"
 #include "library/HistoryRepository.h"
 #include "ui/TrackColours.h"
 
@@ -293,7 +294,13 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
         [this]
         {
             for (const auto& c : automix.tick(engine.readState()))
-                engine.send(c);
+            {
+                const auto* start = std::get_if<engine::StartTransition>(&c);
+                if (start != nullptr && start->curves != nullptr) // a saved / Auto transition (P4-19)
+                    engine.startTransition(*start, automix.takeCurves());
+                else
+                    engine.send(c);
+            }
             // The order played, in the log (to compare smart with plain order).
             if (const auto& order = automix.playedOrder(); static_cast<int>(order.size()) > automixLogged)
             {
@@ -413,9 +420,41 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     mixEditor.onChanged = [this](const ui::TransitionEditor::Edit& e)
     {
         if (mixPlan)
+        {
             mixPlan->edit = e;
+            mixSaveTimer->startTimer(600); // saved for this pair a moment after the last edit (P4-19)
+        }
     };
-    mixEditor.onAuto = [this] { refreshMix(true); };
+    mixSaveTimer = std::make_unique<juce::TimedCallback>(
+        [this]
+        {
+            mixSaveTimer->stopTimer();
+            saveMixPlan();
+        });
+    mixEditor.onAuto = [this]
+    {
+        // Back to Auto: the pair's saved one goes.
+        if (mixPlan && libraryDb != nullptr && mixPlan->fromTrack != 0 && mixPlan->toTrack != 0)
+        {
+            const auto from = mixPlan->fromTrack, to = mixPlan->toTrack;
+            libraryDb->write([from, to](library::Connection& c) { app::deleteTransition(c, from, to); });
+            transitionLabels.erase(from, to);
+            libraryBrowser->repaintRows();
+        }
+        mixPlan.reset();
+        refreshMix(true);
+    };
+    if (gridReader != nullptr)
+        transitionLabels.load(*gridReader);
+    libraryBrowser->transitionLabel = [this](std::int64_t a, std::int64_t b) { return transitionLabels.get(a, b); };
+    // Automix plays the pair's saved transition, else Auto (P4-19).
+    automix.transitionFor = [this](engine::DeckId from, engine::DeckId) -> std::optional<app::Automix::PlannedTransition>
+    {
+        const auto e = transitionFor(from);
+        if (!e)
+            return std::nullopt;
+        return app::Automix::PlannedTransition{std::make_shared<const engine::TransitionCurves>(e->curves), e->outBeat, e->inBeat};
+    };
     mixEditor.onPreset = [this](int index)
     {
         if (!mixPlan)
@@ -1764,11 +1803,17 @@ void MainComponent::autoTransition()
         from = s.decks[0].playing ? 0 : s.decks[1].playing ? 1 : -1;
     if (from < 0 || !s.decks[1 - from].loaded)
         return;
-    // The transition edited in the MIX panel, if it is for these two tracks (P4-17).
+    // The transition edited in the MIX panel, if it is for these two tracks (P4-17); else the pair's saved one, else
+    // Auto (P4-19); else (not analyzed) the style chosen in the Mixer menu.
     if (mixPlan && mixPlan->from == from && mixPlan->fromBuffer == s.decks[from].bufferId &&
         mixPlan->toBuffer == s.decks[1 - from].bufferId)
     {
         startPlannedTransition(mixPlan->edit, from, false);
+        return;
+    }
+    if (const auto planned = transitionFor(from))
+    {
+        startPlannedTransition(*planned, from, false);
         return;
     }
     const auto style = transitionStyle == 1   ? engine::TransitionStyle::FilterSweep
@@ -2136,33 +2181,86 @@ void MainComponent::refreshMix(bool replan)
                       mixPlan->toBuffer == s.decks[to].bufferId;
     if (same && !replan)
         return;
-    app::AutoInput a{&outTrack->waveform, og.grid, outTrack->numSamples(), og.musicalKey, og.grid.firstBpm()};
-    app::AutoInput b{&inTrack->waveform, ig.grid, inTrack->numSamples(), ig.musicalKey, ig.grid.firstBpm()};
-    const auto plan = app::planAutoTransition(a, b);
     MixPlan m;
     m.from = from;
     m.fromBuffer = s.decks[from].bufferId;
     m.toBuffer = s.decks[to].bufferId;
     m.fromTrack = og.trackId;
     m.toTrack = ig.trackId;
-    if (plan.ok)
+    if (const auto planned = replan ? std::nullopt : transitionFor(from))
+        m.edit = *planned;
+    else if (replan)
     {
-        m.edit.curves = plan.curves;
-        m.edit.outBeat = plan.outBeat;
-        m.edit.inBeat = plan.inBeat;
-        m.edit.preset = juce::String("Auto: ") + app::presetName(plan.preset);
+        if (const auto autoPlan = transitionFor(from)) // the saved one was deleted: this is Auto
+            m.edit = *autoPlan;
     }
-    else
+    if (m.edit.curves.from[0].points.empty() && m.edit.curves.to[0].points.empty())
     {
         // Not analyzed enough for Auto: a smooth blend from the next phrase.
         m.edit.curves = app::makePreset(app::TransitionPreset::SmoothBlend, 32.0f);
         m.edit.outBeat = std::ceil(s.decks[from].beat / 16.0) * 16.0;
         m.edit.inBeat = app::firstDownbeatBeat(ig.grid);
         m.edit.preset = "Smooth blend";
+        m.edit.reasons = {"the tracks aren't analyzed enough for Auto: a smooth blend from the next phrase"};
     }
-    m.edit.reasons = plan.reasons;
     mixPlan = m;
     mixEditor.setEdit(m.edit);
+}
+
+std::optional<ui::TransitionEditor::Edit> MainComponent::transitionFor(int from, bool* saved)
+{
+    // The pair on the decks: its saved transition (P4-19), else the Auto plan; nothing when not analyzed enough.
+    const auto& s = engine.readState();
+    const int to = 1 - from;
+    if (saved != nullptr)
+        *saved = false;
+    const auto& og = deckGrids[static_cast<std::size_t>(from)];
+    const auto& ig = deckGrids[static_cast<std::size_t>(to)];
+    if (gridReader != nullptr && og.trackId != 0 && ig.trackId != 0)
+        if (const auto t = app::loadTransition(*gridReader, og.trackId, ig.trackId))
+        {
+            if (saved != nullptr)
+                *saved = true;
+            ui::TransitionEditor::Edit e;
+            e.curves = t->curves;
+            e.outBeat = t->outBeat;
+            e.inBeat = t->inBeat;
+            e.preset = t->preset;
+            e.reasons = {"your saved transition for these two tracks (AUTO plans it again)"};
+            return e;
+        }
+    const auto outTrack = registry.get(s.decks[from].bufferId), inTrack = registry.get(s.decks[to].bufferId);
+    if (outTrack == nullptr || inTrack == nullptr)
+        return std::nullopt;
+    app::AutoInput a{&outTrack->waveform, og.grid, outTrack->numSamples(), og.musicalKey, og.grid.firstBpm()};
+    app::AutoInput b{&inTrack->waveform, ig.grid, inTrack->numSamples(), ig.musicalKey, ig.grid.firstBpm()};
+    const auto plan = app::planAutoTransition(a, b);
+    if (!plan.ok)
+        return std::nullopt;
+    ui::TransitionEditor::Edit e;
+    e.curves = plan.curves;
+    e.outBeat = plan.outBeat;
+    e.inBeat = plan.inBeat;
+    e.preset = juce::String("Auto: ") + app::presetName(plan.preset);
+    e.reasons = plan.reasons;
+    return e;
+}
+
+void MainComponent::saveMixPlan()
+{
+    if (!mixPlan || libraryDb == nullptr || mixPlan->fromTrack == 0 || mixPlan->toTrack == 0)
+        return;
+    app::SavedTransition t;
+    t.fromTrack = mixPlan->fromTrack;
+    t.toTrack = mixPlan->toTrack;
+    t.preset = mixPlan->edit.preset.startsWith("Auto: ") ? mixPlan->edit.preset.fromFirstOccurrenceOf("Auto: ", false, false)
+                                                        : mixPlan->edit.preset;
+    t.curves = mixPlan->edit.curves;
+    t.outBeat = mixPlan->edit.outBeat;
+    t.inBeat = mixPlan->edit.inBeat;
+    libraryDb->write([t](library::Connection& c) { app::saveTransition(c, t); });
+    transitionLabels.set(t.fromTrack, t.toTrack, t.preset);
+    libraryBrowser->repaintRows();
 }
 
 void MainComponent::startPlannedTransition(const ui::TransitionEditor::Edit& edit, int from, bool isPreview)

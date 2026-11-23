@@ -24,6 +24,7 @@
 #include "ui/BeatMakerPanel.h"
 #include "app/BeatMakerProducer.h"
 #include "app/SampleBank.h"
+#include "app/TransitionStore.h"
 #include "beatmaker/Model.h"
 #include "beatmaker/Sequencer.h"
 #include "ui/RecorderPanel.h"
@@ -197,6 +198,11 @@ private:
     void refreshMix(bool replan);
     void startPlannedTransition(const ui::TransitionEditor::Edit& edit, int from, bool isPreview);
     void loadMixPresetNames();
+    // P4-19: saved transitions - the pair's saved one, else Auto (nullopt: not analyzed enough); saved as edited.
+    std::optional<ui::TransitionEditor::Edit> transitionFor(int from, bool* saved = nullptr);
+    app::TransitionLabels transitionLabels;
+    std::unique_ptr<juce::TimedCallback> mixSaveTimer;
+    void saveMixPlan();
     bool beatPlaying = false;
     bool beatSongMode = false, beatSwitchAtEnd = false;
     // P4-10: the producer thread that plays the patterns into the engine, and the BEATS channel strip.

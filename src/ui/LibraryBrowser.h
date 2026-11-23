@@ -132,7 +132,10 @@ public:
     juce::String exportTracklist(std::int64_t sessionId, const juce::File& file);
     std::vector<int> selectedRows() const;
     std::vector<std::int64_t> selectedTrackIds() const;
-    std::int64_t shownPlaylist() const noexcept; // the playlist in the table, 0 for the collection
+    std::int64_t shownPlaylist() const noexcept;
+    // P4-19: the Mix column - a saved transition's preset name from one track into another (empty: none).
+    std::function<juce::String(std::int64_t from, std::int64_t to)> transitionLabel;
+    void repaintRows(); // the playlist in the table, 0 for the collection
     bool canReorder() const noexcept;            // a normal playlist, sorted by #, no filter
     juce::String uniquePlaylistName(const juce::String& base, std::optional<std::int64_t> parentFolder);
     juce::PopupMenu menuForTree(std::int64_t playlistId, View section); // what a right-click shows

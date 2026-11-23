@@ -148,7 +148,17 @@ CREATE TABLE feature_stats (name TEXT PRIMARY KEY, data BLOB);
 CREATE INDEX history_previous ON history(previous_track_id, track_id);
 )sql";
 
-constexpr std::array<std::string_view, 2> kMigrations{kSchemaV1, kSchemaV2};
+// Schema v3 (P4-19): saved transitions, one per track pair (the curves as JSON: a 0..1 shape and its length in beats).
+constexpr std::string_view kSchemaV3 = R"sql(
+CREATE TABLE transitions (
+  from_track INTEGER NOT NULL, to_track INTEGER NOT NULL,
+  preset TEXT, beats REAL NOT NULL, out_beat REAL NOT NULL, in_beat REAL NOT NULL,
+  curves_json TEXT NOT NULL, updated_at INTEGER,
+  PRIMARY KEY (from_track, to_track)
+);
+)sql";
+
+constexpr std::array<std::string_view, 3> kMigrations{kSchemaV1, kSchemaV2, kSchemaV3};
 } // namespace
 
 std::span<const std::string_view> migrations() noexcept

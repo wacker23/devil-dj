@@ -57,6 +57,7 @@ const ColumnInfo kColumns[] = {
     {TrackColumn::DateAdded, "Added", 84, true},
     {TrackColumn::Comment, "Comment", 200, true},
     {TrackColumn::Tags, "Tags", 160, true},
+    {TrackColumn::Mix, "Mix", 110, true}, // P4-19
 };
 
 juce::String stars(int rating)
@@ -591,6 +592,12 @@ void LibraryBrowser::paintCell(juce::Graphics& g, int row, int column, int width
             return;
         }
         case TrackColumn::Tags: text = r->tags; break;
+        case TrackColumn::Mix: // a saved transition into the next row's track (P4-19)
+            if (transitionLabel)
+                if (const auto* next = tableModel->row(row + 1))
+                    if (const auto label = transitionLabel(r->id, next->id); label.isNotEmpty())
+                        text = juce::String::fromUTF8("\xE2\x86\x92 ") + label;
+            break;
         case TrackColumn::Genre: text = r->genre; break;
         case TrackColumn::DateAdded: text = dateText(r->dateAdded); break;
         case TrackColumn::Comment: text = r->comment; break;
@@ -977,6 +984,11 @@ void LibraryBrowser::setActivity(const juce::String& text)
     activityLabel.setText(text, juce::dontSendNotification);
     if (layout)
         resized();
+}
+
+void LibraryBrowser::repaintRows()
+{
+    trackTable.repaint();
 }
 
 void LibraryBrowser::setStatus(const juce::String& text)

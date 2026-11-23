@@ -7,6 +7,8 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <memory>
+#include <optional>
 #include <random>
 #include <vector>
 
@@ -36,6 +38,19 @@ public:
     std::function<void(engine::DeckId deck, int index)> load;
     // The deck's beatgrid, in its buffer's samples (empty if none).
     std::function<util::Beatgrid(engine::DeckId deck)> gridOf;
+    // P4-19: the transition to play from the track on `from` into the one on `to` (a saved one, else Auto) - its
+    // curves, where it starts on the outgoing track (grid beats; < 0: Automix's own mix-out) and where the incoming
+    // track comes in. None: Automix's own style.
+    struct PlannedTransition
+    {
+        std::shared_ptr<const engine::TransitionCurves> curves;
+        double outBeat = -1.0;
+        double inBeat = 0.0;
+    };
+    std::function<std::optional<PlannedTransition>(engine::DeckId from, engine::DeckId to)> transitionFor;
+    // The curves of the StartTransition tick() just returned: send that command with AudioEngine::startTransition
+    // and these (they must stay alive while it plays).
+    std::shared_ptr<const engine::TransitionCurves> takeCurves() noexcept { return std::move(curvesToSend); }
     // Smart mode: the queue item to play after `current` out of `remaining` (the app scores them with the matcher);
     // anything not in `remaining` means the first of them.
     std::function<int(int current, const std::vector<int>& remaining)> pickNext;
@@ -77,6 +92,9 @@ private:
     double lastStart = -1.0;
     std::vector<int> played;
     std::mt19937 rng{20261122u};
+    std::shared_ptr<const engine::TransitionCurves> curvesToSend;
+    std::optional<PlannedTransition> plan; // asked once per transition
+    bool planAsked = false;
 };
 
 // The first downbeat of a grid at or after the track's start (its mix-in): the sample.
