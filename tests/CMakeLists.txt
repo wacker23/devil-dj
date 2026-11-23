@@ -40,6 +40,7 @@ target_sources(DevilDJTests PRIVATE
     dsp/ResamplerTests.cpp
     dsp/SincResamplerTests.cpp
     engine/AudioDeviceServiceTests.cpp
+    engine/VoicesTests.cpp
     engine/AudioEngineDeckTests.cpp
     engine/AudioEngineRoutingTests.cpp
     engine/AudioEngineTests.cpp

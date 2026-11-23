@@ -41,7 +41,9 @@ target_sources(devildj_engine INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/TrackDecoder.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/TrackDecoder.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/TrackLoader.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/TrackLoader.h")
+    "${CMAKE_CURRENT_SOURCE_DIR}/TrackLoader.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Voices.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Voices.h")
 
 target_include_directories(devildj_engine INTERFACE "${PROJECT_SOURCE_DIR}/src")
 

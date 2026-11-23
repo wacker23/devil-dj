@@ -11,6 +11,22 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-03 Voices
+- What changed: `engine/Voices` holds fixed pools of 64 sample voices and 32 synth voices.
+  - `start(event, offset)` begins a voice at an exact sample offset in the next block and returns its id.
+  - Each voice has an ADSR (every ramp at least 0.5 ms, so nothing clicks), its own low-pass and high-pass state-variable filters, gain × velocity, equal-power pan, and delay and reverb sends to the module's buses.
+  - Samples are resampled linearly by speed × pitch × the sample's rate.
+  - Stealing takes the oldest releasing voice first, else the oldest playing one. The stolen voice fades out over 2 ms in a spare tail slot.
+  - Choke groups work per source: a new hit fades the others in its group over 5 ms, starting at its own sample.
+  - No allocation and no locks.
+- Tests: 5 cases.
+  - Covered: offset, ramp-in, pan, pitch, sends, stealing order (releasing first, then oldest; the fades without clicks), the 32-voice synth pool, the open hat choked by the closed hat (other groups and sources untouched), the gate and release, and the low-pass and high-pass filters.
+  - 64 sample voices plus 32 synth voices, all filtered and with sends, take 6.0–6.3 % of real time in Release (budget I set: 15 %).
+- Not yet:
+  - Synth voices play a sine until P4-05 brings the synth engines.
+  - Drum-synth events are counted as unhandled until P4-04.
+  - The engine doesn't run Voices or the EventBuffer yet; that comes with the Beat Maker channel (P4-10).
+
 ## 2026-11-23 · P4-02 Beat Maker event source
 - What changed:
   - `engine/ScheduledEvent.h` follows ARCHITECTURE §3.7.
