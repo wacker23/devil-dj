@@ -419,7 +419,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
   Optional second output device for headphones (e.g. laptop jack + USB DAC for speakers). Second device callback consumes a ring buffer filled by the main callback; adaptive resampling (PI controller on buffer fill level) compensates clock drift.
   Done when: 60-minute run with two devices: buffer neither under- nor overflows; drift-corrected; no audible glitches.
 
-- [ ] **P3-23 Layouts**
+- [x] **P3-23 Layouts**
   2-deck horizontal (default) and vertical waveform layouts; browser-enlarged layout; layout persisted.
   Done when: switch layouts while playing without glitches.
 

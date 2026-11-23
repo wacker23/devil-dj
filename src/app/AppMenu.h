@@ -81,6 +81,13 @@ public:
     std::function<void(bool on)> onHighQualityResampling;
     // P3-21: touch mode - everything drawn larger (bigger targets for fingers).
     std::function<void(bool on)> onTouchMode;
+    // P3-23: the layout - waveforms 0 horizontal / 1 vertical, the browser enlarged (Ctrl+B).
+    std::function<void(int waveforms, bool bigBrowser)> onLayout;
+    void setLayout(int waveforms, bool bigBrowser) noexcept
+    {
+        layoutWaves = waveforms;
+        layoutBigBrowser = bigBrowser;
+    }
     void setTouchMode(bool on) noexcept { touchMode = on; }
     std::function<void()> onReloadKeymap;
     std::function<void()> onEditKeymap; // P3-20
@@ -132,6 +139,9 @@ private:
         TempoRange50,
         HighQualityResampling,
         TouchMode,
+        LayoutHorizontal,
+        LayoutVertical,
+        LayoutBigBrowser,
         ReloadKeymap,
         EditKeymap,
         OpenKeymapFolder,
@@ -170,6 +180,8 @@ private:
     double tempoRange = 10.0;
     bool highQuality = false;
     bool touchMode = false;
+    int layoutWaves = 0;
+    bool layoutBigBrowser = false;
     int keyNotation = 0;
     bool autoGain = true;
     int autoGainTarget = -10;

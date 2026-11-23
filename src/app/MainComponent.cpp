@@ -12,6 +12,7 @@
 #include "library/MissingFiles.h"
 #include "library/PlaylistFiles.h"
 #include "library/TrackRepository.h"
+#include "MainLayout.h"
 #include "RecordingSheets.h"
 #include "util/Log.h"
 #include "util/ProcessStats.h"
@@ -2018,9 +2019,24 @@ void MainComponent::showAnalysisProgress()
     libraryBrowser->setActivity("Analyzing " + juce::String(finished + 1) + " of " + juce::String(analysisTotal));
 }
 
+void MainComponent::setLayout(int waveforms, bool bigBrowser)
+{
+    waveLayout = waveforms == 1 ? app::WaveLayout::Vertical : app::WaveLayout::Horizontal;
+    if (bigBrowser != browserBig)
+    {
+        browserBig = bigBrowser;
+        libraryBrowser->setBig(browserBig);
+    }
+    resized();
+    if (onLayoutChanged)
+        onLayoutChanged(waveforms == 1 ? 1 : 0, browserBig);
+}
+
 void MainComponent::toggleBrowserSize()
 {
     browserBig = !browserBig;
+    if (onLayoutChanged)
+        onLayoutChanged(waveLayout == app::WaveLayout::Vertical ? 1 : 0, browserBig);
     libraryBrowser->setBig(browserBig);
     resized();
 }
@@ -2459,68 +2475,45 @@ double MainComponent::outputLatencySeconds() const
 
 void MainComponent::resized()
 {
-    // Top: deck A | mixer | deck B; then the two zoomed waveforms; bottom: the file browser. On short windows
-    // (laptops at 125-150 % scaling) the mixer gives up height first, down to its minimum, so the waveforms keep
-    // at least ~80 px each and the browser ~4 rows.
-    auto area = getLocalBounds().reduced(12).withTrimmedBottom(18); // bottom: the build-info line
-    const int topHeight = std::clamp(area.getHeight() - 2 * 80 - 6 - 130 - 14 - ui::FxPanel::kPreferredHeight - 6,
-                                     ui::MixerView::kMinimumHeight,
-                                     ui::MixerView::kPreferredHeight);
-    auto top = area.removeFromTop(topHeight);
-    area.removeFromTop(8);
-    const int deckWidth = (top.getWidth() - ui::MixerView::kPreferredWidth - 12) / 2;
-    const int deckHeight = std::min(326, top.getHeight()); // with the pad grid and loop rows (P3-03, P3-06)
-    deckA.setBounds(top.removeFromLeft(deckWidth).withHeight(deckHeight));
-    top.removeFromLeft(6);
-    deckB.setBounds(top.removeFromRight(deckWidth).withHeight(deckHeight));
-    top.removeFromRight(6);
-    mixer.setBounds(top);
-
-    waveA.setVisible(!browserBig);
-    waveB.setVisible(!browserBig);
-    fxPanel.setVisible(!browserBig && shownPanel == 0);
-    samplerPanel.setVisible(!browserBig && shownPanel == 1);
-    recorderPanel.setVisible(!browserBig && shownPanel == 2);
-    automixPanel.setVisible(!browserBig && shownPanel == 3);
-    automixTab.setVisible(!browserBig);
-    fxTab.setVisible(!browserBig);
-    samplerTab.setVisible(!browserBig);
-    recordTab.setVisible(!browserBig);
-    if (browserBig) // Ctrl+B: the browser gets the waveforms' room too
+    // P3-23: the layout (horizontal / vertical waveforms, the enlarged browser) is computed in app/MainLayout.
+    app::LayoutSizes sizes;
+    sizes.mixerPreferredWidth = ui::MixerView::kPreferredWidth;
+    sizes.mixerMinimumHeight = ui::MixerView::kMinimumHeight;
+    sizes.mixerPreferredHeight = ui::MixerView::kPreferredHeight;
+    sizes.panelHeight = ui::FxPanel::kPreferredHeight;
+    const auto l = app::computeLayout(getLocalBounds(), waveLayout, browserBig, sizes);
+    deckA.setBounds(l.deckA);
+    deckB.setBounds(l.deckB);
+    mixer.setBounds(l.mixer);
+    for (const auto& [wave, rect] : {std::pair{&waveA, l.waveA}, std::pair{&waveB, l.waveB}})
     {
-        libraryBrowser->setBounds(area);
-        keymapOverlay.setBounds(getLocalBounds());
-        overlay.setBounds(getWidth() - ui::DebugOverlay::kWidth - kOverlayMargin, kOverlayMargin,
-                          ui::DebugOverlay::kWidth, ui::DebugOverlay::kHeight);
-        return;
+        if (l.wavesVertical)
+        {
+            // A column with time running down: the view keeps its horizontal drawing, turned a quarter.
+            wave->setTransform({});
+            wave->setBounds(0, 0, rect.getHeight(), rect.getWidth());
+            wave->setTransform(app::verticalWaveTransform(rect));
+        }
+        else
+        {
+            wave->setTransform({});
+            wave->setBounds(rect);
+        }
+        wave->setVisible(l.wavesVisible);
     }
-    const int browserHeight = std::max(160, area.getHeight() - 2 * 100 - 12 - ui::FxPanel::kPreferredHeight - 6);
-    libraryBrowser->setBounds(area.removeFromBottom(browserHeight));
-    area.removeFromBottom(6);
+    libraryBrowser->setBounds(l.browser);
+    juce::TextButton* tabs[] = {&fxTab, &samplerTab, &recordTab, &automixTab};
+    for (std::size_t i = 0; i < 4; ++i)
     {
-        auto panel = area.removeFromBottom(ui::FxPanel::kPreferredHeight); // P3-09 / P3-13
-        auto tabs = panel.removeFromLeft(64);
-        const int th = tabs.getHeight() / 4;
-        fxTab.setBounds(tabs.removeFromTop(th).reduced(0, 1));
-        samplerTab.setBounds(tabs.removeFromTop(th).reduced(0, 1));
-        recordTab.setBounds(tabs.removeFromTop(th).reduced(0, 1));
-        automixTab.setBounds(tabs.reduced(0, 1));
-        panel.removeFromLeft(4);
-        fxPanel.setBounds(panel);
-        samplerPanel.setBounds(panel);
-        recorderPanel.setBounds(panel);
-        automixPanel.setBounds(panel);
-        automixPanel.setVisible(!browserBig && shownPanel == 3);
-        fxPanel.setVisible(!browserBig && shownPanel == 0);
-        samplerPanel.setVisible(!browserBig && shownPanel == 1);
-        recorderPanel.setVisible(!browserBig && shownPanel == 2);
+        tabs[i]->setBounds(l.tabs[i]);
+        tabs[i]->setVisible(l.panelVisible);
     }
-    area.removeFromBottom(6);
-    const int waveHeight = (area.getHeight() - 6) / 2;
-    waveA.setBounds(area.removeFromTop(waveHeight));
-    area.removeFromTop(6);
-    waveB.setBounds(area.removeFromTop(waveHeight));
-
+    juce::Component* panels[] = {&fxPanel, &samplerPanel, &recorderPanel, &automixPanel};
+    for (int i = 0; i < 4; ++i)
+    {
+        panels[i]->setBounds(l.panel);
+        panels[i]->setVisible(l.panelVisible && shownPanel == i);
+    }
     keymapOverlay.setBounds(getLocalBounds());
     overlay.setBounds(getWidth() - ui::DebugOverlay::kWidth - kOverlayMargin, kOverlayMargin, ui::DebugOverlay::kWidth,
                       ui::DebugOverlay::kHeight);

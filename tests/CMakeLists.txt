@@ -24,6 +24,7 @@ target_sources(DevilDJTests PRIVATE
     app/PadFxTests.cpp
     app/CaptureTests.cpp
     app/AutomixTests.cpp
+    app/LayoutTests.cpp
     app/SettingsTests.cpp
     app/SoakTestTests.cpp
     beatmaker/BeatMakerSmokeTests.cpp

@@ -9,6 +9,8 @@ target_sources(devildj_app_core INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/Automix.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Automix.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/HotCueStore.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/MainLayout.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/MainLayout.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/PadFxPresets.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/RecordingSheets.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/RecordingSheets.h"

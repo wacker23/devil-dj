@@ -124,6 +124,12 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
         menu.addSeparator();
         menu.addItem(HighQualityResampling, "High-quality resampling (sinc)", true, highQuality);
         menu.addItem(TouchMode, "Touch mode (larger controls)", true, touchMode);
+        juce::PopupMenu layout; // P3-23
+        layout.addItem(LayoutHorizontal, "Waveforms across (one above the other)", true, layoutWaves == 0);
+        layout.addItem(LayoutVertical, "Waveforms upright (beside the mixer)", true, layoutWaves == 1);
+        layout.addSeparator();
+        layout.addItem(LayoutBigBrowser, "Enlarged browser (Ctrl+B)", true, layoutBigBrowser);
+        menu.addSubMenu("Layout", layout);
         menu.addSeparator();
         juce::PopupMenu keyMenu;
         keyMenu.addItem(KeyMusical, "Musical (Am, F#)", true, keyNotation == 0);
@@ -357,6 +363,17 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
             highQuality = !highQuality;
             if (onHighQualityResampling)
                 onHighQualityResampling(highQuality);
+            break;
+
+        case LayoutHorizontal:
+        case LayoutVertical:
+        case LayoutBigBrowser:
+            if (menuItemID == LayoutBigBrowser)
+                layoutBigBrowser = !layoutBigBrowser;
+            else
+                layoutWaves = menuItemID == LayoutVertical ? 1 : 0;
+            if (onLayout)
+                onLayout(layoutWaves, layoutBigBrowser);
             break;
 
         case TouchMode:

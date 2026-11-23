@@ -230,6 +230,19 @@ public:
             menu->setTouchMode(touch);
             juce::Desktop::getInstance().setGlobalScaleFactor(touch ? kTouchScale : 1.0f);
         }
+        {
+            const int waves = std::clamp(settings->get(keys::waveLayout), 0, 1);
+            const bool big = settings->get(keys::browserBig);
+            menu->setLayout(waves, big);
+            mainComponent->onLayoutChanged = [this](int w, bool b)
+            {
+                settings->set(keys::waveLayout, w);
+                settings->set(keys::browserBig, b);
+                menu->setLayout(w, b);
+            };
+            mainComponent->setLayout(waves, big);
+        }
+        menu->onLayout = [this](int waves, bool big) { mainComponent->setLayout(waves, big); };
         menu->onTouchMode = [this](bool on)
         {
             settings->set(keys::touchMode, on);

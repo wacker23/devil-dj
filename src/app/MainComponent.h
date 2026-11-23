@@ -22,6 +22,7 @@
 #include "ui/SamplerPanel.h"
 #include "engine/Recorder.h"
 #include "Automix.h"
+#include "MainLayout.h"
 #include "matcher/MatcherService.h"
 #include "PadFxPresets.h"
 #include "ui/AutomixPanel.h"
@@ -209,6 +210,7 @@ private:
     std::unique_ptr<ui::LibraryBrowser> libraryBrowser; // P2-04, bottom
     std::unique_ptr<juce::Thread> importJob;
     bool browserBig = false;
+    app::WaveLayout waveLayout = app::WaveLayout::Horizontal; // P3-23
     struct DeckGrid
     {
         std::int64_t trackId = 0;
@@ -340,6 +342,9 @@ public:
         applyAutomixSettings();
     }
     std::function<void(const ui::AutomixPanel::Settings&)> onAutomixSettingsChanged;
+    // P3-23: the layout (0 horizontal waveforms, 1 vertical) and the enlarged browser; changes reported to save.
+    void setLayout(int waveforms, bool bigBrowser);
+    std::function<void(int waveforms, bool bigBrowser)> onLayoutChanged;
     std::function<void(const juce::String& json)> onPadFxPresetsChanged;
     void setIsolator(bool on);
     void setCrossfaderCurve(int curve);
