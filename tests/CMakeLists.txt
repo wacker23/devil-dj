@@ -28,6 +28,7 @@ target_sources(DevilDJTests PRIVATE
     app/SettingsTests.cpp
     app/SoakTestTests.cpp
     beatmaker/BeatMakerSmokeTests.cpp
+    beatmaker/ProjectFileTests.cpp
     codebeat/CodeBeatSmokeTests.cpp
     dsp/DriftBufferTests.cpp
     dsp/FxTests.cpp
@@ -127,6 +128,7 @@ target_link_libraries(DevilDJTests PRIVATE
     devildj::analysis
     devildj::library
     devildj::matcher
+    devildj::beatmaker
     TagLib::tag
     juce::juce_core
     juce::juce_data_structures

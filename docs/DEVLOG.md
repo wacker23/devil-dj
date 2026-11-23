@@ -11,6 +11,20 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-01 Beat Maker model + serialization
+- Started Phase 4 at the owner's request, before they had run the Phase 3 MVP gate. The gate stays open in PLAN.md; the owner will run it later.
+- What changed: a new module, `src/beatmaker/`. It is an INTERFACE library like engine, because it uses juce_core for JSON.
+  - `Model.h`: Step, SoundRef, DrumTrack, Note, SynthPreset, ArpSettings, SynthTrack, Pattern and Project, following BEATMAKER_SPEC §1. Also `defaultProject()` (patterns A–H; A gets an 8-track kit with the hats in one choke group, plus a sub bass), `setPatternLength` and `normalize`, which brings every value back into range.
+  - `ProjectFile`: the .ddjbeat format is JSON with a schema version and a `samples` list. Steps are stored as [on, vel, prob, micro, ratchet] and notes as [start, length, pitch, vel].
+  - Unknown fields are kept per object (project, pattern, track, sound, preset, arp) and written back on save.
+  - A file from a newer version loads with a warning. Values out of range are fixed, with a warning.
+  - Samples inside the project folder are stored relative to it, with forward slashes, and made absolute again on load. Saving goes through a temporary file.
+- Tests: 7 cases, 180 assertions.
+  - Random full projects round-trip exactly, and serializing again gives the same text.
+  - Unknown fields survive load and save at each level.
+  - Bad JSON is refused; values out of range are fixed.
+  - On disk: relative sample paths, a second save matches, and a missing file gives an error.
+
 ## 2026-11-23 · P3-25 Automix smart mode
 - What changed: Automix option SMART (the AUTOMIX tab, remembered). At each track start the next one is the best-scoring remaining queue item against the one playing: the matcher's score with the Next Track panel's intent, preset and key policy, items passing the matcher's filters first. The scope is the queue. Automix keeps the order played, and the app writes each start to the log ("Automix smart #3: queue item 7 (...)"), so a smart run can be compared with plain order.
 - Fixed in passing: with REPEAT on, plain Automix went back to the first item after every track once the first round ended; it now goes round the whole queue again (a regression test covers plain and smart).
