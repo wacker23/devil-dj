@@ -519,6 +519,13 @@ struct SetSynthSound
 struct BeatMakerStop
 {
 };
+// P4-13: a drum track's user sample (index = pattern x 16 + track); nullptr: none (a missing file plays nothing).
+// The sample stays alive while the app runs (app::SampleBank), so the audio thread may keep the pointer.
+struct SetSampleSound
+{
+    std::uint16_t index = 0;
+    const SampleData* sample = nullptr;
+};
 
 // Beat sync (P2-19): the deck follows the master clock's tempo (half / double aware) and phase.
 struct SetSync
@@ -534,7 +541,7 @@ using EngineCommand =
                  SetClockSource, SetInternalTempo, SetSync, SetQuantize, BeatJump, JumpBy, SetHotCues, HotCue,
                  SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle, SetSlicer, SlicerPad, FxSetEffect, FxCommand, SetColorFx, ReleaseFxCommand, PadFxSetEffect, PadFxCommand,
                  SamplerLoad, SamplerPad, SamplerSet, SequencerCommand, SequencerEvents,
-                 StartTransition, CancelTransition, SetDrumSound, SetSynthSound, BeatMakerStop>;
+                 StartTransition, CancelTransition, SetDrumSound, SetSynthSound, BeatMakerStop, SetSampleSound>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

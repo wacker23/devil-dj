@@ -9,6 +9,7 @@ namespace devildj::ui
 
 namespace
 {
+constexpr int kSampleFileId = 1000; // the sound picker's "Sample file..." item
 const juce::Colour kBackground(0xff16161b);
 const juce::Colour kPanel(0xff1f1f26);
 const juce::Colour kBeat(0xff272730);
@@ -164,9 +165,22 @@ StepGrid::StepGrid()
         r.name.setInterceptsMouseClicks(false, false);
         for (int c = 0; c < static_cast<int>(soundChoices().size()); ++c)
             r.sound.addItem(soundChoices()[static_cast<std::size_t>(c)].label, c + 1);
+        r.sound.addSeparator();
+        r.sound.addItem("Sample file...", kSampleFileId); // P4-13
         r.sound.setTooltip("Track " + juce::String(i + 1) + "'s sound (Shift+Left / Shift+Right on the cursor track)");
         r.sound.setWantsKeyboardFocus(false);
-        r.sound.onChange = [this, i] { setSound(i, rows[static_cast<std::size_t>(i)].sound.getSelectedId() - 1); };
+        r.sound.onChange = [this, i]
+        {
+            const int id = rows[static_cast<std::size_t>(i)].sound.getSelectedId();
+            if (id == kSampleFileId)
+            {
+                refresh(); // back to what it is until a file is chosen
+                if (onChooseSample)
+                    onChooseSample(i);
+                return;
+            }
+            setSound(i, id - 1);
+        };
         for (auto* b : {&r.mute, &r.solo})
             styleButton(*b);
         r.mute.setClickingTogglesState(false);
@@ -308,8 +322,20 @@ void StepGrid::refresh()
         }
         r.sound.setSelectedId(id, juce::dontSendNotification);
         if (id == 0)
-            r.sound.setText(t->sound.kind == beatmaker::SoundRef::Kind::Sample ? "Sample" : juce::String(t->sound.synth),
+        {
+            // A user sample: its file name, or "missing" when it can't be found (P4-13).
+            const bool sample = t->sound.kind == beatmaker::SoundRef::Kind::Sample;
+            const auto file = juce::File(juce::String::fromUTF8(t->sound.samplePath.c_str())).getFileName();
+            const bool missing = sample && isSampleMissing && isSampleMissing(t->sound.samplePath);
+            r.sound.setText(sample ? (missing ? "MISSING: " : "Sample: ") + file : juce::String(t->sound.synth),
                             juce::dontSendNotification);
+            r.sound.setColour(juce::ComboBox::textColourId, missing ? kAccent : kText);
+            r.sound.setTooltip(missing ? "This sample file can't be found (not at its path, not in Documents\\Devil-DJ\\Samples): "
+                                             "drop a file on the row or choose one (Ctrl+O)"
+                                       : juce::String::fromUTF8(t->sound.samplePath.c_str()));
+        }
+        else
+            r.sound.setColour(juce::ComboBox::textColourId, kText);
         r.mute.setToggleState(t->mute, juce::dontSendNotification);
         r.solo.setToggleState(t->solo, juce::dontSendNotification);
     }
@@ -330,6 +356,40 @@ void StepGrid::setSongMode(bool on)
 {
     song = on;
     refresh();
+}
+
+bool StepGrid::isSampleFile(const juce::String& path)
+{
+    return juce::File(path).hasFileExtension("wav;aif;aiff;flac");
+}
+
+int StepGrid::rowAt(int y) const
+{
+    if (project == nullptr || gridArea.getHeight() <= 0 || y < gridArea.getY())
+        return -1;
+    const int row = (y - gridArea.getY()) / std::max(1, gridArea.getHeight() / beatmaker::kMaxDrumTracks);
+    const auto& pat = project->patterns[static_cast<std::size_t>(patternIndex)];
+    return row < static_cast<int>(pat.drums.size()) ? row : -1;
+}
+
+bool StepGrid::isInterestedInFileDrag(const juce::StringArray& files)
+{
+    return std::any_of(files.begin(), files.end(), [](const juce::String& f) { return isSampleFile(f); });
+}
+
+void StepGrid::filesDropped(const juce::StringArray& files, int, int y)
+{
+    // The first sound file onto the row it was dropped on; more files onto the rows below it.
+    int row = rowAt(y);
+    if (row < 0)
+        return;
+    for (const auto& f : files)
+        if (isSampleFile(f) && row < static_cast<int>(shown().drums.size()))
+        {
+            if (onSampleFile)
+                onSampleFile(row, juce::File(f));
+            ++row;
+        }
 }
 
 void StepGrid::setRecording(bool on)
@@ -554,6 +614,10 @@ bool StepGrid::perform(GlobalAction a)
                 project->song.pop_back();
                 edited();
             }
+            return true;
+        case GA::BeatMakerLoadSample:
+            if (onChooseSample && t != nullptr)
+                onChooseSample(track);
             return true;
         case GA::BeatMakerExport:
             if (onExport)

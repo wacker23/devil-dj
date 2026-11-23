@@ -53,8 +53,14 @@ BeatRenderResult renderBeat(const beatmaker::Project& project, const BeatRenderO
     {
         const auto& pat = project.patterns[static_cast<std::size_t>(p)];
         for (std::size_t t = 0; t < pat.drums.size() && t < 16; ++t)
-            engine->send(engine::SetDrumSound{static_cast<std::uint16_t>(p * 16 + static_cast<int>(t)),
-                                              beatmaker::engineDrumSound(pat.drums[t].sound)});
+        {
+            const auto index = static_cast<std::uint16_t>(p * 16 + static_cast<int>(t));
+            const auto& sound = pat.drums[t].sound;
+            if (sound.kind == beatmaker::SoundRef::Kind::Sample)
+                engine->send(engine::SetSampleSound{index, o.sample ? o.sample(sound.samplePath) : nullptr});
+            else
+                engine->send(engine::SetDrumSound{index, beatmaker::engineDrumSound(sound)});
+        }
         for (std::size_t t = 0; t < pat.synths.size() && t < 16; ++t)
             engine->send(engine::SetSynthSound{static_cast<std::uint16_t>(p * 16 + static_cast<int>(t)),
                                                beatmaker::synthParamsOf(pat.synths[t].preset)});

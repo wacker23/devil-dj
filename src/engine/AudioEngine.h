@@ -171,6 +171,7 @@ private:
     void apply(const SetDrumSound& command) noexcept;
     void apply(const SetSynthSound& command) noexcept;
     void apply(const BeatMakerStop& command) noexcept;
+    void apply(const SetSampleSound& command) noexcept;
     void runTransition() noexcept; // the automation lanes, once a block (after the clock)
     void endTransition(bool finished) noexcept;
     void setLowEq(DeckId deck, bool kill) noexcept;

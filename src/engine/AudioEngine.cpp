@@ -1865,6 +1865,11 @@ void AudioEngine::apply(const SetSynthSound& command) noexcept
     beatMaker->voices.setSynthSound(command.index, command.sound);
 }
 
+void AudioEngine::apply(const SetSampleSound& command) noexcept
+{
+    beatMaker->voices.setSample(command.index, command.sample);
+}
+
 void AudioEngine::apply(const BeatMakerStop&) noexcept
 {
     beatMaker->due.clear();

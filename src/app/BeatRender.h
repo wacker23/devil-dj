@@ -6,6 +6,10 @@
 
 #include "beatmaker/Model.h"
 #include "engine/TrackBuffer.h"
+#include "engine/Voices.h"
+
+#include <functional>
+#include <string>
 
 #include <memory>
 
@@ -21,6 +25,8 @@ struct BeatRenderOptions
     double masterBpm = 120.0; // the tempo when the project follows the master
     double sampleRate = 48000.0;
     int blockSize = 256;
+    // P4-13: the drum tracks' user samples by path (nullptr: missing - silent); unset: none.
+    std::function<const engine::SampleData*(const std::string& path)> sample;
 };
 
 struct BeatRenderResult

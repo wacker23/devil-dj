@@ -19,6 +19,8 @@ target_sources(devildj_app_core INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/PadFxPresets.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/HotCueStore.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/LibraryBackup.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SampleBank.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SampleBank.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/BeatRender.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/BeatRender.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/BeatMakerProducer.cpp"

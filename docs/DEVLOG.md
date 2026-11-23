@@ -11,6 +11,23 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-13 User samples
+- What changed:
+  - `app/SampleBank` decodes WAV / AIFF / FLAC once, mono or stereo at their own rate, up to 60 s. Every sample stays loaded for the session, so the audio thread never reads freed memory.
+  - A missing path is looked for by file name in `Documents\Devil-DJ\Samples`, including its sub-folders ("relocated"). Otherwise the track is missing, with a reason. Missing results are remembered until `retryMissing()`.
+  - The engine gets a new command, `SetSampleSound{index, sample}`. With nullptr the sample plays nothing; its events are counted as unhandled, with no voice and no crash.
+  - The app sends each drum track's sample, or the drum synth, when it changes. Exports use the same samples.
+  - Grid:
+    - drop WAV / AIFF / FLAC files on a row (several files go to the rows below it);
+    - or use "Sample file..." in a track's sound picker, or Ctrl+O, which opens a file chooser in the Samples folder.
+    - The header shows "Sample: name", or "MISSING: name" in red with a tooltip saying what to do.
+  - `beatmaker::setSample` sets a track's sample and names the track after the file.
+- Tests: 3 cases.
+  - The bank decodes once, finds a moved file in the samples folder after `retryMissing`, and refuses a non-audio file and an empty path with a reason.
+  - A render plays the sample on each beat, while the missing sample's steps are silent. In the engine a missing sample gives no voice and no crash. A saved project opened after its sample moved keeps the path and reports it missing.
+  - The grid: drop on a row (and the rows below), Ctrl+O, the picker item, and the MISSING label.
+- The owner should drop a few WAVs on rows in the app and play them.
+
 ## 2026-11-23 · P4-12 Export
 - What changed:
   - `app/BeatRender` renders the pattern (1 or more passes) or the song once round, offline and faster than real time. It uses a private AudioEngine of its own:

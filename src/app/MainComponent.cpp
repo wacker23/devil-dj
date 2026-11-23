@@ -389,6 +389,11 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     beatPanel.grid().onSwitchAt = [this](bool atEnd) { beatSwitchAtEnd = atEnd; };
     beatPanel.grid().onHit = [this](int track) { beatHit(track); };
     beatPanel.grid().onExport = [this] { showBeatExportMenu(); };
+    // User samples (P4-13).
+    samplesFolder().createDirectory();
+    beatPanel.grid().isSampleMissing = [this](const std::string& path) { return sampleBank.isMissing(path); };
+    beatPanel.grid().onSampleFile = [this](int track, const juce::File& file) { setBeatSample(track, file); };
+    beatPanel.grid().onChooseSample = [this](int track) { chooseBeatSample(track); };
     addChildComponent(beatStrip);
     beatStrip.setTempo(beatProject.followMaster, beatProject.ownBpm);
     beatStrip.onTempo = [this](bool follow, double bpm)
@@ -697,7 +702,7 @@ void MainComponent::registerActions()
                            });
     };
     // The Beat Maker's grid (P4-06): every Beat Maker action goes to it (held keys repeat where they may).
-    for (int a = static_cast<int>(GA::BeatMakerStartStop); a <= static_cast<int>(GA::BeatMakerExport); ++a)
+    for (int a = static_cast<int>(GA::BeatMakerStartStop); a <= static_cast<int>(GA::BeatMakerLoadSample); ++a)
         if (a < static_cast<int>(GA::CodeEvaluate) || a > static_cast<int>(GA::BrowserBigger))
             actions.setHandler(ui::globalCommand(static_cast<GA>(a)),
                                [this, a](Phase p)
@@ -1812,6 +1817,19 @@ void MainComponent::exportBeat(BeatExport what)
     o.masterBpm = es.masterBpm;
     o.sampleRate = es.sampleRate > 0.0 ? es.sampleRate : 48000.0;
     o.blockSize = es.blockSize > 0 ? es.blockSize : 256;
+    {
+        // The user samples it uses, looked up now (here, on the message thread); the render reads them (P4-13).
+        auto samples = std::make_shared<std::map<std::string, const engine::SampleData*>>();
+        for (const auto& pat : beatProject.patterns)
+            for (const auto& d : pat.drums)
+                if (d.sound.kind == beatmaker::SoundRef::Kind::Sample)
+                    (*samples)[d.sound.samplePath] = sampleBank.get(d.sound.samplePath).data;
+        o.sample = [samples](const std::string& path) -> const engine::SampleData*
+        {
+            const auto it = samples->find(path);
+            return it != samples->end() ? it->second : nullptr;
+        };
+    }
     auto project = std::make_shared<const beatmaker::Project>(beatProject);
     const auto letter = juce::String::charToString(static_cast<juce::juce_wchar>('A' + o.pattern));
     const auto stamp = juce::Time::getCurrentTime().formatted("%Y-%m-%d %H%M%S");
@@ -1907,6 +1925,38 @@ void MainComponent::exportBeat(BeatExport what)
     }
 }
 
+void MainComponent::setBeatSample(int track, const juce::File& file)
+{
+    const auto lookup = sampleBank.get(file.getFullPathName().toStdString());
+    if (lookup.data == nullptr)
+    {
+        libraryBrowser->setStatus("Beat Maker: " + lookup.error);
+        return;
+    }
+    const int pattern = beatPanel.grid().pattern();
+    beatPanel.edit(
+        [&](beatmaker::Project& p)
+        {
+            auto& drums = p.patterns[static_cast<std::size_t>(pattern)].drums;
+            if (track >= 0 && track < static_cast<int>(drums.size()))
+                beatmaker::setSample(drums[static_cast<std::size_t>(track)], file.getFullPathName().toStdString(),
+                                     file.getFileNameWithoutExtension().toStdString());
+        });
+    beatPanel.grid().modelChanged();
+}
+
+void MainComponent::chooseBeatSample(int track)
+{
+    beatExportChooser = std::make_unique<juce::FileChooser>("A sample for drum track " + juce::String(track + 1),
+                                                            samplesFolder(), "*.wav;*.aif;*.aiff;*.flac");
+    beatExportChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                                   [this, track](const juce::FileChooser& fc)
+                                   {
+                                       if (const auto file = fc.getResult(); file.existsAsFile())
+                                           setBeatSample(track, file);
+                                   });
+}
+
 void MainComponent::stopBeatMaker()
 {
     beatProducer->stop();
@@ -1927,6 +1977,14 @@ void MainComponent::beatProjectChanged()
         {
             const auto index = static_cast<std::size_t>(p * 16) + t;
             const auto& sound = pat.drums[t].sound;
+            if (sound.kind == beatmaker::SoundRef::Kind::Sample) // a user sample (P4-13); missing: nothing plays
+            {
+                const auto* data = sampleBank.get(sound.samplePath).data;
+                if (sentSamples[index] != data && engine.send(engine::SetSampleSound{static_cast<std::uint16_t>(index), data}))
+                    sentSamples[index] = data;
+                sentDrumSounds[index].reset();
+                continue;
+            }
             if (sentDrumSounds[index] != sound && engine.send(engine::SetDrumSound{static_cast<std::uint16_t>(index),
                                                                                    beatmaker::engineDrumSound(sound)}))
                 sentDrumSounds[index] = sound;

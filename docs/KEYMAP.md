@@ -132,6 +132,7 @@ The same tools are on each deck's GRID button (and TAP); editing a grid locks it
 | Pattern switch while playing: on the next bar / at the playing pattern's end | E |
 | Record hits on / off (then 1–8 play drum tracks 1–8 into the nearest step) | Ctrl+R |
 | Export menu (pattern / song to WAV, the sampler, the library) | Ctrl+E |
+| A sample file on the cursor's drum track (or drop WAVs on a row) | Ctrl+O |
 
 In the synth view (piano roll) the same keys mean: arrows move the cursor (by the snap / a semitone, or a scale step with snap to scale on), Enter adds or removes the note (or chord) at the cursor, Shift+Up / Down its velocity, Alt+Left / Right shorter / longer, Shift+Left / Right the track's sound, 1–4 the synth track, Ctrl+C / V copy and paste the track's notes, Delete clears them. Also:
 

@@ -474,6 +474,7 @@ std::vector<KeyBinding> defaultKeymap()
     key(E, mods::None, GA::BeatMakerSwitchAt, bm);
     key(R, mods::Ctrl, GA::BeatMakerRecord, bm); // P4-11
     key(E, mods::Ctrl, GA::BeatMakerExport, bm); // P4-12
+    key(O, mods::Ctrl, GA::BeatMakerLoadSample, bm); // P4-13
 
     // Code Beat editor.
     constexpr auto cb = KeyContext::CodeBeat;

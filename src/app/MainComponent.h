@@ -22,6 +22,7 @@
 #include "ui/BeatChannelStrip.h"
 #include "ui/BeatMakerPanel.h"
 #include "app/BeatMakerProducer.h"
+#include "app/SampleBank.h"
 #include "beatmaker/Model.h"
 #include "beatmaker/Sequencer.h"
 #include "ui/RecorderPanel.h"
@@ -187,6 +188,11 @@ private:
     ui::BeatChannelStrip beatStrip{engine};
     std::array<std::optional<beatmaker::SoundRef>, 128> sentDrumSounds;
     std::array<std::optional<beatmaker::SynthPreset>, 128> sentSynthSounds;
+    // P4-13: user samples, decoded once and kept; what each drum sound index was last given.
+    app::SampleBank sampleBank{samplesFolder()};
+    std::array<std::optional<const engine::SampleData*>, 128> sentSamples;
+    void setBeatSample(int track, const juce::File& file);
+    void chooseBeatSample(int track);
     void startBeatMaker();
     void stopBeatMaker();
     void beatProjectChanged(); // the producer's copy and the voices' sounds follow the project

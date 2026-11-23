@@ -23,7 +23,7 @@
 namespace devildj::ui
 {
 
-class StepGrid final : public juce::Component, public juce::SettableTooltipClient
+class StepGrid final : public juce::Component, public juce::SettableTooltipClient, public juce::FileDragAndDropTarget
 {
 public:
     StepGrid();
@@ -49,6 +49,15 @@ public:
     std::function<void(int track)> onHit;
     std::function<void(bool on)> onRecord; // REC
     std::function<void()> onExport;        // EXPORT (P4-12)
+    // P4-13: user samples - a file dropped on a track's row (or chosen: "Sample file..." / Ctrl+O), and whether a
+    // track's sample file is missing (shown in its header).
+    std::function<void(int track, const juce::File& file)> onSampleFile;
+    std::function<void(int track)> onChooseSample;
+    std::function<bool(const std::string& path)> isSampleMissing;
+    static bool isSampleFile(const juce::String& path);
+    int rowAt(int y) const; // the track row at y (-1: none)
+    bool isInterestedInFileDrag(const juce::StringArray& files) override;
+    void filesDropped(const juce::StringArray& files, int x, int y) override;
     juce::TextButton& exportButton() { return exportNow; }
     bool recording() const noexcept { return recordOn; }
     void setRecording(bool on);

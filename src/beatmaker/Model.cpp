@@ -41,6 +41,14 @@ Project defaultProject()
     return p;
 }
 
+void setSample(DrumTrack& track, const std::string& path, const std::string& name)
+{
+    track.sound.kind = SoundRef::Kind::Sample;
+    track.sound.samplePath = path;
+    track.sound.params.clear();
+    track.name = name;
+}
+
 void setPatternLength(Pattern& pattern, int lengthSteps)
 {
     pattern.lengthSteps = lengthSteps <= 16 ? 16 : lengthSteps <= 32 ? 32 : 64;

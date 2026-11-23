@@ -154,6 +154,8 @@ struct Project
 Project defaultProject();
 // The default kit's drum track for synth `name` (empty steps of `lengthSteps`).
 DrumTrack drumTrack(const std::string& synthName, int lengthSteps = 16);
+// P4-13: a user sample on a drum track (its name the file's, no choke group change).
+void setSample(DrumTrack& track, const std::string& path, const std::string& name);
 // The pattern's length: 16, 32 or 64 steps; every drum track's steps resized to it (new steps off).
 void setPatternLength(Pattern& pattern, int lengthSteps);
 // Values brought into range (after a load or an edit): step fields, track counts, lengths, swing, song indices.
