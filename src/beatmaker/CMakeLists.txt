@@ -10,6 +10,8 @@ target_sources(devildj_beatmaker INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/DrumKits.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/DrumKits.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/Model.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/NoteEdit.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/NoteEdit.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/Model.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/ProjectFile.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ProjectFile.h"

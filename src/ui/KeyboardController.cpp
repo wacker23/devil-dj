@@ -452,6 +452,21 @@ std::vector<KeyBinding> defaultKeymap()
     key(PageDown, mods::None, GA::BeatMakerPageNext, bm);
     key(Minus, mods::None, GA::BeatMakerSwingDown, bm);
     key(Equals, mods::None, GA::BeatMakerSwingUp, bm);
+    // P4-07: the piano roll.
+    key(Left, mods::Ctrl, GA::BeatMakerNoteLeft, bm);
+    key(Right, mods::Ctrl, GA::BeatMakerNoteRight, bm);
+    key(Up, mods::Ctrl, GA::BeatMakerNoteUp, bm);
+    key(Down, mods::Ctrl, GA::BeatMakerNoteDown, bm);
+    key(Q, mods::None, GA::BeatMakerQuantize, bm);
+    key(C, mods::None, GA::BeatMakerChord, bm);
+    key(K, mods::None, GA::BeatMakerScale, bm);
+    key(K, mods::Shift, GA::BeatMakerScaleSnap, bm);
+    key(G, mods::None, GA::BeatMakerSnap, bm);
+    key(A, mods::None, GA::BeatMakerArp, bm);
+    key(A, mods::Shift, GA::BeatMakerArpRate, bm);
+    key(A, mods::Alt, GA::BeatMakerArpMode, bm);
+    key(A, mods::Ctrl, GA::BeatMakerArpOctaves, bm);
+    key(Tab, mods::None, GA::BeatMakerView, bm);
 
     // Code Beat editor.
     constexpr auto cb = KeyContext::CodeBeat;

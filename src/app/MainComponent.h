@@ -19,7 +19,7 @@
 #include "ui/FxPanel.h"
 #include "ui/KeymapEditor.h"
 #include "ui/NextTrackPanel.h"
-#include "ui/StepGrid.h"
+#include "ui/BeatMakerPanel.h"
 #include "beatmaker/Model.h"
 #include "ui/RecorderPanel.h"
 #include "ui/SamplerPanel.h"
@@ -175,7 +175,7 @@ private:
     // The Beat Maker (P4-06): its project (saved to Documents\Devil-DJ\Beats\Current.ddjbeat a moment after each
     // edit) and the step grid, shown in the browser's place (Ctrl+Tab switches).
     beatmaker::Project beatProject;
-    ui::StepGrid stepGrid;
+    ui::BeatMakerPanel beatPanel;
     int bottomPanel = 0; // 0 the browser, 1 the Beat Maker
     bool beatPlaying = false;
     double beatStartBeat = 0.0;

@@ -291,6 +291,18 @@ void StepGrid::refresh()
     repaint();
 }
 
+void StepGrid::modelChanged()
+{
+    if (project != nullptr)
+    {
+        ensureTracks();
+        step = std::clamp(step, 0, shown().lengthSteps - 1);
+        track = std::clamp(track, 0, std::max(0, static_cast<int>(shown().drums.size()) - 1));
+        pageIndex = std::clamp(pageIndex, 0, pages() - 1);
+    }
+    refresh();
+}
+
 void StepGrid::setPlayback(bool isPlaying, int stepIndex)
 {
     if (isPlaying == playing && stepIndex == playingStep)

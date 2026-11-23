@@ -11,6 +11,22 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-07 Piano roll UI
+- What changed:
+  - `ui/PianoRoll`, one synth track at a time:
+    - Tracks 1–4 (created when first used), sound (all 30 factory presets), snap (1/4 … 1/32 plus triplets), scale root and scale (in-scale rows lit), snap to scale, chord stamp, QUANTIZE, and the arpeggiator (on, rate, mode, octaves).
+    - Draw / drag-longer, move, resize from the right edge, right-click delete, a velocity lane, wheel scrolling, and a keyboard cursor with every edit on a key.
+  - `beatmaker/NoteEdit`: 9 scales, 8 chords, snap and quantize (notes that land together merge), plus note lookup and sorting.
+  - `ui/BeatMakerPanel`: DRUMS and SYNTH views (Tab switches) and the edit history. It is the bottom panel now (Ctrl+Tab).
+- Undo, done here because this task needs it: every edit stores a snapshot of the project in a juce::UndoManager (up to 200 steps). One key press or click is one step, and a whole drag is one step. Ctrl+Z / Ctrl+Y work across the grid and the roll, and a new edit drops the redo. P4-08 adds its 100-step test.
+- Tests: 4 cases.
+  - The note logic.
+  - Mouse: draw, draw longer, move, resize, chord, scale snap, delete, lane, scroll.
+  - Keyboard: every action, copy / paste between tracks, view switching.
+  - Undo: steps, drag as one step, redo, redo dropped after a new edit.
+  - Key coverage now includes the 14 new actions.
+- Manual test (owner, not done yet): Ctrl+Tab → SYNTH, draw a few notes and chords, Ctrl+Z / Ctrl+Y. Nothing sounds until P4-10.
+
 ## 2026-11-23 · P4-06 Step grid UI
 - What changed: `ui/StepGrid`.
   - Pattern bar: PLAY, A–H, length 16 / 32 / 64, page, and a swing knob.

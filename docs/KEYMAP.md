@@ -126,7 +126,20 @@ The same tools are on each deck's GRID button (and TAP); editing a grid locks it
 | Previous / next page of 16 steps | Page Up / Page Down |
 | Swing − / + (5 %) | - / = |
 
-Mouse: click a step to toggle it, drag along a row to paint, Alt-drag on a step for its velocity, drag in the velocity lane under the grid, right-click a step for its editor.
+| Drums / synth view | Tab |
+
+In the synth view (piano roll) the same keys mean: arrows move the cursor (by the snap / a semitone, or a scale step with snap to scale on), Enter adds or removes the note (or chord) at the cursor, Shift+Up / Down its velocity, Alt+Left / Right shorter / longer, Shift+Left / Right the track's sound, 1–4 the synth track, Ctrl+C / V copy and paste the track's notes, Delete clears them. Also:
+
+| Action (synth view) | Key |
+| --- | --- |
+| Move the note under the cursor | Ctrl+arrows |
+| Quantize the track's notes | Q |
+| Chord stamp (note, maj, min, 7, maj7, min7, sus2, sus4) | C |
+| Scale / snap to scale | K / Shift+K |
+| Snap 1/4 … 1/32, then triplets | G |
+| Arpeggiator on / rate / mode / octaves | A / Shift+A / Alt+A / Ctrl+A |
+
+Mouse (drums): click a step to toggle it, drag along a row to paint, Alt-drag on a step for its velocity, drag in the velocity lane under the grid, right-click a step for its editor. Mouse (synth): click to draw a note or chord (drag on to draw it longer), drag a note to move it, drag its right edge to resize, right-click to delete, drag in the velocity lane, the wheel scrolls the rows.
 
 ## Code Beat (when the editor has focus)
 

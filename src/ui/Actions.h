@@ -180,6 +180,20 @@ namespace devildj::ui
     X(BeatMakerPageNext, "Beat Maker: next page", false)                                                               \
     X(BeatMakerSwingDown, "Beat Maker: swing -", true)                                                                 \
     X(BeatMakerSwingUp, "Beat Maker: swing +", true)                                                                   \
+    X(BeatMakerNoteLeft, "Beat Maker: move note earlier", true)                                                        \
+    X(BeatMakerNoteRight, "Beat Maker: move note later", true)                                                         \
+    X(BeatMakerNoteUp, "Beat Maker: move note up", true)                                                               \
+    X(BeatMakerNoteDown, "Beat Maker: move note down", true)                                                           \
+    X(BeatMakerQuantize, "Beat Maker: quantize notes", false)                                                          \
+    X(BeatMakerChord, "Beat Maker: chord stamp", false)                                                                \
+    X(BeatMakerScale, "Beat Maker: scale", false)                                                                      \
+    X(BeatMakerScaleSnap, "Beat Maker: snap to scale", false)                                                          \
+    X(BeatMakerSnap, "Beat Maker: note snap", false)                                                                   \
+    X(BeatMakerArp, "Beat Maker: arpeggiator on / off", false)                                                         \
+    X(BeatMakerArpRate, "Beat Maker: arpeggiator rate", false)                                                         \
+    X(BeatMakerArpMode, "Beat Maker: arpeggiator mode", false)                                                         \
+    X(BeatMakerArpOctaves, "Beat Maker: arpeggiator octaves", false)                                                   \
+    X(BeatMakerView, "Beat Maker: drums / synth view", false)                                                          \
     X(CodeEvaluate, "Code Beat: evaluate", false)                                                                      \
     X(CodeEvaluateNow, "Code Beat: evaluate immediately", false)                                                       \
     X(CodeHush, "Code Beat: hush", false)                                                                              \
