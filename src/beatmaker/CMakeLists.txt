@@ -14,7 +14,9 @@ target_sources(devildj_beatmaker INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/ProjectFile.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ProjectFile.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/Sequencer.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Sequencer.h")
+    "${CMAKE_CURRENT_SOURCE_DIR}/Sequencer.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SynthPresets.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SynthPresets.h")
 
 target_include_directories(devildj_beatmaker INTERFACE "${PROJECT_SOURCE_DIR}/src")
 

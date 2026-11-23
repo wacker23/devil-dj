@@ -39,6 +39,15 @@ void Voices::reset() noexcept
             v.stage = Stage::Idle;
 }
 
+void Voices::setSynthSound(std::uint16_t index, const dsp::SynthParams& sound) noexcept
+{
+    if (index < kSounds)
+    {
+        synthSounds[index] = sound;
+        synthSet[index] = true;
+    }
+}
+
 void Voices::setDrumSound(std::uint16_t index, const DrumSound& sound) noexcept
 {
     if (index < kSounds)
@@ -121,6 +130,18 @@ void Voices::setUp(Voice& v, const ScheduledEvent& e, int offset) noexcept
         v.sustain = 1.0f;
         v.drum.prepare(rate);
         v.drum.trigger(sound.kind, sound.params, 1.0f, static_cast<std::uint32_t>(v.serial));
+    }
+    else if (synthSet[e.soundIndex % kSounds])
+    {
+        const auto i = static_cast<std::size_t>(e.soundIndex % kSounds);
+        auto& last = lastNote[static_cast<std::size_t>(std::min(static_cast<int>(e.source), kSources - 1))][i];
+        v.synthEngine = true;
+        v.synthGate = v.gateSamples;
+        v.gateSamples = -1; // the synth's own envelopes
+        v.sustain = 1.0f;
+        v.synth.prepare(rate);
+        v.synth.noteOn(synthSounds[i], e.note, 1.0f, static_cast<std::uint32_t>(v.serial), last > 0.0f ? last : -1.0f);
+        last = e.note;
     }
     else
     {
@@ -266,6 +287,17 @@ void Voices::render(Voice& v, const VoiceBuses& b, int numSamples) noexcept
         {
             l = r = v.drum.next();
             if (v.drum.finished())
+            {
+                v.stage = Stage::Idle;
+                break;
+            }
+        }
+        else if (v.synthEngine)
+        {
+            if (v.synthGate >= 0 && v.synthGate-- == 0)
+                v.synth.noteOff();
+            l = r = v.synth.next();
+            if (v.synth.finished())
             {
                 v.stage = Stage::Idle;
                 break;

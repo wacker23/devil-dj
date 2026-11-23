@@ -13,14 +13,16 @@
 // - Drum-synth voices (P4-04): 16 per source, each a dsp::DrumVoice for the event's sound (setDrumSound);
 //   one-shots (no gate), ended by their own decay, a choke or a steal.
 // - Sample voices play a SampleData (resampled linearly to the engine rate, x speed x 2^((note - 60) / 12)) to
-//   its end, or until their duration then their release. Synth voices: a sine at the note's pitch until the synth
-//   engines arrive (P4-05) - `durationSeconds` is the gate.
+//   its end, or until their duration then their release. Synth voices (P4-05) play the event's synth sound
+//   (setSynthSound: subtractive / FM / sub-bass) with `durationSeconds` as the gate and its own envelopes, gliding
+//   from the previous note of the same source and sound; a sound never set plays a plain sine with the voice ADSR.
 //
 // Real-time safe: no allocation, no locks; the sample table is set from the message thread only while the
 // engine isn't processing (later: through an engine command).
 
 #include "dsp/DrumSynth.h"
 #include "dsp/StateVariableFilter.h"
+#include "dsp/Synth.h"
 #include "engine/ScheduledEvent.h"
 
 #include <array>
@@ -71,6 +73,7 @@ public:
 
     void setSample(std::uint16_t index, const SampleData* data) noexcept;
     void setDrumSound(std::uint16_t index, const DrumSound& sound) noexcept;
+    void setSynthSound(std::uint16_t index, const dsp::SynthParams& sound) noexcept;
 
     // Audio thread.
     // The voice's id (0 if none was started: a missing sample, a drum synth).
@@ -109,6 +112,9 @@ private:
         double position = 0.0, increment = 1.0;
         double phase = 0.0, phaseIncrement = 0.0;
         dsp::DrumVoice drum;
+        dsp::SynthVoice synth;
+        bool synthEngine = false;     // a synth sound (else the plain sine)
+        std::int64_t synthGate = -1; // samples to its note-off
         // Envelope
         float level = 0.0f, attackStep = 1.0f, decayStep = 1.0f, sustain = 1.0f, releaseStep = 1.0f, fadeStep = 1.0f;
         std::int64_t gateSamples = -1; // release after this many samples (-1: none)
@@ -130,6 +136,9 @@ private:
     std::array<Voice, kSynthVoices> synths{}, synthTails{};
     std::array<Voice, kDrumVoicesPerSource * kSources> drums{}, drumTails{};
     std::array<DrumSound, kSounds> drumSounds{};
+    std::array<dsp::SynthParams, kSounds> synthSounds{};
+    std::array<bool, kSounds> synthSet{};
+    std::array<std::array<float, kSounds>, kSources> lastNote{}; // for glide; 0 = none yet
     std::array<const SampleData*, kSounds> sounds{};
     std::uint64_t serialCounter = 0, steals = 0, unhandledEvents = 0;
 };

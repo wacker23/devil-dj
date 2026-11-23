@@ -11,6 +11,19 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-05 Synths
+- What changed: `dsp/Synth` has three engines:
+  - **Subtractive:** two PolyBLEP oscillators (saw / square / triangle / sine, detune, octave), a sub oscillator (−1 octave square or sine) and noise, into a TPT SVF (LP / BP / HP, 12 or 24 dB, resonance, envelope amount, key tracking, cutoff updated every 16 samples). It has separate amp and filter ADSRs, glide, and unison of up to 8 detuned copies.
+  - **FM:** 2 operators, ratio, index with its own envelope, feedback.
+  - **Sub-bass:** a sine plus an optional 2nd harmonic, drive, a 3 ms click, and glide.
+- Presets: `beatmaker/SynthPresets` has 10 factory presets per engine, including Supersaw, Acid Bass, Reese, Bell, E-Piano, 808 Glide and Distorted 808. It maps the model's 36 named parameters to the engine, and saves and loads user presets as JSON (folder `Documents\Devil-DJ\Beats\Presets`).
+- Voices: `setSynthSound` per sound. The event's duration is the note-off; the synth's own envelopes shape the note; it glides from the previous note of the same source and sound. A sound that was never set still plays the plain sine.
+- Tests: 5 cases, 5,683 assertions.
+  - All 30 presets, every parameter at its ends and 15 random mixes, each at notes 24 / 60 / 96: finite, peaks ≤ 2.0, every note ends after its release, every preset audible.
+  - Pitch checks: A4 = 440 Hz, the sub's A1 = 55 Hz. Also covered: glide, the low-pass and 24 dB slope, unison loudness, the FM index, repeatability, model ↔ engine and JSON round trips, and the gate in the voices.
+  - CPU, 32 voices: a plain saw takes 4.8 % of real time and the 8-copy supersaw 14.4 %.
+- Listening note: 30 phrase renders are in `build/listen/synths/` (from `[.listen][synth]`). They are waiting for the owner's ears.
+
 ## 2026-11-23 · P4-04 Drum synths
 - What changed:
   - `dsp/DrumSynth`: one `DrumVoice` covering the 11 sounds from BEATMAKER_SPEC §4.

@@ -33,6 +33,7 @@ target_sources(DevilDJTests PRIVATE
     codebeat/CodeBeatSmokeTests.cpp
     dsp/DriftBufferTests.cpp
     dsp/DrumSynthTests.cpp
+    dsp/SynthTests.cpp
     dsp/FxTests.cpp
     dsp/BeatFxTests.cpp
     dsp/ColorFxTests.cpp

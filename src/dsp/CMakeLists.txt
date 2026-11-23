@@ -10,7 +10,8 @@ add_library(devildj_dsp STATIC
     fx/ReleaseFx.cpp
     Resampler.cpp
     SignalsmithStretcher.cpp
-    SincResampler.cpp)
+    SincResampler.cpp
+    Synth.cpp)
 add_library(devildj::dsp ALIAS devildj_dsp)
 
 target_sources(devildj_dsp PUBLIC
@@ -32,6 +33,7 @@ target_sources(devildj_dsp PUBLIC
         Resampler.h
         SincResampler.h
         StateVariableFilter.h
+        Synth.h
         Stretcher.h)
 
 target_include_directories(devildj_dsp PUBLIC "${PROJECT_SOURCE_DIR}/src")
