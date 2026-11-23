@@ -26,6 +26,7 @@
 #include "app/SampleBank.h"
 #include "app/TransitionStore.h"
 #include "app/SpotifyAuth.h"
+#include "app/SpotifyImportWindow.h"
 #include "beatmaker/Model.h"
 #include "beatmaker/Sequencer.h"
 #include "ui/RecorderPanel.h"
@@ -206,6 +207,8 @@ private:
     std::unique_ptr<app::SpotifyAuth> spotify; // P4-20
     juce::String spotifyClientId;
     int spotifyPort = 43879;
+    juce::Component::SafePointer<juce::DialogWindow> spotifyImportWindow;
+    std::unique_ptr<juce::FileChooser> spotifyChooser;
     void saveMixPlan();
     bool beatPlaying = false;
     bool beatSongMode = false, beatSwitchAtEnd = false;
@@ -438,7 +441,8 @@ public:
     void setNextTrackPanel(bool show); // P3-24
     // P4-20: Spotify sign-in (the Client ID and port from the settings).
     void setSpotifyApp(const juce::String& clientId, int redirectPort);
-    void spotifyMenu(int op); // 0 the Client ID (asks), 1 sign in, 2 sign out
+    void spotifyMenu(int op); // 0 the Client ID (asks), 1 sign in, 2 sign out, 3 import playlists (P4-21)
+    void showSpotifyImport();
     std::function<void(const juce::String& clientId)> onSpotifyClientIdChanged;
     std::function<void()> onSpotifyStateChanged; // signed in / out: the menu follows
     bool spotifySignedIn() const { return spotify != nullptr && spotify->signedIn(); }

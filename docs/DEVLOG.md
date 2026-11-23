@@ -11,6 +11,28 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-21 Spotify playlist import
+- What changed:
+  - `app/SpotifyApi` reads the owner's playlists (`/v1/me/playlists`, following `next`) and each one's tracks (title, artists, album, duration, ISRC; local files and episodes are skipped). It waits on 429 (Retry-After, 1-30 s) and refreshes the token once on 401. Only track lists are read: no Spotify audio is ever streamed or cached.
+  - `app/PlaylistMatch` matches each track to the library by name and duration:
+    - Titles are split into a base and a version (remix / edit / dub / VIP ...). Featuring credits move to the artists. Remaster and "original mix" are noise. A radio edit counts as the plain song. Accents are folded.
+    - Scores combine: the same base (else word overlap of at least half), the version (a remix is not the original), artists in common, and the duration within 3 s.
+    - Clearly best and >= 0.85 is matched; a close call is ambiguous (the owner picks); otherwise missing.
+    - A word index with per-entry word lists, candidates scored best-overlap first with an exact early stop: 500 tracks against 20,000 in about 1.5 s (Release).
+    - The plan's "ISRC tag" step is not used: the library stores no ISRC yet, so the ISRC is only kept for the report.
+  - `app/SpotifyImport`: library tracks from the database (the file name for untagged ones), an import plan per playlist, a library playlist "<name> (Spotify)" (numbered if taken) from the matches, and the missing list as "Artist - Title (Album) [ISRC]".
+  - `app/SpotifyImportWindow` (Decks > Spotify > Import playlists...):
+    - Tick the playlists (click or Space), then IMPORT, which works on a worker thread.
+    - A review shows the counts, a choice box per ambiguous track (or leave it out), and the missing tracks with COPY MISSING / SAVE MISSING....
+    - Then CREATE PLAYLISTS.
+- Tests: 5 new cases, all run offline.
+  - Splitting and normalising.
+  - Fixture matching: exact, featuring, the edit vs the original, a remix of another song sent to ambiguous, a duration tie-break, accents, the radio edit, duplicates ambiguous, missing.
+  - The 20k x 500 timing.
+  - The API against a fake `get`: paging, 429, 401 then refresh, skipping non-tracks.
+  - An import into a temporary database through the window: playlists created, a name clash numbered, the missing text.
+- Owner: after signing in (P4-20), import one real playlist and check the matches, the ambiguous choices and the missing list.
+
 ## 2026-11-23 · P4-20 Spotify sign-in
 - What changed:
   - `app/SpotifyAuth` does OAuth 2 authorization code with PKCE (RFC 7636), so there is no client secret.

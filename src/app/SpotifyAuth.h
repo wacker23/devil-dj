@@ -51,6 +51,8 @@ public:
     // A valid access token - refreshed (blocking, network) if it expires within a minute; empty if signed out or
     // the refresh fails (`error` says why).
     juce::String accessToken(juce::String* error = nullptr);
+    // P4-21: a new access token now (Spotify said the one we have is no good: a 401).
+    juce::String refreshNow(juce::String* error = nullptr);
 
     // Pieces, public for tests.
     static juce::String makeVerifier(juce::Random& random); // 64 characters of [A-Za-z0-9-._~]

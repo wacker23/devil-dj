@@ -2290,6 +2290,11 @@ void MainComponent::spotifyMenu(int op)
     }
     if (spotify == nullptr)
         setSpotifyApp(spotifyClientId, spotifyPort);
+    if (op == 3)
+    {
+        showSpotifyImport();
+        return;
+    }
     if (op == 2)
     {
         spotify->signOut();
@@ -2313,6 +2318,65 @@ void MainComponent::spotifyMenu(int op)
                                          safe->onSpotifyStateChanged();
                                  });
                          });
+}
+
+void MainComponent::showSpotifyImport()
+{
+    if (spotify == nullptr || !spotify->signedIn() || libraryDb == nullptr)
+    {
+        libraryBrowser->setStatus("Sign in to Spotify first (Decks > Spotify > Sign in).");
+        return;
+    }
+    if (spotifyImportWindow != nullptr)
+    {
+        spotifyImportWindow->toFront(true);
+        return;
+    }
+    // The API reads with the sign-in's token (refreshed when needed); the library through its own reader.
+    auto* auth = spotify.get();
+    auto api = std::make_shared<app::SpotifyApi>([auth](bool force, juce::String* error)
+                                                 { return force ? auth->refreshNow(error) : auth->accessToken(error); });
+    auto* db = libraryDb;
+    app::SpotifyImportWindow::Source source;
+    source.playlists = [api] { return api->playlists(); };
+    source.tracks = [api](const std::string& id) { return api->tracks(id); };
+    source.library = [db]
+    {
+        auto reader = db->openReader();
+        return reader ? app::loadLibraryTracks(*reader.value()) : std::vector<app::LibraryTrack>{};
+    };
+    source.create = [db](const app::ImportPlan& plan)
+    {
+        util::Result<std::int64_t> result = util::Result<std::int64_t>::fail("not written");
+        db->writeAndWait([&](library::Connection& c) { result = app::createImportedPlaylist(c, plan); });
+        return result;
+    };
+    source.saveText = [this](const juce::String& text)
+    {
+        spotifyChooser = std::make_unique<juce::FileChooser>(
+            "Save the tracks not in your library",
+            juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("Spotify tracks not in my library.txt"), "*.txt");
+        spotifyChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
+                                    [text](const juce::FileChooser& fc)
+                                    {
+                                        if (const auto f = fc.getResult(); f != juce::File())
+                                            f.replaceWithText(text);
+                                    });
+    };
+    auto* content = new app::SpotifyImportWindow(source);
+    content->onDone = [this](int created)
+    {
+        libraryBrowser->setStatus(juce::String(created) + " playlists imported from Spotify (matched to your own files).");
+    };
+    juce::DialogWindow::LaunchOptions o;
+    o.content.setOwned(content);
+    o.dialogTitle = "Import Spotify playlists";
+    o.dialogBackgroundColour = juce::Colour(0xff16161b);
+    o.escapeKeyTriggersCloseButton = true;
+    o.useNativeTitleBar = true;
+    o.resizable = true;
+    spotifyImportWindow = o.launchAsync();
+    content->start();
 }
 
 void MainComponent::saveMixPlan()

@@ -84,7 +84,7 @@ public:
     // P3-23: the layout - waveforms 0 horizontal / 1 vertical, the browser enlarged (Ctrl+B).
     std::function<void(int waveforms, bool bigBrowser)> onLayout;
     std::function<void(bool show)> onNextTrackPanel; // P3-24
-    // P4-20: Spotify - 0 the Client ID, 1 sign in, 2 sign out (playlist import: P4-21).
+    // P4-20: Spotify - 0 the Client ID, 1 sign in, 2 sign out, 3 import playlists (P4-21).
     std::function<void(int op)> onSpotify;
     void setSpotifyState(bool hasClientId, bool signedIn) noexcept
     {
@@ -155,6 +155,7 @@ private:
         SpotifyClientId,
         SpotifySignIn,
         SpotifySignOut,
+        SpotifyImport,
         ReloadKeymap,
         EditKeymap,
         OpenKeymapFolder,

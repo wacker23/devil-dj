@@ -135,6 +135,8 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
         spotify.addItem(SpotifyClientId, spotifyHasClientId ? "Client ID (set)..." : "Client ID (needed first)...");
         spotify.addItem(SpotifySignIn, spotifySignedIn ? "Signed in - sign in again" : "Sign in (in your browser)", spotifyHasClientId);
         spotify.addItem(SpotifySignOut, "Sign out", spotifySignedIn);
+        spotify.addSeparator();
+        spotify.addItem(SpotifyImport, "Import playlists (matched to your own files)...", spotifySignedIn);
         menu.addSubMenu("Spotify", spotify);
         menu.addSeparator();
         juce::PopupMenu keyMenu;
@@ -374,8 +376,9 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
         case SpotifyClientId:
         case SpotifySignIn:
         case SpotifySignOut:
+        case SpotifyImport:
             if (onSpotify)
-                onSpotify(menuItemID == SpotifyClientId ? 0 : menuItemID == SpotifySignIn ? 1 : 2);
+                onSpotify(menuItemID == SpotifyClientId ? 0 : menuItemID == SpotifySignIn ? 1 : menuItemID == SpotifySignOut ? 2 : 3);
             break;
 
         case LayoutNextTrack:

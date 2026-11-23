@@ -260,6 +260,15 @@ juce::String SpotifyAuth::accessToken(juce::String* error)
     return tokens().access;
 }
 
+juce::String SpotifyAuth::refreshNow(juce::String* error)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        current.expiresAtMs = 0; // as if it had expired
+    }
+    return accessToken(error);
+}
+
 void SpotifyAuth::signOut()
 {
     {
