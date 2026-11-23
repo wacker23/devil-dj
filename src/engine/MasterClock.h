@@ -22,7 +22,8 @@ struct ClockDeckInput
 // Source: a chosen deck, Auto (the leading deck while it plays, else the first playing synced deck with a grid,
 // else the first playing deck with a grid) or the internal tempo. While a deck
 // leads, the clock's beat is that deck's grid beat plus a whole number of bars (chosen when the deck takes over,
-// as close as possible to where the clock was), so bar counts don't jump and the beat follows the deck's phase.
+// and again when the deck jumps - a loop, a beat jump, a seek - as close as possible to where the clock was), so
+// bar counts don't jump back and the beat follows the deck's phase.
 // With no deck leading, the clock runs on from where it was at the internal tempo - which takes the last
 // leading deck's tempo - so the beat never jumps. Within a block the beat is linear in samples.
 //

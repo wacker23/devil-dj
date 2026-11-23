@@ -78,7 +78,9 @@ void MasterClock::beginBlock(int numSamples, std::span<const ClockDeckInput> dec
     if (next != kInternal)
     {
         const auto& d = decks[static_cast<std::size_t>(next)];
-        if (next != source) // a deck takes over: keep the bar count, take its phase
+        // A deck takes over - or the leading deck jumped (a loop wrapped, a beat jump, a seek): keep the bar count
+        // going, take its phase. (P4-18: before, the clock jumped back with every loop of the leading deck.)
+        if (next != source || std::abs(d.beat + barOffset - continued) > 0.5)
             barOffset = kBeatsPerBar * std::round((continued - d.beat) / kBeatsPerBar);
         beatStart = d.beat + barOffset;
         tempo = d.bpm;

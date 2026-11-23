@@ -11,6 +11,23 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-18 Effects and loops in transitions
+- What changed:
+  - **FX lane:** each deck's FX lane sends into an effect of its own, chosen from the beat FX (`TransitionCurves.fx`, time `fxBeats`).
+    - It is a send: the channel after its volume lane, × the lane value, goes into the effect, and the effect's wet output goes straight to the master. So an echo rings on after the deck is cut and after the transition ends.
+    - The tails run up to 16 s, then the effect stops being processed.
+    - The effects are made and prepared on the message thread by `startTransition` (new command `TransitionFxSetEffect`) and retired like the FX units' effects.
+  - **Loop out:** the outgoing deck loops the last 1 / 2 / 4 bars before the start beat, from the first block, using the deck's sample-accurate loop. It exits when the transition ends or is cancelled.
+  - **Presets and files:** the Echo out preset now really echoes (a ¾-beat echo). Saved presets keep the effect, its time and the loop.
+  - **Editor:** an FX type button (F; it adds a send lane to start from if there is none), the time (Shift+F) and LOOP (O).
+- Bug fixed: the master clock went back with every loop of the leading deck. It was the leading deck's beat plus a bar offset chosen only at takeover, so a loop wrap moved it back by the loop length. Quantize, sync targets and the Beat Maker followed it back. A curve transition with loop out never reached its end, and the new test hung until stopped. Now the bar offset is chosen again whenever the leading deck jumps more than half a beat (loop, beat jump, seek): the beat count goes on and the phase stays the deck's.
+- Tests:
+  - An echo out measured with the incoming deck silent: peak 0.68 during the transition, 0.21 a beat after the cut, 0.015 after the end, silent 20 s later. Without the effect it is silent at once after the cut. A send of 0 feeds nothing.
+  - Loop out: deck A stays inside the bar before the start and wraps exactly twice in 8 beats, then the loop is off.
+  - Presets / JSON / editor: FX and loop kept and edited.
+  - The clock: a leading deck looping 3 times keeps the clock running as if it had played on, in the deck's phase; a 3-beat jump takes the new phase.
+- Listening check (owner): Echo out and Loop out between two real tracks, by ear.
+
 ## 2026-11-23 · P4-17 Transition editor UI
 - What changed:
   - `ui/TransitionEditor` is a third bottom panel, MIX (Ctrl+Tab: Browser → Beat Maker → MIX).

@@ -58,7 +58,12 @@ struct LaneCurve
 struct TransitionCurves
 {
     float beats = 16.0f; // its length
-    float loopBeats = 0.0f; // P4-18: the outgoing deck loops its last this-many beats through it (0: no loop)
+    float loopBeats = 0.0f; // P4-18: the outgoing deck loops its last this-many beats before it, through it (0: no)
+    // P4-18: the effect each deck's FX lane sends into (a dsp::fx::EffectType; -1: none) - [0] outgoing, [1]
+    // incoming - and its time in beats. A send: the channel after its volume lane x the FX lane into the effect, its
+    // output added to the master, so a tail goes on after the deck is silent (an echo out).
+    std::array<std::int8_t, 2> fx{-1, -1};
+    float fxBeats = 0.75f;
     std::array<LaneCurve, kLaneCount> from, to; // the outgoing deck's lanes, the incoming deck's
 
     LaneCurve& lane(bool incoming, Lane l) { return (incoming ? to : from)[static_cast<std::size_t>(l)]; }

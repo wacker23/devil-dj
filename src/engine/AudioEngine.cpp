@@ -65,6 +65,7 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
     beatMaker->reverb->prepare(sampleRate, capacity);
     beatMaker->reverb->setBeats(1.0);
     beatMaker->due.clear();
+    transitionFxBus.setSize(4, capacity, false, true, false); // P4-18
     sequencer.reset();                      // P3-15
     if (!tapPrepared) // P3-16: once, for the fastest rate (the recorder thread may be reading it later)
     {
@@ -170,6 +171,8 @@ void AudioEngine::renderChunk(float* const* outputs, int numChannels, int offset
 {
     masterBus.clear(0, numSamples);
     cueBus.clear(0, numSamples);
+    transitionFxBus.clear(0, numSamples); // P4-18: this block's sends
+    transitionFxFed = {false, false};
 
     advanceClock(numSamples); // before the decks render: the clock reads their playheads at the block start
     renderDecks(numSamples);
@@ -1255,6 +1258,19 @@ void AudioEngine::setLowEq(DeckId deck, bool kill) noexcept
 bool AudioEngine::startTransition(StartTransition command, std::shared_ptr<const TransitionCurves> curves)
 {
     command.curves = curves.get();
+    // P4-18: its FX lanes' effects, made and prepared here (a new one replaces the one before).
+    if (curves != nullptr)
+        for (int side = 0; side < 2; ++side)
+            if (const int type = curves->fx[static_cast<std::size_t>(side)]; type >= 0 && type < dsp::fx::kEffectTypeCount)
+            {
+                auto effect = dsp::fx::makeEffect(static_cast<dsp::fx::EffectType>(type));
+                effect->prepare(sampleRate, preparedBlockSize);
+                effect->setBeats(curves->fxBeats);
+                auto* raw = effect.get();
+                ownedEffects.push_back(std::move(effect));
+                if (!send(TransitionFxSetEffect{static_cast<std::uint8_t>(side), raw}))
+                    ownedEffects.pop_back();
+            }
     // Kept until four more have been started: by then the audio thread has long let go of it (a new transition
     // ends the one before).
     heldCurves[static_cast<std::size_t>(heldNext)] = std::move(curves);
@@ -1352,6 +1368,13 @@ void AudioEngine::endTransition(bool finished) noexcept
             m.autoGain = false;
             m.autoGainStart = m.autoGainEnd = 1.0f;
         }
+        for (const auto d : {t.from, t.to}) // the FX lanes stop sending (the effects' tails go on)
+            mixer[d].transitionSend = -1;
+        if (transitionLoop) // the loop out ends with it
+        {
+            decks[t.from].deck.exitLoop();
+            transitionLoop = false;
+        }
         const auto side = t.saved[1].assign;
         if (finished && side != CrossfaderAssign::Thru)
             apply(SetParam{ParamId::Crossfader, side == CrossfaderAssign::A ? 0.0f : 1.0f});
@@ -1382,6 +1405,19 @@ void AudioEngine::runCurves() noexcept
         t.fromScale = static_cast<float>(mixer[t.from].crossfaderGain.value());
         for (const auto d : {t.from, t.to}) // the lanes do the levels from here
             apply(SetParam{channelParam(d, ChannelParam::CrossfaderAssign), static_cast<float>(static_cast<int>(CrossfaderAssign::Thru))});
+        // Loop out (P4-18): the outgoing deck loops the last loopBeats before the transition's start beat.
+        auto& slot = decks[t.from];
+        if (t.curves->loopBeats > 0.0f && !slot.grid.empty())
+        {
+            const double here = slot.grid.beatAt(slot.deck.position());
+            const double end = std::round(here - std::max(0.0, b0));
+            const double a = slot.grid.sampleAt(end - t.curves->loopBeats), e = slot.grid.sampleAt(end);
+            if (a >= 0.0 && e > a)
+            {
+                slot.deck.setLoop(a, e);
+                transitionLoop = true;
+            }
+        }
     }
     const auto& c = *t.curves;
     t.lanesUsed = 0;
@@ -1430,8 +1466,14 @@ void AudioEngine::runCurves() noexcept
                 case Lane::Filter:
                     apply(SetParam{channelParam(d, ChannelParam::Filter), 0.5f + 0.5f * std::clamp(v, -1.0f, 1.0f)});
                     break;
-                case Lane::FxSend: // P4-18 plays it; its value is published meanwhile
+                case Lane::FxSend: // into this side's effect (P4-18)
+                {
+                    auto& m = mixer[d];
+                    m.transitionSend = c.fx[static_cast<std::size_t>(k)] >= 0 ? k : -1;
+                    m.sendStart = v;
+                    m.sendEnd = evaluate(lane, std::max(0.0, b1));
                     break;
+                }
             }
         }
     }
@@ -1956,6 +1998,7 @@ void AudioEngine::renderDecks(int numSamples) noexcept
     }
     renderSampler(numSamples); // its own channel (P3-13)
     renderBeatMaker(numSamples); // and the Beat Maker's (P4-10)
+    processTransitionFx(numSamples); // a transition's send effects and their tails (P4-18)
 }
 
 void AudioEngine::renderBeatMaker(int numSamples) noexcept
@@ -1991,6 +2034,31 @@ void AudioEngine::apply(const SetDrumSound& command) noexcept
 void AudioEngine::apply(const SetSynthSound& command) noexcept
 {
     beatMaker->voices.setSynthSound(command.index, command.sound);
+}
+
+void AudioEngine::apply(const TransitionFxSetEffect& command) noexcept
+{
+    const auto side = std::min<std::size_t>(command.side, 1);
+    retireEffect(transitionFx[side]);
+    transitionFx[side] = command.effect;
+    transitionFxTail[side] = 0;
+}
+
+void AudioEngine::processTransitionFx(int numSamples) noexcept
+{
+    // The two send effects: what their FX lanes sent this block, then their tails until they have run out.
+    for (std::size_t side = 0; side < 2; ++side)
+    {
+        auto* fx = transitionFx[side];
+        if (fx == nullptr || (!transitionFxFed[side] && transitionFxTail[side] <= 0))
+            continue;
+        float* l = transitionFxBus.getWritePointer(static_cast<int>(2 * side));
+        float* r = transitionFxBus.getWritePointer(static_cast<int>(2 * side + 1));
+        fx->process(l, r, numSamples, beatContext());
+        masterBus.addFrom(0, 0, l, numSamples);
+        masterBus.addFrom(1, 0, r, numSamples);
+        transitionFxTail[side] = transitionFxFed[side] ? static_cast<int>(16.0 * sampleRate) : transitionFxTail[side] - numSamples;
+    }
 }
 
 void AudioEngine::apply(const SetSampleSound& command) noexcept
@@ -2085,6 +2153,20 @@ void AudioEngine::mixChannel(int channel, float* l, float* r, int numSamples) no
                 l[s] *= g;
                 r[s] *= g;
             }
+        }
+        if (m.transitionSend >= 0 && (m.sendStart > 0.0f || m.sendEnd > 0.0f)) // its FX lane (P4-18): into the send
+        {
+            const auto side = static_cast<std::size_t>(m.transitionSend);
+            float* sl = transitionFxBus.getWritePointer(static_cast<int>(2 * side));
+            float* sr = transitionFxBus.getWritePointer(static_cast<int>(2 * side + 1));
+            const float g0 = m.sendStart, step = (m.sendEnd - m.sendStart) / static_cast<float>(numSamples);
+            for (int s = 0; s < numSamples; ++s)
+            {
+                const float g = g0 + step * static_cast<float>(s);
+                sl[s] += g * l[s];
+                sr[s] += g * r[s];
+            }
+            transitionFxFed[side] = true;
         }
         if (m.crossfaderGain.isRamping() || m.crossfaderGain.value() != 1.0)
             for (int s = 0; s < numSamples; ++s)

@@ -1,5 +1,7 @@
 #include "app/TransitionPresets.h"
 
+#include "dsp/fx/BeatFx.h"
+
 #include <algorithm>
 
 namespace devildj::app
@@ -113,6 +115,8 @@ TransitionCurves presetShape(TransitionPreset p)
             set(c, true, Lane::EqLow, {{0.0f, kKill, Shape::Hold}, {0.75f, 0.0f}});
             break;
         case TransitionPreset::EchoOut:
+            c.fx = {static_cast<std::int8_t>(dsp::fx::EffectType::Echo), -1}; // a 3/4-beat echo on the old track
+            c.fxBeats = 0.75f;
             set(c, false, Lane::FxSend, {{0.5f, 0.0f, Shape::EaseIn}, {0.75f, 1.0f}});
             set(c, false, Lane::Volume, {{0.75f, 1.0f, Shape::Hold}, {0.76f, 0.0f}});
             set(c, true, Lane::Volume, {{0.75f, 0.0f, Shape::EaseOut}, {0.8f, 1.0f}});
@@ -177,6 +181,9 @@ juce::String curvesToJson(const TransitionCurves& shapeIn, const juce::String& n
     root->setProperty("version", 1);
     root->setProperty("name", name);
     root->setProperty("loopBeats", static_cast<double>(shape.loopBeats));
+    root->setProperty("fxOut", static_cast<int>(shape.fx[0]));
+    root->setProperty("fxIn", static_cast<int>(shape.fx[1]));
+    root->setProperty("fxBeats", static_cast<double>(shape.fxBeats));
     for (int k = 0; k < 2; ++k)
     {
         auto* side = new juce::DynamicObject();
@@ -205,6 +212,9 @@ bool curvesFromJson(const juce::String& json, TransitionCurves& shape, juce::Str
     shape.beats = 1.0f;
     name = root.getProperty("name", "").toString();
     shape.loopBeats = static_cast<float>(static_cast<double>(root.getProperty("loopBeats", 0.0)));
+    shape.fx = {static_cast<std::int8_t>(static_cast<int>(root.getProperty("fxOut", -1))),
+                static_cast<std::int8_t>(static_cast<int>(root.getProperty("fxIn", -1)))};
+    shape.fxBeats = static_cast<float>(static_cast<double>(root.getProperty("fxBeats", 0.75)));
     for (int k = 0; k < 2; ++k)
     {
         const auto side = root.getProperty(k == 0 ? "out" : "in", {});

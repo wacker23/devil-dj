@@ -51,6 +51,7 @@ target_sources(DevilDJTests PRIVATE
     engine/AudioDeviceServiceTests.cpp
     engine/VoicesTests.cpp
     engine/TransitionCurveTests.cpp
+    engine/TransitionFxTests.cpp
     engine/AudioEngineDeckTests.cpp
     engine/AudioEngineRoutingTests.cpp
     engine/AudioEngineTests.cpp

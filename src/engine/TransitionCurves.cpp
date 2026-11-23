@@ -64,6 +64,10 @@ float neutralValue(Lane lane) noexcept
 void normalize(TransitionCurves& c)
 {
     c.beats = std::clamp(c.beats, 1.0f, 256.0f);
+    c.loopBeats = std::clamp(c.loopBeats, 0.0f, 64.0f);
+    c.fxBeats = std::clamp(c.fxBeats, 1.0f / 16.0f, 16.0f);
+    for (auto& f : c.fx)
+        f = static_cast<std::int8_t>(std::clamp(static_cast<int>(f), -1, 13));
     for (auto* side : {&c.from, &c.to})
         for (int l = 0; l < kLaneCount; ++l)
         {

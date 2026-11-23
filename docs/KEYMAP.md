@@ -165,6 +165,9 @@ Mouse (drums): click a step to toggle it, drag along a row to paint, Alt-drag on
 | Start a bar earlier / later | Shift+, / Shift+. |
 | Preview from 2 bars before | Space |
 | Save as a preset | Ctrl+S |
+| The FX lane's effect (none, echo, ping pong, reverb, spiral, filter LFO, flanger, phaser, bit crush) | F |
+| The effect's time (1/4 … 4 beats) | Shift+F |
+| Loop out (none, 1, 2, 4 bars) | O |
 
 Mouse: click a lane point and drag it (quarter beats; Alt: free), click elsewhere to add one, right-click to delete, double-click for its shape, Shift-drag a track to move it against the other. The T key plays the transition shown here while it is for the two tracks on the decks.
 

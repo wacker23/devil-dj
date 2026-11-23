@@ -281,3 +281,41 @@ TEST_CASE("Master clock in the engine: follows the playing deck's grid and tempo
     blocks(1);
     CHECK(e.readState().masterSource == 0);
 }
+
+TEST_CASE("Master clock: the leading deck looping or jumping doesn't send the clock back (P4-18)", "[engine][clock]")
+{
+    MasterClock clock;
+    clock.prepare(kRate);
+    clock.reset();
+    std::array<FakeDeck, 2> decks{};
+    decks[0].playing = true;
+    decks[0].bpm = 120.0;
+    decks[0].beat = 10.0;
+    const auto inputs = [&] { return std::array<ClockDeckInput, 2>{decks[0].input(), decks[1].input()}; };
+    double last = -1e9, first = 0.0;
+    int loops = 0;
+    for (int i = 0; i < 2000; ++i)
+    {
+        clock.beginBlock(256, inputs());
+        // A 4-beat loop from beat 16 to 20: the deck wraps back; the clock goes on, in the deck's phase.
+        if (i == 0)
+            first = clock.beatAtBlockStart();
+        CHECK(clock.beatAtBlockStart() >= last);
+        CHECK(near(clock.beatAtBlockStart() - decks[0].beat, std::round(clock.beatAtBlockStart() - decks[0].beat), 1e-6));
+        last = clock.beatAtBlockStart();
+        decks[0].advance(256);
+        if (decks[0].beat >= 20.0)
+        {
+            decks[0].beat -= 4.0;
+            ++loops;
+        }
+    }
+    CHECK(loops == 3); // from beat 10 to the loop at 20, then every 4 of the 21.3 beats
+    CHECK(near(clock.beatAtBlockEnd(), first + 2000 * 256 * 2.0 / 48000.0, 1e-6)); // as if it had played on
+    // A jump of 3 beats: the clock takes the deck's new phase (to the nearest bar line of where it was).
+    const double before = clock.beatAtBlockEnd();
+    decks[0].beat += 3.0;
+    clock.beginBlock(256, inputs());
+    CHECK(std::abs(clock.beatAtBlockStart() - before) <= 2.0);
+    CHECK(near(std::fmod(clock.beatAtBlockStart() - decks[0].beat, 4.0), 0.0, 1e-6));
+}

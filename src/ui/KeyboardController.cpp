@@ -504,6 +504,9 @@ std::vector<KeyBinding> defaultKeymap()
     key(Period, mods::Shift, GA::TransMoveOutLater, tr);
     key(Space, mods::None, GA::TransPreview, tr);
     key(S, mods::Ctrl, GA::TransSavePreset, tr);
+    key(F, mods::None, GA::TransFxType, tr); // P4-18
+    key(F, mods::Shift, GA::TransFxTime, tr);
+    key(O, mods::None, GA::TransLoop, tr);
 
     // Code Beat editor.
     constexpr auto cb = KeyContext::CodeBeat;

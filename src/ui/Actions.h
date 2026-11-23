@@ -229,6 +229,9 @@ namespace devildj::ui
     X(TransMoveOutLater, "Transition: start a bar later", true)                                                        \
     X(TransPreview, "Transition: preview", false)                                                                      \
     X(TransSavePreset, "Transition: save as a preset", false)                                                          \
+    X(TransFxType, "Transition: the FX lane's effect", false)                                                          \
+    X(TransFxTime, "Transition: the effect's time", false)                                                             \
+    X(TransLoop, "Transition: loop out (none, 1, 2, 4 bars)", false)                                                   \
     X(CodeEvaluate, "Code Beat: evaluate", false)                                                                      \
     X(CodeEvaluateNow, "Code Beat: evaluate immediately", false)                                                       \
     X(CodeHush, "Code Beat: hush", false)                                                                              \

@@ -771,7 +771,7 @@ void MainComponent::registerActions()
                                });
     onPress(ui::globalCommand(GA::SwitchPanel), [this] { switchBottomPanel(); });
     // The transition editor's keys (P4-17).
-    for (int a = static_cast<int>(GA::TransLane1); a <= static_cast<int>(GA::TransSavePreset); ++a)
+    for (int a = static_cast<int>(GA::TransLane1); a <= static_cast<int>(GA::TransLoop); ++a)
         actions.setHandler(ui::globalCommand(static_cast<GA>(a)),
                            [this, a](Phase p)
                            {

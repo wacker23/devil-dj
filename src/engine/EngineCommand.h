@@ -523,6 +523,13 @@ struct SetSynthSound
 struct BeatMakerStop
 {
 };
+// P4-18: the effect a transition's FX lane sends into, for the outgoing (0) or incoming (1) deck (prepared and
+// owned like the FX units' - AudioEngine::startTransition makes them).
+struct TransitionFxSetEffect
+{
+    std::uint8_t side = 0;
+    dsp::fx::Effect* effect = nullptr;
+};
 // P4-13: a drum track's user sample (index = pattern x 16 + track); nullptr: none (a missing file plays nothing).
 // The sample stays alive while the app runs (app::SampleBank), so the audio thread may keep the pointer.
 struct SetSampleSound
@@ -545,7 +552,8 @@ using EngineCommand =
                  SetClockSource, SetInternalTempo, SetSync, SetQuantize, BeatJump, JumpBy, SetHotCues, HotCue,
                  SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle, SetSlicer, SlicerPad, FxSetEffect, FxCommand, SetColorFx, ReleaseFxCommand, PadFxSetEffect, PadFxCommand,
                  SamplerLoad, SamplerPad, SamplerSet, SequencerCommand, SequencerEvents,
-                 StartTransition, CancelTransition, SetDrumSound, SetSynthSound, BeatMakerStop, SetSampleSound>;
+                 StartTransition, CancelTransition, SetDrumSound, SetSynthSound, BeatMakerStop, SetSampleSound,
+                 TransitionFxSetEffect>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

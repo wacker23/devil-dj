@@ -85,6 +85,9 @@ public:
     juce::ComboBox& presetBox() { return presets; }
     juce::TextButton& autoButton() { return autoNow; }
     juce::TextButton& previewButton() { return preview; }
+    juce::TextButton& fxButton() { return fxType; }
+    juce::TextButton& loopButton() { return loop; }
+    static const std::vector<int>& fxChoices(); // the effects a transition can send into (-1: none)
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -126,6 +129,7 @@ private:
     std::array<juce::TextButton, engine::kLaneCount> laneButtons;
     juce::ComboBox length, presets;
     juce::TextButton autoNow{"AUTO"}, preview{"PREVIEW"}, save{"SAVE PRESET"};
+    juce::TextButton fxType{"FX: NONE"}, fxTime{"3/4"}, loop{"NO LOOP"};
     juce::Rectangle<int> view, reasonsArea;
 };
 

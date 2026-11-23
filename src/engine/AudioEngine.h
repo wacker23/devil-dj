@@ -176,6 +176,7 @@ private:
     void apply(const SetSynthSound& command) noexcept;
     void apply(const BeatMakerStop& command) noexcept;
     void apply(const SetSampleSound& command) noexcept;
+    void apply(const TransitionFxSetEffect& command) noexcept;
     void runTransition() noexcept; // the automation lanes, once a block (after the clock)
     void endTransition(bool finished) noexcept;
     void setLowEq(DeckId deck, bool kill) noexcept;
@@ -335,6 +336,14 @@ private:
     };
     Transition transition;
     void runCurves() noexcept; // P4-14: one block of a curve transition
+    // P4-18: the transition's two send effects, what was sent into them this block (4 x capacity: side 0 L / R,
+    // side 1 L / R) and how long their tails still run; the loop out.
+    std::array<dsp::fx::Effect*, 2> transitionFx{};
+    juce::AudioBuffer<float> transitionFxBus;
+    std::array<bool, 2> transitionFxFed{};
+    std::array<int, 2> transitionFxTail{};
+    bool transitionLoop = false;
+    void processTransitionFx(int numSamples) noexcept;
     std::array<std::shared_ptr<const TransitionCurves>, 4> heldCurves;
     int heldNext = 0;
     bool tapPrepared = false;
@@ -359,6 +368,9 @@ private:
         // value at its end (sample-accurate along the curve).
         bool autoGain = false;
         float autoGainStart = 1.0f, autoGainEnd = 1.0f;
+        // P4-18: a transition's FX lane - this channel (after its volume lane) x the lane into side 0 / 1's effect.
+        int transitionSend = -1;
+        float sendStart = 0.0f, sendEnd = 0.0f;
     };
     std::array<MixerChannel, kMaxChannels> mixer{};
     double crossfaderPosition = 0.5;

@@ -1,5 +1,7 @@
 #include "ui/TransitionEditor.h"
 
+#include "dsp/fx/BeatFx.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -46,6 +48,15 @@ const char* shapeName(engine::Shape s)
 }
 } // namespace
 
+const std::vector<int>& TransitionEditor::fxChoices()
+{
+    using T = dsp::fx::EffectType;
+    static const std::vector<int> c{-1, static_cast<int>(T::Echo), static_cast<int>(T::PingPong), static_cast<int>(T::Reverb),
+                                    static_cast<int>(T::Spiral), static_cast<int>(T::FilterLfo), static_cast<int>(T::Flanger),
+                                    static_cast<int>(T::Phaser), static_cast<int>(T::BitCrush)};
+    return c;
+}
+
 const std::vector<int>& TransitionEditor::lengths()
 {
     static const std::vector<int> l{1, 2, 4, 8, 12, 16, 24, 32};
@@ -85,11 +96,17 @@ TransitionEditor::TransitionEditor()
         c->setWantsKeyboardFocus(false);
         addAndMakeVisible(*c);
     }
-    for (auto* b : {&autoNow, &preview, &save})
+    for (auto* b : {&autoNow, &preview, &save, &fxType, &fxTime, &loop})
     {
         style(*b);
         addAndMakeVisible(*b);
     }
+    fxType.setTooltip("The effect this deck's FX lane sends into (F)");
+    fxType.onClick = [this] { perform(GA::TransFxType); };
+    fxTime.setTooltip("The effect's time in beats (Shift+F)");
+    fxTime.onClick = [this] { perform(GA::TransFxTime); };
+    loop.setTooltip("Loop out: the old track loops its last 1, 2 or 4 bars through the transition (O)");
+    loop.onClick = [this] { perform(GA::TransLoop); };
     autoNow.setTooltip("Plan it from the two tracks: where their phrases, intro and outro are, keys, tempo, energy (A)");
     autoNow.onClick = [this] { perform(GA::TransAuto); };
     preview.setTooltip("Play it, from 2 bars before (Space)");
@@ -155,6 +172,16 @@ void TransitionEditor::refresh()
     for (int i = 0; i < engine::kLaneCount; ++i)
         laneButtons[static_cast<std::size_t>(i)].setToggleState(static_cast<int>(selectedLane) == i, juce::dontSendNotification);
     length.setSelectedId(bars(), juce::dontSendNotification);
+    {
+        const int fx = current.curves.fx[incoming ? 1u : 0u];
+        fxType.setButtonText(juce::String("FX: ") + (fx < 0 ? juce::String("NONE")
+                                                            : juce::String(dsp::fx::effectTypeName(static_cast<dsp::fx::EffectType>(fx))).toUpperCase()));
+        const float b = current.curves.fxBeats;
+        fxTime.setButtonText(b == 0.75f ? juce::String("3/4") : b < 1.0f ? "1/" + juce::String(juce::roundToInt(1.0f / b)) : juce::String(b, 0));
+        const float lb = current.curves.loopBeats;
+        loop.setButtonText(lb <= 0.0f ? juce::String("NO LOOP") : "LOOP " + juce::String(juce::roundToInt(lb / 4.0f)) + (lb > 4.0f ? " BARS" : " BAR"));
+        loop.setToggleState(lb > 0.0f, juce::dontSendNotification);
+    }
     int presetId = 0;
     for (int i = 0; i < presets.getNumItems(); ++i)
         if (presets.getItemText(i) == current.preset)
@@ -283,6 +310,34 @@ bool TransitionEditor::perform(GlobalAction a)
     auto& pts = laneCurve(incoming, selectedLane).points;
     switch (a)
     {
+        case GA::TransFxType:
+        {
+            const auto& c = fxChoices();
+            auto& fx = current.curves.fx[incoming ? 1u : 0u];
+            const auto it = std::find(c.begin(), c.end(), static_cast<int>(fx));
+            const auto next = it == c.end() || it + 1 == c.end() ? c.front() : *(it + 1);
+            fx = static_cast<std::int8_t>(next);
+            if (next >= 0 && !laneCurve(incoming, Lane::FxSend).used()) // something to send: a lane to start from
+                laneCurve(incoming, Lane::FxSend).points = {{0.0f, 0.0f}, {static_cast<float>(len), 0.5f}};
+            changed();
+            return true;
+        }
+        case GA::TransFxTime:
+        {
+            static const float times[] = {0.25f, 0.5f, 0.75f, 1.0f, 2.0f, 4.0f};
+            auto& t = current.curves.fxBeats;
+            const auto it = std::find(std::begin(times), std::end(times), t);
+            t = it == std::end(times) || it + 1 == std::end(times) ? times[0] : *(it + 1);
+            changed();
+            return true;
+        }
+        case GA::TransLoop:
+        {
+            auto& lb = current.curves.loopBeats;
+            lb = lb <= 0.0f ? 4.0f : lb <= 4.0f ? 8.0f : lb <= 8.0f ? 16.0f : 0.0f;
+            changed();
+            return true;
+        }
         case GA::TransSide:
             incoming = !incoming;
             refresh();
@@ -546,6 +601,9 @@ void TransitionEditor::resized()
     for (auto& b : laneButtons)
         b.setBounds(bar.removeFromLeft(64).reduced(2));
     bar.removeFromLeft(8);
+    fxType.setBounds(bar.removeFromLeft(110).reduced(2));
+    fxTime.setBounds(bar.removeFromLeft(44).reduced(2));
+    loop.setBounds(bar.removeFromLeft(84).reduced(2));
     preview.setBounds(bar.removeFromLeft(80).reduced(2));
     save.setBounds(bar.removeFromLeft(100).reduced(2));
     area.removeFromTop(4);

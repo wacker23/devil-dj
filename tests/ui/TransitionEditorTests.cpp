@@ -208,7 +208,7 @@ TEST_CASE("Transition editor by mouse: add, drag, delete, shape, move a track, l
 TEST_CASE("Transition editor keys: every action on a key in its own context, none clash", "[ui][transition][keys]")
 {
     const auto map = ui::defaultKeymap();
-    for (int a = static_cast<int>(GA::TransLane1); a <= static_cast<int>(GA::TransSavePreset); ++a)
+    for (int a = static_cast<int>(GA::TransLane1); a <= static_cast<int>(GA::TransLoop); ++a)
     {
         INFO(ui::commandKey(ui::globalCommand(static_cast<GA>(a))));
         CHECK_FALSE(ui::keysOf(map, ui::globalCommand(static_cast<GA>(a)), ui::KeyContext::Transition).empty());
