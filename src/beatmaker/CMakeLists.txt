@@ -7,6 +7,8 @@ add_library(devildj_beatmaker INTERFACE)
 add_library(devildj::beatmaker ALIAS devildj_beatmaker)
 
 target_sources(devildj_beatmaker INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/DrumKits.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/DrumKits.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/Model.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Model.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/ProjectFile.cpp"

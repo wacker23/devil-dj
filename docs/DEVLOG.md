@@ -11,6 +11,22 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-04 Drum synths
+- What changed:
+  - `dsp/DrumSynth`: one `DrumVoice` covering the 11 sounds from BEATMAKER_SPEC §4.
+    - Kick: a sine with a 4–8× pitch drop over 20–80 ms, a 0.1–1.5 s decay, and a high-passed noise click.
+    - Snare: two triangle bodies and band-passed noise, with tone setting the mix and snap the noise decay.
+    - Clap: 4 bursts 8–12 ms apart, then a tail.
+    - Hats: six inharmonic squares, band-pass then high-pass at 7 kHz.
+    - Toms (low / mid / high), rim, cowbell (a two-stage decay) and shaker (a 10 ms attack).
+    - Every voice ends in a tanh soft clipper (drive). Parameters run 0..1. The noise is seeded per hit, so renders are repeatable.
+  - `engine::Voices` now has 16 drum-synth voices per source: one-shots that ignore the step gate, choked or stolen like the others, with sounds set by `setDrumSound`.
+  - `beatmaker/DrumKits`: 3–5 presets per sound (Tight, Boomy, Distorted, 808, …) and the kits Club, Minimal, Breaks, Trap and Lo-fi. It also maps the model's named parameters to the engine's drum sound.
+- Tests:
+  - Each sound with every parameter at 0 / 0.25 / 0.5 / 0.75 / 1, the extremes, out-of-range values and 20 random settings: all finite, all audible, all finish by themselves, peaks 0.13–1.16 (limit 2.0, i.e. +6 dBFS).
+  - Also covered: repeatable per seed, velocity scales the level, the kick's pitch falls, every kit's presets exist, the 16-voice pools per source, and the hats choking.
+- Listening note: the hidden test `[.listen]` with `DEVILDJ_RENDER_DIR` set writes every preset to WAV; 37 files are in `build/listen/drums/`. This needs the owner's ears; nothing has been judged by listening yet.
+
 ## 2026-11-23 · P4-03 Voices
 - What changed: `engine/Voices` holds fixed pools of 64 sample voices and 32 synth voices.
   - `start(event, offset)` begins a voice at an exact sample offset in the next block and returns its id.

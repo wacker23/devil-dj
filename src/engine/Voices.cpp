@@ -34,6 +34,15 @@ void Voices::reset() noexcept
     for (auto* pool : {&synths, &synthTails})
         for (auto& v : *pool)
             v.stage = Stage::Idle;
+    for (auto* pool : {&drums, &drumTails})
+        for (auto& v : *pool)
+            v.stage = Stage::Idle;
+}
+
+void Voices::setDrumSound(std::uint16_t index, const DrumSound& sound) noexcept
+{
+    if (index < kSounds)
+        drumSounds[index] = sound;
 }
 
 void Voices::setSample(std::uint16_t index, const SampleData* data) noexcept
@@ -42,8 +51,7 @@ void Voices::setSample(std::uint16_t index, const SampleData* data) noexcept
         sounds[index] = data;
 }
 
-template <std::size_t N>
-Voices::Voice& Voices::allocate(std::array<Voice, N>& pool, std::array<Voice, N>& tails) noexcept
+Voices::Voice& Voices::allocate(std::span<Voice> pool, std::span<Voice> tails) noexcept
 {
     for (auto& v : pool)
         if (v.stage == Stage::Idle)
@@ -106,6 +114,14 @@ void Voices::setUp(Voice& v, const ScheduledEvent& e, int offset) noexcept
         if (v.sample != nullptr)
             v.increment = std::max(0.0, static_cast<double>(e.speed)) * pitch * v.sample->sampleRate / rate;
     }
+    else if (e.kind == VoiceKind::DrumSynth)
+    {
+        const auto& sound = drumSounds[e.soundIndex % kSounds];
+        v.gateSamples = -1; // one-shot
+        v.sustain = 1.0f;
+        v.drum.prepare(rate);
+        v.drum.trigger(sound.kind, sound.params, 1.0f, static_cast<std::uint32_t>(v.serial));
+    }
     else
     {
         const double hz = 440.0 * std::pow(2.0, (static_cast<double>(e.note) - 69.0) / 12.0);
@@ -129,6 +145,8 @@ void Voices::choke(SourceId source, std::uint8_t group, int offset, const Voice*
         apply(v);
     for (auto& v : synths)
         apply(v);
+    for (auto& v : drums)
+        apply(v);
 }
 
 std::uint64_t Voices::start(const ScheduledEvent& e, int offset) noexcept
@@ -147,8 +165,9 @@ std::uint64_t Voices::start(const ScheduledEvent& e, int offset) noexcept
         v = &allocate(synths, synthTails);
     else
     {
-        ++unhandledEvents; // drum synths: P4-04
-        return 0;
+        const auto s = static_cast<std::size_t>(std::min(static_cast<int>(e.source), kSources - 1)) * kDrumVoicesPerSource;
+        v = &allocate(std::span<Voice>(drums).subspan(s, kDrumVoicesPerSource),
+                      std::span<Voice>(drumTails).subspan(s, kDrumVoicesPerSource));
     }
     setUp(*v, e, offset);
     if (e.chokeGroup != 0)
@@ -160,7 +179,7 @@ bool Voices::playing(std::uint64_t id) const noexcept
 {
     const auto in = [&](const auto& pool)
     { return std::any_of(pool.begin(), pool.end(), [&](const Voice& v) { return v.serial == id && v.stage != Stage::Idle && v.stage != Stage::Fade; }); };
-    return id != 0 && (in(samples) || in(synths));
+    return id != 0 && (in(samples) || in(synths) || in(drums));
 }
 
 bool Voices::envelopeStep(Voice& v) noexcept
@@ -243,6 +262,15 @@ void Voices::render(Voice& v, const VoiceBuses& b, int numSamples) noexcept
                 r = l;
             v.position += v.increment;
         }
+        else if (v.kind == VoiceKind::DrumSynth)
+        {
+            l = r = v.drum.next();
+            if (v.drum.finished())
+            {
+                v.stage = Stage::Idle;
+                break;
+            }
+        }
         else
         {
             l = r = static_cast<float>(std::sin(2.0 * std::numbers::pi * v.phase));
@@ -295,6 +323,15 @@ void Voices::process(const VoiceBuses& buses, int numSamples) noexcept
         for (auto& v : *pool)
             if (v.stage != Stage::Idle)
                 render(v, buses, numSamples);
+    for (auto* pool : {&drums, &drumTails})
+        for (auto& v : *pool)
+            if (v.stage != Stage::Idle)
+                render(v, buses, numSamples);
+}
+
+int Voices::activeDrumVoices() const noexcept
+{
+    return static_cast<int>(std::count_if(drums.begin(), drums.end(), [](const Voice& v) { return v.stage != Stage::Idle; }));
 }
 
 int Voices::activeSampleVoices() const noexcept

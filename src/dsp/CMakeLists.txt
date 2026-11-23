@@ -1,6 +1,7 @@
 # dsp: pure signal processing, no JUCE, no knowledge of decks or tracks (ARCHITECTURE §2). Normal static library.
 add_library(devildj_dsp STATIC
     DriftBuffer.cpp
+    DrumSynth.cpp
     Limiter.cpp
     fx/BeatFx.cpp
     fx/ColorFx.cpp
@@ -18,6 +19,7 @@ target_sources(devildj_dsp PUBLIC
     FILES
         Biquad.h
         DriftBuffer.h
+        DrumSynth.h
         fx/BeatFx.h
         fx/ColorFx.h
         fx/Effect.h

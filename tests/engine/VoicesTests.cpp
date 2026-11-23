@@ -89,12 +89,12 @@ TEST_CASE("Voices: a sample starts on its sample offset, ramps in, is panned, pi
     CHECK(b.l[300] > 0.9f);
     CHECK(std::abs(b.r[300]) < 1e-6f);
     CHECK(b.l[420] == 0.0f);
-    // Missing samples and drum synths (until P4-04) don't start.
+    // A missing sample doesn't start; a drum synth does (P4-04).
     CHECK(v.start(hit(9), 0) == 0);
     auto drum = hit(3);
     drum.kind = VoiceKind::DrumSynth;
-    CHECK(v.start(drum, 0) == 0);
-    CHECK(v.unhandled() == 2);
+    CHECK(v.start(drum, 0) != 0);
+    CHECK(v.unhandled() == 1);
 }
 
 TEST_CASE("Voices: stealing takes the oldest releasing voice, else the oldest playing one, without a click",
