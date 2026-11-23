@@ -11,6 +11,27 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-14 Transition curves in the engine
+- What changed:
+  - `engine/TransitionCurves`: per deck (outgoing / incoming), 6 lanes:
+    - volume 0..1 (after the fader);
+    - EQ low / mid / high in dB (kill below −100);
+    - filter −1 LP … 0 off … +1 HP;
+    - FX send 0..1 (played in P4-18).
+  - Each lane is breakpoints with shapes (linear, ease in, ease out, S-curve, hold). `evaluate` doesn't allocate.
+  - `StartTransition` gained a `curves` pointer. `AudioEngine::startTransition(command, shared_ptr)` keeps the last 4 curve sets alive on the message thread and sends the pointer.
+  - During a curve transition:
+    - Both decks come off the crossfader (THRU). The outgoing deck's lanes are scaled by the crossfader gain it had, so nothing jumps (the test found a 3 dB jump before this).
+    - Volume is a gain ramped sample by sample across each block after the fader. EQ and filter go through the channel's own parameters (smoothed).
+    - The lanes' current values are published in `TransitionState.lanes` / `lanesUsed`.
+    - At the end the outgoing deck pauses, both channels' EQ, filter and crossfader assign go back to what they were, and the crossfader goes to the incoming deck's side. Cancelling restores everything and the outgoing deck plays on.
+  - Without curves, P3-17's three styles run unchanged (P4-15 turns them into presets).
+- Tests: 4 new cases.
+  - The shapes, plus before / after, hold and normalizing.
+  - 1,500 blocks of a 16-beat transition: published lanes, EQ and filter equal their curves (worst error 0 / 0 dB / 3e-8). Everything is back afterwards, including a −3 dB mid set by the DJ.
+  - The volume lane measured within 0.1 dB at 0.5 (outgoing, crossfader centred) and 0.25 (incoming).
+  - Cancel midway. The old transition and Automix tests still pass.
+
 ## 2026-11-23 · Planning: transition editor and Spotify playlist import
 - The owner asked for a transition editor like the playlist mixers in streaming apps: two waveforms with volume / EQ / filter curves over them, presets, an Auto transition, effects and loops. They also asked to import their Spotify playlists. Added P4-14 … P4-21 before Phase 5 (the owner chose that over folding it into Phase 6).
 - Spotify: no outside app may play or mix Spotify audio. It is DRM-protected, and the Developer Policy / Terms list DJ / mixing ("segue, mix, re-mix or overlap") as a prohibited use. So the import reads track lists only and matches them to the owner's own files. The owner chose sign-in (PKCE) over CSV import. Their own Spotify developer app's Client ID is decision D8.

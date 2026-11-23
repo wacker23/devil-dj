@@ -81,6 +81,10 @@ public:
     // Latest published state. One reader thread only (the UI); the reference stays valid until the next call.
     const EngineState& readState() noexcept { return state.read(); }
 
+    // A transition with curves (P4-14), message thread: keeps the curves alive (the last few) and sends the command
+    // pointing at them. False if the command queue is full.
+    bool startTransition(StartTransition command, std::shared_ptr<const TransitionCurves> curves);
+
     // The Beat Maker's events (P4-10): its producer thread (only that one) pushes them; the audio thread plays
     // them at their samples on the BEATS channel.
     EventQueue& beatMakerEvents() noexcept { return beatMaker->queue; }
@@ -314,8 +318,25 @@ private:
         double beats = 16.0, startBeat = 0.0;
         TransitionStyle style = TransitionStyle::Blend;
         double crossfaderFrom = 0.0, crossfaderTo = 1.0, fromFader = 1.0;
+        // P4-14: curves, and what the two channels were before (put back at the end).
+        const TransitionCurves* curves = nullptr;
+        struct Saved
+        {
+            std::array<double, 3> eq{};
+            double filter = 0.5;
+            CrossfaderAssign assign = CrossfaderAssign::Thru;
+        };
+        std::array<Saved, 2> saved{}; // [0] the outgoing channel, [1] the incoming one
+        std::array<float, 12> lanes{};
+        std::uint16_t lanesUsed = 0;
+        // The outgoing deck's crossfader gain when it began: its lanes are scaled by it, so taking both decks off
+        // the crossfader (THRU) doesn't make it jump.
+        float fromScale = 1.0f;
     };
     Transition transition;
+    void runCurves() noexcept; // P4-14: one block of a curve transition
+    std::array<std::shared_ptr<const TransitionCurves>, 4> heldCurves;
+    int heldNext = 0;
     bool tapPrepared = false;
     bool sequencerMetronome = false;
     int seqClickPosition = 0, seqClickLength = 0, seqClickDelay = -1;
@@ -334,6 +355,10 @@ private:
         dsp::LevelMeter meter;          // pre-fader
         bool cue = false;
         dsp::LinearRamp cueSend; // 0/1, 20 ms: pre-fader signal into the cue bus
+        // P4-14: a transition's volume lane - a gain after the fader, from its value at the block's start to the
+        // value at its end (sample-accurate along the curve).
+        bool autoGain = false;
+        float autoGainStart = 1.0f, autoGainEnd = 1.0f;
     };
     std::array<MixerChannel, kMaxChannels> mixer{};
     double crossfaderPosition = 0.5;

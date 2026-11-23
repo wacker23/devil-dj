@@ -5,6 +5,7 @@
 #include "engine/Sequencer.h"
 #include "engine/MasterClock.h"
 #include "engine/OutputRouter.h"
+#include "engine/TransitionCurves.h"
 #include "engine/Voices.h"
 #include "util/Beatgrid.h"
 
@@ -498,6 +499,9 @@ struct StartTransition
     float beats = 16.0f;
     TransitionStyle style = TransitionStyle::Blend;
     double startBeat = -1.0;
+    // P4-14: the lanes to play instead of the style (its own length: curves->beats). Send it through
+    // AudioEngine::startTransition, which keeps it alive while the audio thread may read it.
+    const TransitionCurves* curves = nullptr;
 };
 
 struct CancelTransition

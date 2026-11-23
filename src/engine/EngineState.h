@@ -122,6 +122,11 @@ struct TransitionState
     float beats = 16.0f;
     double startBeat = 0.0;
     float progress = 0.0f; // 0..1
+    // P4-14: a curve transition - each lane's value now (the outgoing deck's 6, then the incoming deck's 6) and
+    // which lanes are used (bit i = lane i of that list).
+    bool curves = false;
+    std::uint16_t lanesUsed = 0;
+    std::array<float, 12> lanes{};
 };
 
 // The sequencer (P3-15).

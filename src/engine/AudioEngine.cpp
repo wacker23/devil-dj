@@ -1252,6 +1252,16 @@ void AudioEngine::setLowEq(DeckId deck, bool kill) noexcept
     apply(SetParam{channelParam(deck, ChannelParam::EqLow), kill ? -1000.0f : 0.0f});
 }
 
+bool AudioEngine::startTransition(StartTransition command, std::shared_ptr<const TransitionCurves> curves)
+{
+    command.curves = curves.get();
+    // Kept until four more have been started: by then the audio thread has long let go of it (a new transition
+    // ends the one before).
+    heldCurves[static_cast<std::size_t>(heldNext)] = std::move(curves);
+    heldNext = (heldNext + 1) % static_cast<int>(heldCurves.size());
+    return send(command);
+}
+
 void AudioEngine::apply(const StartTransition& command) noexcept
 {
     if (transition.active)
@@ -1266,6 +1276,27 @@ void AudioEngine::apply(const StartTransition& command) noexcept
     t.active = true;
     t.from = command.from;
     t.to = command.to;
+    if (command.curves != nullptr) // P4-14: the lanes, any length
+    {
+        t.curves = command.curves;
+        t.beats = std::max(1.0, static_cast<double>(command.curves->beats));
+        t.startBeat = command.startBeat >= 0.0 ? command.startBeat : std::ceil(clock.beatAtBlockEnd() - 1e-9);
+        // What the two channels are now (put back at the end), then both THRU: the lanes do the levels, the
+        // crossfader goes to the incoming deck's side at the end.
+        for (int k = 0; k < 2; ++k)
+        {
+            const auto d = static_cast<std::size_t>(k == 0 ? t.from : t.to);
+            auto& sv = t.saved[static_cast<std::size_t>(k)];
+            for (int b = 0; b < ChannelStrip::kBands; ++b)
+                sv.eq[static_cast<std::size_t>(b)] = strips[d].bandDb(b);
+            sv.filter = filterKnob[d];
+            sv.assign = mixer[d].assign;
+        }
+        to.synced = true;
+        if (!to.deck.isPlaying())
+            queue(to, {DeckSlot::QueuedAction::Kind::Play, t.startBeat, 0.0});
+        return;
+    }
     t.beats = command.beats >= 24.0f ? 32.0 : command.beats >= 12.0f ? 16.0 : 8.0;
     t.style = command.style;
     t.startBeat = command.startBeat >= 0.0 ? command.startBeat
@@ -1304,6 +1335,29 @@ void AudioEngine::endTransition(bool finished) noexcept
                 to.queued[static_cast<std::size_t>(kept++)] = to.queued[static_cast<std::size_t>(k)];
         to.queuedCount = kept;
     }
+    if (t.curves != nullptr) // P4-14: both channels as they were; finished, the crossfader on the incoming side
+    {
+        if (finished)
+            decks[t.from].deck.pause();
+        for (int k = 0; k < 2; ++k)
+        {
+            const auto d = k == 0 ? t.from : t.to;
+            const auto& sv = t.saved[static_cast<std::size_t>(k)];
+            apply(SetParam{channelParam(d, ChannelParam::EqLow), static_cast<float>(sv.eq[0])});
+            apply(SetParam{channelParam(d, ChannelParam::EqMid), static_cast<float>(sv.eq[1])});
+            apply(SetParam{channelParam(d, ChannelParam::EqHigh), static_cast<float>(sv.eq[2])});
+            apply(SetParam{channelParam(d, ChannelParam::Filter), static_cast<float>(sv.filter)});
+            apply(SetParam{channelParam(d, ChannelParam::CrossfaderAssign), static_cast<float>(static_cast<int>(sv.assign))});
+            auto& m = mixer[d];
+            m.autoGain = false;
+            m.autoGainStart = m.autoGainEnd = 1.0f;
+        }
+        const auto side = t.saved[1].assign;
+        if (finished && side != CrossfaderAssign::Thru)
+            apply(SetParam{ParamId::Crossfader, side == CrossfaderAssign::A ? 0.0f : 1.0f});
+        t.curves = nullptr;
+        return;
+    }
     if (finished && t.style != TransitionStyle::EchoOut)
         decks[t.from].deck.pause(); // the echo out ends it itself
     if (!finished && releaseFx[t.from].stage() == dsp::fx::ReleaseFx::Stage::Held)
@@ -1316,11 +1370,85 @@ void AudioEngine::endTransition(bool finished) noexcept
         apply(SetParam{channelParam(t.from, ChannelParam::Fader), static_cast<float>(t.fromFader)});
 }
 
+void AudioEngine::runCurves() noexcept
+{
+    auto& t = transition;
+    const double b0 = clock.beatAtBlockStart() - t.startBeat, b1 = clock.beatAtBlockEnd() - t.startBeat;
+    if (b0 < 0.0 && b1 <= 0.0)
+        return; // waiting for its beat
+    if (!t.started)
+    {
+        t.started = true;
+        t.fromScale = static_cast<float>(mixer[t.from].crossfaderGain.value());
+        for (const auto d : {t.from, t.to}) // the lanes do the levels from here
+            apply(SetParam{channelParam(d, ChannelParam::CrossfaderAssign), static_cast<float>(static_cast<int>(CrossfaderAssign::Thru))});
+    }
+    const auto& c = *t.curves;
+    t.lanesUsed = 0;
+    for (int k = 0; k < 2; ++k)
+    {
+        const auto d = k == 0 ? t.from : t.to;
+        const auto& lanes = k == 0 ? c.from : c.to;
+        for (int l = 0; l < kLaneCount; ++l)
+        {
+            const auto& lane = lanes[static_cast<std::size_t>(l)];
+            const auto slot = static_cast<std::size_t>(k * kLaneCount + l);
+            if (!lane.used())
+            {
+                t.lanes[slot] = neutralValue(static_cast<Lane>(l));
+                if (k == 0 && static_cast<Lane>(l) == Lane::Volume) // no volume lane: as loud as it was
+                {
+                    auto& m = mixer[d];
+                    m.autoGain = true;
+                    m.autoGainStart = m.autoGainEnd = t.fromScale;
+                }
+                continue;
+            }
+            t.lanesUsed = static_cast<std::uint16_t>(t.lanesUsed | (1u << slot));
+            const float v = evaluate(lane, std::max(0.0, b0));
+            t.lanes[slot] = v;
+            switch (static_cast<Lane>(l))
+            {
+                case Lane::Volume:
+                {
+                    auto& m = mixer[d];
+                    const float scale = k == 0 ? t.fromScale : 1.0f;
+                    m.autoGain = true;
+                    m.autoGainStart = v * scale;
+                    m.autoGainEnd = evaluate(lane, std::max(0.0, b1)) * scale;
+                    break;
+                }
+                case Lane::EqLow:
+                case Lane::EqMid:
+                case Lane::EqHigh:
+                {
+                    const auto band = static_cast<int>(l) - static_cast<int>(Lane::EqLow);
+                    const auto p = band == 0 ? ChannelParam::EqLow : band == 1 ? ChannelParam::EqMid : ChannelParam::EqHigh;
+                    apply(SetParam{channelParam(d, p), v});
+                    break;
+                }
+                case Lane::Filter:
+                    apply(SetParam{channelParam(d, ChannelParam::Filter), 0.5f + 0.5f * std::clamp(v, -1.0f, 1.0f)});
+                    break;
+                case Lane::FxSend: // P4-18 plays it; its value is published meanwhile
+                    break;
+            }
+        }
+    }
+    if (b0 >= t.beats)
+        endTransition(true);
+}
+
 void AudioEngine::runTransition() noexcept
 {
     auto& t = transition;
     if (!t.active)
         return;
+    if (t.curves != nullptr)
+    {
+        runCurves();
+        return;
+    }
     const double p = (clock.beatAtBlockStart() - t.startBeat) / t.beats;
     if (p < 0.0)
         return; // waiting for its beat
@@ -1948,6 +2076,16 @@ void AudioEngine::mixChannel(int channel, float* l, float* r, int numSamples) no
             }
         }
         strips[i].applyFader(l, r, numSamples);
+        if (m.autoGain) // a transition's volume lane (P4-14), along the block
+        {
+            const float g0 = m.autoGainStart, step = (m.autoGainEnd - m.autoGainStart) / static_cast<float>(numSamples);
+            for (int s = 0; s < numSamples; ++s)
+            {
+                const float g = g0 + step * static_cast<float>(s);
+                l[s] *= g;
+                r[s] *= g;
+            }
+        }
         if (m.crossfaderGain.isRamping() || m.crossfaderGain.value() != 1.0)
             for (int s = 0; s < numSamples; ++s)
             {
@@ -2172,6 +2310,9 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
     current.transition.style = static_cast<std::uint8_t>(transition.style);
     current.transition.beats = static_cast<float>(transition.beats);
     current.transition.startBeat = transition.startBeat;
+    current.transition.curves = transition.active && transition.curves != nullptr; // P4-14
+    current.transition.lanesUsed = transition.lanesUsed;
+    current.transition.lanes = transition.lanes;
     current.transition.progress = transition.active && transition.started
                                       ? static_cast<float>(std::clamp((clock.beatAtBlockEnd() - transition.startBeat) / transition.beats, 0.0, 1.0))
                                       : 0.0f;

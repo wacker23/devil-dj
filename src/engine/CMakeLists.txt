@@ -42,6 +42,8 @@ target_sources(devildj_engine INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/TrackDecoder.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/TrackLoader.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/TrackLoader.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/TransitionCurves.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/TransitionCurves.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/Voices.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Voices.h")
 
