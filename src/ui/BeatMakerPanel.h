@@ -2,7 +2,8 @@
 
 // The Beat Maker's bottom panel (P4-07): DRUMS (the step grid) or SYNTH (the piano roll) for the pattern shown,
 // Tab switching between them, and the edit history - every edit a snapshot of the project in a juce::UndoManager,
-// one undo step per key press or click, a whole drag as one (Ctrl+Z / Ctrl+Y).
+// one undo step per key press or click, a whole drag as one (Ctrl+Z / Ctrl+Y). P4-08: drag snapshots coalesce;
+// at least 100 steps are kept, and older ones beyond a 64 MB history are dropped.
 
 #include "beatmaker/Model.h"
 #include "ui/Actions.h"
@@ -48,9 +49,13 @@ private:
     beatmaker::Project* project = nullptr;
     beatmaker::Project snapshot;
     bool dragging = false;
+    int lastGesture = -1; // grid presses + roll presses when the last step began
     int shownView = 0;
     std::vector<beatmaker::Note> noteClipboard;
-    juce::UndoManager undo{1 << 30, 200};
+    // At least 100 steps kept; beyond that, older ones go once the history holds more than 64 MB.
+    static constexpr int kHistoryBytes = 64 << 20;
+    static constexpr int kMinimumSteps = 100;
+    juce::UndoManager undo{kHistoryBytes, kMinimumSteps};
     juce::TextButton drumsTab{"DRUMS"}, synthTab{"SYNTH"};
     StepGrid stepGrid;
     PianoRoll pianoRoll;

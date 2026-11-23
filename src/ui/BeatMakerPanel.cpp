@@ -1,5 +1,7 @@
 #include "ui/BeatMakerPanel.h"
 
+#include <algorithm>
+
 namespace devildj::ui
 {
 
@@ -10,7 +12,23 @@ const juce::Colour kPanel(0xff1f1f26);
 const juce::Colour kText(0xffe8e8ee);
 const juce::Colour kAccent(0xffe0483c);
 
-// One edit: the whole project before and after (a project is a few kilobytes).
+// Roughly how many bytes a project copy holds (the history's budget is counted in these).
+int projectBytes(const beatmaker::Project& p)
+{
+    std::size_t n = sizeof(beatmaker::Project) + p.unknown.size();
+    for (const auto& pat : p.patterns)
+    {
+        n += pat.unknown.size();
+        for (const auto& d : pat.drums)
+            n += sizeof(d) + d.steps.size() * sizeof(beatmaker::Step) + d.sound.params.size() * 48 + d.unknown.size();
+        for (const auto& s : pat.synths)
+            n += sizeof(s) + s.notes.size() * sizeof(beatmaker::Note) + s.preset.params.size() * 48 + s.unknown.size();
+    }
+    return static_cast<int>(std::min<std::size_t>(n, 1u << 30));
+}
+
+// One edit: the whole project before and after (a project is a few kilobytes). Within one transaction (a drag)
+// the snapshots coalesce into one: the first "before", the last "after".
 class Snapshot final : public juce::UndoableAction
 {
 public:
@@ -30,7 +48,13 @@ public:
         project = was;
         return true;
     }
-    int getSizeInUnits() override { return 1; }
+    int getSizeInUnits() override { return projectBytes(was) + projectBytes(now); }
+    juce::UndoableAction* createCoalescedAction(juce::UndoableAction* next) override
+    {
+        if (auto* later = dynamic_cast<Snapshot*>(next); later != nullptr && &later->project == &project)
+            return new Snapshot(project, was, later->now);
+        return nullptr;
+    }
 
 private:
     beatmaker::Project& project;
@@ -56,7 +80,13 @@ BeatMakerPanel::BeatMakerPanel()
     addChildComponent(pianoRoll);
     stepGrid.onChanged = [this] { record(); };
     pianoRoll.onChanged = [this] { record(); };
-    stepGrid.onPattern = [this](int p) { pianoRoll.setPattern(p); };
+    stepGrid.onPattern = [this](int p)
+    {
+        pianoRoll.setPattern(p);
+        // A pattern shown for the first time got its 8 rows: part of the state, not an edit of its own.
+        if (project != nullptr)
+            snapshot = *project;
+    };
     stepGrid.onPlayStop = [this]
     {
         if (onPlayStop)
@@ -88,9 +118,11 @@ void BeatMakerPanel::record()
         return;
     // A drag is one step: a new transaction when it starts, the rest merged into it.
     const bool drag = stepGrid.isDragging() || pianoRoll.isDragging();
-    if (!drag || !dragging)
+    const int gesture = stepGrid.gesture() + pianoRoll.gesture();
+    if (!drag || !dragging || gesture != lastGesture)
         undo.beginNewTransaction();
     dragging = drag;
+    lastGesture = gesture;
     undo.perform(new Snapshot(*project, snapshot, *project));
     snapshot = *project;
     if (onChanged)
@@ -99,11 +131,11 @@ void BeatMakerPanel::record()
 
 void BeatMakerPanel::afterHistory()
 {
-    if (project != nullptr)
-        snapshot = *project;
     dragging = false;
     stepGrid.modelChanged();
     pianoRoll.modelChanged();
+    if (project != nullptr) // after the views (a pattern shown first fills in its rows): not an edit of its own
+        snapshot = *project;
     if (onChanged)
         onChanged();
 }

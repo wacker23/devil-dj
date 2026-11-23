@@ -36,6 +36,7 @@ public:
 
     std::function<void()> onChanged;
     bool isDragging() const noexcept { return drag != Drag::None; }
+    int gesture() const noexcept { return gestures; } // counts mouse presses (one undo step per drag)
 
     bool perform(GlobalAction action);
 
@@ -111,6 +112,7 @@ private:
     std::vector<std::size_t> dragNotes; // the notes a drag moves (a chord drawn moves together)
     std::vector<beatmaker::Note> dragStart;
     int dragTick = 0, dragPitch = 0;
+    int gestures = 0;
 
     std::array<juce::TextButton, beatmaker::kMaxSynthTracks> trackButtons;
     juce::ComboBox sound, scaleChoice, rootChoice, chordChoice;

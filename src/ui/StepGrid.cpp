@@ -534,6 +534,7 @@ juce::Rectangle<int> StepGrid::cellBounds(int t, int s) const
 
 void StepGrid::pressAt(juce::Point<int> p, juce::ModifierKeys mods)
 {
+    ++gestures;
     drag = Drag::None;
     if (laneArea.contains(p))
     {

@@ -36,6 +36,7 @@ public:
     std::function<void()> onPlayStop;         // the PLAY button / Space
     std::function<void(int pattern)> onPattern; // the pattern shown changed (A-H)
     bool isDragging() const noexcept { return drag != Drag::None; }
+    int gesture() const noexcept { return gestures; } // counts mouse presses (one undo step per drag)
     void modelChanged(); // the project changed underneath (undo): keep the cursor in range, redraw
 
     // The playing step of the shown pattern (-1: stopped), and whether the Beat Maker plays (the button's light).
@@ -123,6 +124,7 @@ public:
 private:
     Drag drag = Drag::None;
     bool paintOn = true;
+    int gestures = 0;
     int dragTrack = 0;
 
     juce::TextButton play{"PLAY"}, length{"16 STEPS"}, pageButton{"PAGE 1/1"};

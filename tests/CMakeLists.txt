@@ -95,6 +95,7 @@ target_sources(DevilDJTests PRIVATE
     ui/NextTrackPanelTests.cpp
     ui/StepGridTests.cpp
     ui/PianoRollTests.cpp
+    ui/UndoTests.cpp
     ui/KeymapOverlayTests.cpp
     ui/LibraryBrowserTests.cpp
     ui/MixerViewTests.cpp

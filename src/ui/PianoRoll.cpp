@@ -480,6 +480,7 @@ bool PianoRoll::perform(GlobalAction a)
 
 void PianoRoll::pressAt(juce::Point<int> p, juce::ModifierKeys mods)
 {
+    ++gestures;
     drag = Drag::None;
     if (project == nullptr)
         return;

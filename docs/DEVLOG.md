@@ -11,6 +11,17 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-08 Undo / redo
+- Undo itself arrived in P4-07, as project snapshots in a juce::UndoManager. This task made it solid:
+  - The snapshots of a drag coalesce into one, holding the first "before" and the last "after".
+  - Every mouse press starts its own step. Before this, two drags in a row with no key between them merged into one step; the 100-step test found it.
+  - A history size: at least 100 steps are always kept, and older ones go once the history passes 64 MB (sized from each snapshot's steps and notes). Before this nothing was ever trimmed.
+  - The 8 rows a pattern gets when first shown are part of the state, not an undo step of their own.
+- Tests: 3 cases.
+  - 100 random edits across the grid and the roll (toggles, velocity, probability, micro-timing, ratchet, mute, sound, swing, length, notes, arp, and 7-cell drags, each drag checked to be one coalesced action), undone one at a time through every saved state back to the start, then redone through every state. The keys give the same result.
+  - 150 edits are all kept, and a loaded project clears the history.
+  - A new pattern's rows are not an undo step.
+
 ## 2026-11-23 · P4-07 Piano roll UI
 - What changed:
   - `ui/PianoRoll`, one synth track at a time:
