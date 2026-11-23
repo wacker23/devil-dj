@@ -29,6 +29,7 @@ struct MainLayout
     std::array<juce::Rectangle<int>, 4> tabs;                       // its tab buttons
     bool panelVisible = true;
     juce::Rectangle<int> browser;
+    juce::Rectangle<int> nextTrack; // P3-24: the Next Track panel (empty when hidden / no room)
 };
 
 struct LayoutSizes
@@ -40,7 +41,8 @@ struct LayoutSizes
     int verticalWaveWidth = 120;
 };
 
-MainLayout computeLayout(juce::Rectangle<int> window, WaveLayout layout, bool browserBig, const LayoutSizes& sizes = {});
+MainLayout computeLayout(juce::Rectangle<int> window, WaveLayout layout, bool browserBig, const LayoutSizes& sizes = {},
+                         bool nextTrackPanel = false);
 
 // The transform that shows a WaveformView of logical size (length x width) as a column `column` with time running
 // down (a quarter turn clockwise). Give the component bounds (0, 0, column.height, column.width) and this transform.

@@ -47,6 +47,10 @@ struct Suggestion
     bool wildcard = false;
     std::vector<std::string> reasons;
     std::array<std::optional<double>, kFeatureCount> features{};
+    // For the Next Track panel (P3-24): up to 4 chips - key, tempo, energy, then sound / groove / history - each its
+    // reason and the feature's value (how good); and every feature as "name  value x weight" lines.
+    std::vector<std::pair<std::string, double>> chips;
+    std::string breakdown;
 };
 
 struct MatchResult

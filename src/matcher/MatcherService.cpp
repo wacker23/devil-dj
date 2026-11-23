@@ -3,6 +3,7 @@
 #include "library/Database.h"
 
 #include <chrono>
+#include <cstdio>
 
 namespace devildj::matcher
 {
@@ -95,6 +96,35 @@ MatchResult MatcherService::run(library::Connection& db, const MatchRequest& r, 
         out.reasons = s.reasons;
         for (std::size_t i = 0; i < out.features.size(); ++i)
             out.features[i] = s.features[i].value;
+        for (const auto id : {FeatureId::Key, FeatureId::Tempo, FeatureId::Energy, FeatureId::Sound, FeatureId::Groove,
+                              FeatureId::History})
+        {
+            const auto& f = s.features[static_cast<std::size_t>(id)];
+            if (f.value && !f.reason.empty() && out.chips.size() < 4)
+                out.chips.emplace_back(f.reason, *f.value);
+        }
+        for (int i = 0; i < kFeatureCount; ++i)
+        {
+            const auto& f = s.features[static_cast<std::size_t>(i)];
+            char line[160];
+            if (f.value)
+                std::snprintf(line, sizeof(line), "%-8s %.2f x %.1f  %s\n", featureName(static_cast<FeatureId>(i)),
+                              *f.value, weights.w[static_cast<std::size_t>(i)], f.reason.c_str());
+            else
+                std::snprintf(line, sizeof(line), "%-8s -\n", featureName(static_cast<FeatureId>(i)));
+            out.breakdown += line;
+        }
+        if (s.penalty > 0.0)
+        {
+            char line[64];
+            std::snprintf(line, sizeof(line), "penalty  -%.2f\n", s.penalty);
+            out.breakdown += line;
+        }
+        {
+            char line[64];
+            std::snprintf(line, sizeof(line), "score    %.2f%s", s.score, s.wildcard ? "  (wildcard)" : "");
+            out.breakdown += line;
+        }
         result.suggestions.push_back(std::move(out));
     }
     result.milliseconds = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();

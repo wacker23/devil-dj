@@ -18,6 +18,7 @@
 #include "ui/DeckView.h"
 #include "ui/FxPanel.h"
 #include "ui/KeymapEditor.h"
+#include "ui/NextTrackPanel.h"
 #include "ui/RecorderPanel.h"
 #include "ui/SamplerPanel.h"
 #include "engine/Recorder.h"
@@ -162,8 +163,25 @@ private:
     int suggestionHighlight = 0;
     int analysisRuns = 0;
     std::unique_ptr<juce::TimedCallback> matcherTimer;
-    void askMatcher();
+    void askMatcher(bool now = false); // now: whatever the triggers say (a load, a setting changed)
     void loadSuggestion();
+    // The Next Track panel (P3-24) and the matcher's settings it shows.
+    ui::NextTrackPanel nextTrackPanel;
+    bool showNextTrack = true;
+    int matcherIntent = 1, matcherKeyPolicy = 1, matcherScope = 0, matcherPreset = 0;
+    std::vector<double> energyHistory;
+    std::int64_t lastMasterTrack = 0;
+    std::vector<matcher::Preset> matcherPresets = matcher::defaultPresets();
+    void showSuggestions();
+    void previewSuggestion(bool down);
+    struct Preview
+    {
+        bool on = false;
+        int deck = -1;
+        float fader = 1.0f;
+        bool cue = false;
+    } preview;
+    std::optional<double> energyOf(std::int64_t trackId);
     void queueAutomix();
     void applyAutomixSettings();
     void showPanel(int which);
@@ -344,6 +362,8 @@ public:
     std::function<void(const ui::AutomixPanel::Settings&)> onAutomixSettingsChanged;
     // P3-23: the layout (0 horizontal waveforms, 1 vertical) and the enlarged browser; changes reported to save.
     void setLayout(int waveforms, bool bigBrowser);
+    void setNextTrackPanel(bool show); // P3-24
+    std::function<void(bool show)> onNextTrackPanelChanged;
     std::function<void(int waveforms, bool bigBrowser)> onLayoutChanged;
     std::function<void(const juce::String& json)> onPadFxPresetsChanged;
     void setIsolator(bool on);

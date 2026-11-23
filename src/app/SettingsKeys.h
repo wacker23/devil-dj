@@ -79,6 +79,8 @@ inline const SettingKey<bool> touchMode{"touchMode", false};
 // P3-23: the layout - waveforms 0 across / 1 upright - and the enlarged browser.
 inline const SettingKey<int> waveLayout{"waveLayout", 0};
 inline const SettingKey<bool> browserBig{"browserBig", false};
+// P3-24: the Next Track panel beside the browser.
+inline const SettingKey<bool> nextTrackPanel{"nextTrackPanel", true};
 inline const SettingKey<double> brakeSeconds{"brakeSeconds", 1.0};
 inline const SettingKey<double> spinBackSeconds{"spinBackSeconds", 1.0};
 

@@ -311,12 +311,42 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
                     safe->suggestions = r.suggestions;
                     safe->suggestionsFor = r.contextTrackId;
                     safe->suggestionHighlight = 0;
+                    safe->showSuggestions();
                     util::logInfo("Matcher: {} suggestions from {} candidates in {:.1f} ms", r.suggestions.size(),
                                   r.candidates, r.milliseconds);
                 });
         };
         matcherTimer = std::make_unique<juce::TimedCallback>([this] { askMatcher(); });
-        matcherTimer->startTimerHz(4);
+        matcherTimer->startTimerHz(10);
+    }
+    // The Next Track panel (P3-24).
+    addAndMakeVisible(nextTrackPanel);
+    {
+        auto s = nextTrackPanel.state();
+        for (const auto& p : matcherPresets)
+            s.presets.add(juce::String(p.name));
+        nextTrackPanel.setState(s);
+    }
+    const auto changed = [this]
+    {
+        showSuggestions();
+        askMatcher(true);
+    };
+    nextTrackPanel.onIntent = [this, changed](int i) { matcherIntent = i; changed(); };
+    nextTrackPanel.onKeyPolicy = [this, changed](int i) { matcherKeyPolicy = i; changed(); };
+    nextTrackPanel.onScope = [this, changed](int i) { matcherScope = i; changed(); };
+    nextTrackPanel.onPreset = [this, changed](int i) { matcherPreset = i; changed(); };
+    nextTrackPanel.onHighlight = [this](int row)
+    {
+        suggestionHighlight = row;
+        showSuggestions();
+    };
+    nextTrackPanel.onLoad = [this](int row)
+    {
+        suggestionHighlight = row;
+        loadSuggestion();
+    };
+    {
     }
     for (auto* tab : {&fxTab, &samplerTab, &recordTab, &automixTab})
     {
@@ -475,6 +505,8 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     loader.callbacks.onLoaded = [this](engine::DeckId deck, const engine::TrackBuffer& t)
     {
         loadGridFor(deck, t.file, t.sampleRate); // P2-14
+        juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this)]
+                                        { if (safe != nullptr) safe->askMatcher(true); }); // P3-24: at once
         if (deck < 2 && automixLoading[deck] >= 0) // Automix's next track is on the deck (with its grid)
         {
             automix.loaded(deck, automixLoading[deck]);
@@ -730,7 +762,24 @@ void MainComponent::registerActions()
             {
                 if (!suggestions.empty())
                     suggestionHighlight = (suggestionHighlight + 1) % static_cast<int>(suggestions.size());
+                showSuggestions();
             });
+    actions.setHandler(ui::globalCommand(GA::PreviewSuggestion),
+                       [this](Phase p)
+                       {
+                           if (p != Phase::Repeat)
+                               previewSuggestion(p == Phase::Press);
+                       });
+    const auto matcherChanged = [this]
+    {
+        showSuggestions();
+        askMatcher(true);
+    };
+    onPress(ui::globalCommand(GA::CycleIntent), [this, matcherChanged] { matcherIntent = (matcherIntent + 1) % 4; matcherChanged(); });
+    onPress(ui::globalCommand(GA::MatcherPreset),
+            [this, matcherChanged] { matcherPreset = (matcherPreset + 1) % static_cast<int>(matcherPresets.size()); matcherChanged(); });
+    onPress(ui::globalCommand(GA::MatcherKeyPolicy), [this, matcherChanged] { matcherKeyPolicy = (matcherKeyPolicy + 1) % 3; matcherChanged(); });
+    onPress(ui::globalCommand(GA::MatcherScope), [this, matcherChanged] { matcherScope = 1 - matcherScope; matcherChanged(); });
     onPress(ui::globalCommand(GA::AutoTransition), [this] { autoTransition(); }); // T (P3-17)
     onPress(ui::globalCommand(GA::AutoTransitionCancel), [this] { engine.send(engine::CancelTransition{}); });
     // FX (P3-09): F5 / F7 the unit on / off, F6 / F8 slot 1's next effect, Shift+F5 / Shift+F7 the target.
@@ -1514,7 +1563,7 @@ void MainComponent::autoTransition()
                                         static_cast<float>(transitionBeats), style, -1.0});
 }
 
-void MainComponent::askMatcher()
+void MainComponent::askMatcher(bool now)
 {
     if (matcherService == nullptr)
         return;
@@ -1529,8 +1578,18 @@ void MainComponent::askMatcher()
         snap.masterFraction = s.decks[static_cast<std::size_t>(master)].positionSamples /
                               s.decks[static_cast<std::size_t>(master)].lengthSamples;
     snap.analysisVersion = analysisRuns;
-    if (!matcherTriggers.update(snap) || deckTrackId(static_cast<engine::DeckId>(master)) == 0)
+    const bool fire = matcherTriggers.update(snap);
+    if ((!fire && !now) || master < 0 || deckTrackId(static_cast<engine::DeckId>(master)) == 0)
         return;
+    // The energy line: the master tracks so far (the last 5).
+    if (const auto id = deckTrackId(static_cast<engine::DeckId>(master)); id != lastMasterTrack)
+    {
+        lastMasterTrack = id;
+        if (const auto e = energyOf(id))
+            energyHistory.push_back(*e);
+        if (energyHistory.size() > 5)
+            energyHistory.erase(energyHistory.begin());
+    }
     const auto& a = s.decks[static_cast<std::size_t>(master)];
     matcher::MatchRequest r;
     r.contextTrackId = deckTrackId(static_cast<engine::DeckId>(master));
@@ -1538,7 +1597,117 @@ void MainComponent::askMatcher()
     r.keyLockOff = !s.decks[static_cast<std::size_t>(1 - master)].keyLock;
     r.nowUnixSeconds = juce::Time::currentTimeMillis() / 1000;
     r.playedThisSession = {deckTrackId(0), deckTrackId(1)};
+    r.intent = matcherIntent == 0 ? matcher::Intent::Down : matcherIntent == 2 ? matcher::Intent::Up
+              : matcherIntent == 3                       ? matcher::Intent::Switch
+                                                         : matcher::Intent::Hold;
+    r.keyPolicy = matcherKeyPolicy == 0 ? matcher::KeyPolicy::Strict : matcherKeyPolicy == 2 ? matcher::KeyPolicy::Off
+                                                                                           : matcher::KeyPolicy::Relaxed;
+    r.scope.playlistId = matcherScope == 1 ? libraryBrowser->shownPlaylist() : 0;
+    r.preset = matcherPresets[static_cast<std::size_t>(std::clamp(matcherPreset, 0, static_cast<int>(matcherPresets.size()) - 1))].name;
     matcherService->request(std::move(r));
+}
+
+std::optional<double> MainComponent::energyOf(std::int64_t trackId)
+{
+    if (gridReader == nullptr)
+        return std::nullopt;
+    if (auto* st = gridReader->prepare("SELECT energy FROM track_features WHERE track_id = ?"))
+    {
+        st->bind(1, trackId);
+        std::optional<double> e;
+        if (st->step())
+            e = st->getOptionalDouble(0);
+        st->reset();
+        return e;
+    }
+    return std::nullopt;
+}
+
+void MainComponent::showSuggestions()
+{
+    auto s = nextTrackPanel.state();
+    s.intent = matcherIntent;
+    s.keyPolicy = matcherKeyPolicy;
+    s.scope = matcherScope;
+    s.preset = matcherPreset;
+    s.highlight = suggestionHighlight;
+    s.energyHistory = energyHistory;
+    s.rows.clear();
+    s.keyA = -1;
+    s.context = {};
+    if (gridReader != nullptr)
+    {
+        library::TrackRepository tracks(*gridReader);
+        if (const auto a = tracks.get(suggestionsFor))
+            s.keyA = a->musicalKey.value_or(-1);
+        for (const auto& sug : suggestions)
+        {
+            ui::NextTrackPanel::Row row;
+            if (const auto t = tracks.get(sug.trackId))
+            {
+                row.title = juce::String::fromUTF8(t->title.c_str());
+                if (row.title.isEmpty())
+                    row.title = juce::File(juce::String::fromUTF8(t->path.c_str())).getFileNameWithoutExtension();
+                row.artist = juce::String::fromUTF8(t->artist.c_str());
+                row.bpm = t->bpm.value_or(0.0);
+                row.key = t->musicalKey.value_or(-1);
+            }
+            row.energy = energyOf(sug.trackId);
+            row.score = sug.score;
+            row.wildcard = sug.wildcard;
+            for (const auto& [text, value] : sug.chips)
+                row.chips.push_back({juce::String::fromUTF8(text.c_str()), ui::NextTrackPanel::chipLevel(value)});
+            row.breakdown = juce::String::fromUTF8(sug.breakdown.c_str());
+            s.rows.push_back(std::move(row));
+        }
+    }
+    if (s.rows.empty())
+        s.context = matcherService == nullptr ? "No library: suggestions need it."
+                                              : "Play a track from the library: suggestions for the other deck appear here.";
+    nextTrackPanel.setState(std::move(s));
+}
+
+void MainComponent::previewSuggestion(bool down)
+{
+    // Ctrl+N held: the highlighted suggestion on the idle deck, in the headphones only (its fader down meanwhile),
+    // from a third of the way in; let go: paused, everything back.
+    const auto& s = engine.readState();
+    if (!down)
+    {
+        if (preview.on && preview.deck >= 0)
+        {
+            const auto d = static_cast<engine::DeckId>(preview.deck);
+            engine.send(engine::Pause{d});
+            engine.send(engine::Seek{d, s.decks[d].cuePointSamples});
+            engine.send(engine::SetParam{engine::channelParam(d, engine::ChannelParam::Fader), preview.fader});
+            engine.send(engine::SetParam{engine::channelParam(d, engine::ChannelParam::Cue), preview.cue ? 1.0f : 0.0f});
+        }
+        preview.on = false;
+        return;
+    }
+    const int idle = !s.decks[0].playing ? 0 : !s.decks[1].playing ? 1 : -1;
+    if (idle < 0 || suggestions.empty())
+        return;
+    const auto& pick = suggestions[static_cast<std::size_t>(std::clamp(suggestionHighlight, 0, static_cast<int>(suggestions.size()) - 1))];
+    if (deckTrackId(static_cast<engine::DeckId>(idle)) != pick.trackId)
+    {
+        loadSuggestion(); // on the deck first; the next Ctrl+N previews it
+        return;
+    }
+    const auto d = static_cast<engine::DeckId>(idle);
+    preview = {true, idle, s.channels[d].fader, s.channels[d].cue};
+    engine.send(engine::SetParam{engine::channelParam(d, engine::ChannelParam::Fader), 0.0f});
+    engine.send(engine::SetParam{engine::channelParam(d, engine::ChannelParam::Cue), 1.0f});
+    engine.send(engine::Seek{d, s.decks[d].lengthSamples / 3.0});
+    engine.send(engine::Play{d});
+}
+
+void MainComponent::setNextTrackPanel(bool show)
+{
+    showNextTrack = show;
+    resized();
+    if (onNextTrackPanelChanged)
+        onNextTrackPanelChanged(show);
 }
 
 void MainComponent::loadSuggestion()
@@ -2481,7 +2650,9 @@ void MainComponent::resized()
     sizes.mixerMinimumHeight = ui::MixerView::kMinimumHeight;
     sizes.mixerPreferredHeight = ui::MixerView::kPreferredHeight;
     sizes.panelHeight = ui::FxPanel::kPreferredHeight;
-    const auto l = app::computeLayout(getLocalBounds(), waveLayout, browserBig, sizes);
+    const auto l = app::computeLayout(getLocalBounds(), waveLayout, browserBig, sizes, showNextTrack);
+    nextTrackPanel.setBounds(l.nextTrack);
+    nextTrackPanel.setVisible(!l.nextTrack.isEmpty());
     deckA.setBounds(l.deckA);
     deckB.setBounds(l.deckB);
     mixer.setBounds(l.mixer);

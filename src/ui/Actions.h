@@ -95,6 +95,9 @@ namespace devildj::ui
     X(NextSuggestion, "Next suggestion", true)                                                                         \
     X(PreviewSuggestion, "Preview suggestion (hold)", false)                                                           \
     X(CycleIntent, "Cycle intent", false)                                                                              \
+    X(MatcherPreset, "Next Track: next preset", false)                                                                 \
+    X(MatcherKeyPolicy, "Next Track: key policy (strict / relaxed / any)", false)                                      \
+    X(MatcherScope, "Next Track: scope (library / the playlist shown)", false)                                         \
     X(RateTransitionUp, "Rate last transition up", false)                                                              \
     X(RateTransitionDown, "Rate last transition down", false)                                                          \
     X(Quantize, "Quantize on/off", false)                                                                              \

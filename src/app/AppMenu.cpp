@@ -129,6 +129,7 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
         layout.addItem(LayoutVertical, "Waveforms upright (beside the mixer)", true, layoutWaves == 1);
         layout.addSeparator();
         layout.addItem(LayoutBigBrowser, "Enlarged browser (Ctrl+B)", true, layoutBigBrowser);
+        layout.addItem(LayoutNextTrack, "Next Track panel (beside the browser)", true, layoutNextTrack);
         menu.addSubMenu("Layout", layout);
         menu.addSeparator();
         juce::PopupMenu keyMenu;
@@ -363,6 +364,12 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
             highQuality = !highQuality;
             if (onHighQualityResampling)
                 onHighQualityResampling(highQuality);
+            break;
+
+        case LayoutNextTrack:
+            layoutNextTrack = !layoutNextTrack;
+            if (onNextTrackPanel)
+                onNextTrackPanel(layoutNextTrack);
             break;
 
         case LayoutHorizontal:

@@ -243,6 +243,13 @@ public:
             mainComponent->setLayout(waves, big);
         }
         menu->onLayout = [this](int waves, bool big) { mainComponent->setLayout(waves, big); };
+        menu->setNextTrackPanel(settings->get(keys::nextTrackPanel));
+        mainComponent->setNextTrackPanel(settings->get(keys::nextTrackPanel));
+        menu->onNextTrackPanel = [this](bool show)
+        {
+            settings->set(keys::nextTrackPanel, show);
+            mainComponent->setNextTrackPanel(show);
+        };
         menu->onTouchMode = [this](bool on)
         {
             settings->set(keys::touchMode, on);

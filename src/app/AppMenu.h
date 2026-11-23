@@ -83,6 +83,8 @@ public:
     std::function<void(bool on)> onTouchMode;
     // P3-23: the layout - waveforms 0 horizontal / 1 vertical, the browser enlarged (Ctrl+B).
     std::function<void(int waveforms, bool bigBrowser)> onLayout;
+    std::function<void(bool show)> onNextTrackPanel; // P3-24
+    void setNextTrackPanel(bool show) noexcept { layoutNextTrack = show; }
     void setLayout(int waveforms, bool bigBrowser) noexcept
     {
         layoutWaves = waveforms;
@@ -142,6 +144,7 @@ private:
         LayoutHorizontal,
         LayoutVertical,
         LayoutBigBrowser,
+        LayoutNextTrack,
         ReloadKeymap,
         EditKeymap,
         OpenKeymapFolder,
@@ -182,6 +185,7 @@ private:
     bool touchMode = false;
     int layoutWaves = 0;
     bool layoutBigBrowser = false;
+    bool layoutNextTrack = true;
     int keyNotation = 0;
     bool autoGain = true;
     int autoGainTarget = -10;

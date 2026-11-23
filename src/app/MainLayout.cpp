@@ -6,7 +6,18 @@
 namespace devildj::app
 {
 
-MainLayout computeLayout(juce::Rectangle<int> window, WaveLayout layout, bool browserBig, const LayoutSizes& s)
+static void splitNextTrack(MainLayout& out, bool show)
+{
+    // The Next Track panel takes the browser's right side when it fits (the browser keeps at least 560 px).
+    if (show && out.browser.getWidth() >= 560 + 6 + 380)
+    {
+        out.nextTrack = out.browser.removeFromRight(std::min(440, out.browser.getWidth() / 3 + 40));
+        out.browser.removeFromRight(6);
+    }
+}
+
+MainLayout computeLayout(juce::Rectangle<int> window, WaveLayout layout, bool browserBig, const LayoutSizes& s,
+                         bool nextTrackPanel)
 {
     MainLayout out;
     const bool vertical = layout == WaveLayout::Vertical;
@@ -38,11 +49,13 @@ MainLayout computeLayout(juce::Rectangle<int> window, WaveLayout layout, bool br
     if (browserBig)
     {
         out.browser = area;
+        splitNextTrack(out, nextTrackPanel);
         return out;
     }
     const int browserHeight =
         std::max(160, area.getHeight() - (vertical ? 0 : 2 * 100 + 12) - s.panelHeight - 6);
     out.browser = area.removeFromBottom(browserHeight);
+    splitNextTrack(out, nextTrackPanel);
     area.removeFromBottom(6);
     auto panel = area.removeFromBottom(s.panelHeight);
     auto tabs = panel.removeFromLeft(64);

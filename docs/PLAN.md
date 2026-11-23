@@ -423,7 +423,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
   2-deck horizontal (default) and vertical waveform layouts; browser-enlarged layout; layout persisted.
   Done when: switch layouts while playing without glitches.
 
-- [ ] **P3-24 Next Track panel**
+- [x] **P3-24 Next Track panel**
   UI from MATCHER_SPEC §6: scope, preset, intent ↓ → ↑ ⤨, key policy; top-10 list with score bars and reason chips; full breakdown on hover/long-press; energy mini-line and Camelot wheel. Keys N / Shift+N / Ctrl+N / Ctrl+Shift+N per KEYMAP.
   Done when: suggestions refresh within 100 ms of loading a track or changing intent; every control reachable by keyboard.
 

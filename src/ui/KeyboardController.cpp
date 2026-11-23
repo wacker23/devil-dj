@@ -371,6 +371,9 @@ std::vector<KeyBinding> defaultKeymap()
     key(N, mods::Shift, GA::NextSuggestion);
     key(N, mods::Ctrl, GA::PreviewSuggestion);
     key(N, mods::Ctrl | mods::Shift, GA::CycleIntent);
+    key(N, mods::Alt, GA::MatcherPreset); // P3-24
+    key(N, mods::Alt | mods::Shift, GA::MatcherKeyPolicy);
+    key(N, mods::Ctrl | mods::Alt, GA::MatcherScope);
     key(Quote, mods::None, GA::RateTransitionUp);
     key(Quote, mods::Shift, GA::RateTransitionDown);
     key(Backquote, mods::None, GA::Quantize);
