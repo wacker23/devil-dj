@@ -11,6 +11,12 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · Planning: transition editor and Spotify playlist import
+- The owner asked for a transition editor like the playlist mixers in streaming apps: two waveforms with volume / EQ / filter curves over them, presets, an Auto transition, effects and loops. They also asked to import their Spotify playlists. Added P4-14 … P4-21 before Phase 5 (the owner chose that over folding it into Phase 6).
+- Spotify: no outside app may play or mix Spotify audio. It is DRM-protected, and the Developer Policy / Terms list DJ / mixing ("segue, mix, re-mix or overlap") as a prohibited use. So the import reads track lists only and matches them to the owner's own files. The owner chose sign-in (PKCE) over CSV import. Their own Spotify developer app's Client ID is decision D8.
+- Auto transition: built as analysis plus rules (phrases, intros / outros, tempo, key, energy) with reasons shown, not a trained model. Learning from the owner's edits can follow in Phase 6, next to the matcher's ranker.
+- P4-14 changes the engine's transition command (curves instead of the three fixed styles). That is an ARCHITECTURE-level change; the owner approved this block of work.
+
 ## 2026-11-23 · P4-13 User samples
 - What changed:
   - `app/SampleBank` decodes WAV / AIFF / FLAC once, mono or stereo at their own rate, up to 60 s. Every sample stays loaded for the session, so the audio thread never reads freed memory.

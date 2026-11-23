@@ -39,6 +39,7 @@ Timeline assumes focused full-time work; at a part-time pace expect 9–12 month
 | D5 | Name "Devil-DJ" trademark check (Korea + target markets) | Keep as working name |
 | D6 | JUCE licence tier | Starter (free up to $20k/yr revenue) or AGPL if D1 = open |
 | D7 | ASIO support licence (proprietary agreement vs GPLv3) | WASAPI only until decided |
+| D8 | Spotify developer app for playlist import (P4-20) | The owner creates one (free, developer.spotify.com) and enters its Client ID in Settings; until then, no Spotify import |
 
 ---
 
@@ -458,6 +459,22 @@ Spec: `docs/BEATMAKER_SPEC.md`.
 - [x] **P4-11 Live record** — record pad/keyboard hits into steps (quantized, overdub). Done when: manual test.
 - [x] **P4-12 Export** — render pattern/song offline to WAV; to sampler slot; to a library track. Done when: offline render bit-identical to real-time output for a deterministic pattern.
 - [x] **P4-13 User samples** — drag WAVs into drum tracks; sample folder `Documents\Devil-DJ\Samples`. Done when: missing-sample handling tested.
+
+### Transition editor and playlist import (added 2026-11-23 at the owner's request, before Phase 5)
+
+A per-transition editor in the spirit of streaming apps' playlist mixers - our own design, names and look - and
+playlist import from Spotify (track lists only: Spotify audio can't be played or mixed by other apps, it is
+DRM-protected and the Spotify Developer Terms forbid mixing or overlapping it; tracks are matched to the owner's own
+files).
+
+- [ ] **P4-14 Transition curves in the engine** — a transition = its length in beats, where it starts on the outgoing deck, where the incoming one comes in, and automation lanes for each deck: volume, EQ low / mid / high, filter (low-pass ← off → high-pass), FX send; breakpoints with curve shapes. The engine plays the lanes sample-accurately (per-block ramps), replacing P3-17's fixed styles (Blend / Filter sweep / Echo out become presets). Done when: tests show every lane's value at given beats within 0.1 dB / 0.01 of its curve; the old auto-transition tests still pass.
+- [ ] **P4-15 Transition presets** — our own set (e.g. Smooth blend, Bass swap, Filter rise, High-pass out, Echo out, Quick cut, Long blend, Loop out), each a lane set scaled to the chosen length (1–32 bars). Done when: each preset's curves tested; a user preset can be saved and reloaded.
+- [ ] **P4-16 Auto transition** — chooses the mix-out / mix-in points and the preset by analysis, not a learned model: phrase boundaries (8 / 16 / 32-bar blocks from the downbeats and energy changes), the outgoing track's outro and the incoming track's intro, tempo gap, key compatibility (shorter and filter-led when keys clash), energy direction; bass swap on a phrase line. Every choice comes with its reasons. Later (Phase 6) it learns from the owner's edits like the matcher's ranker. Done when: on generated tracks with known phrases it picks phrase lines; on `DEVILDJ_EVAL_DIR` tracks the owner rates at least 7 of 10 Auto transitions as usable.
+- [ ] **P4-17 Transition editor UI** — the outgoing track's end over the incoming track's start, both waveforms on one beat grid; the lanes drawn over them (each its own colour), breakpoints dragged / added / removed, the lane picker, length in bars, the preset row with Auto first, move either track against the other on the grid, preview from 2 bars before (headphones or master). Every control on a key. Done when: everything editable by keyboard and mouse; preview plays the edited transition.
+- [ ] **P4-18 Effects and loops in transitions** — an FX lane per deck (echo, reverb, filter LFO, … from the beat FX) and "loop out": the outgoing deck loops its last 1 / 2 / 4 bars through the transition. Done when: tests for the FX lane and loop timing; listening check.
+- [ ] **P4-19 Saved transitions in Automix** — a transition saved per track pair (library table), shown in playlists; Automix and the auto-transition key play the saved one, else Auto. Done when: a 10-track Automix plays its custom transitions unattended and on the beat.
+- [ ] **P4-20 Spotify sign-in** — OAuth 2 with PKCE (no client secret) through the system browser and a loopback redirect on 127.0.0.1; the Client ID of the owner's own Spotify developer app in Settings (decision D8); tokens refreshed and stored encrypted for the Windows user (DPAPI). No new library (JUCE networking). Done when: sign in, refresh after expiry and sign out work; tests against a local fake server.
+- [ ] **P4-21 Spotify playlist import** — the owner's playlists listed; the chosen ones read (title, artists, album, duration, ISRC) and matched to library tracks (ISRC tag, else normalised artist + title with duration ± 3 s, best match first, ambiguous ones asked); a library playlist made from the matches, the rest listed (and exportable as text). Never streams or caches Spotify audio. Done when: matching tests on fixture playlists (exact, featuring / remix variants, missing); manual import of one of the owner's playlists.
 
 **Phase 4 gate:** build an 8-track beat with a bassline, play it under a synced track, switch patterns on the bar, render it to a sampler slot.
 
