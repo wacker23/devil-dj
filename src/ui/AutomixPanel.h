@@ -18,6 +18,7 @@ public:
         bool repeat = false, random = false;
         int beats = 16;
         int style = 0; // 0 blend, 1 filter sweep, 2 echo out
+        bool smart = false; // P3-25: the best next track each time (the Next Track settings)
     };
 
     AutomixPanel();
@@ -36,6 +37,7 @@ public:
     juce::TextButton& queueButton() noexcept { return queue; }
     juce::TextButton& repeatButton() noexcept { return repeat; }
     juce::TextButton& randomButton() noexcept { return random; }
+    juce::TextButton& smartButton() noexcept { return smart; }
     juce::TextButton& beatsButton() noexcept { return beats; }
     juce::TextButton& styleButton() noexcept { return style; }
     const juce::String& statusText() const noexcept { return status; }
@@ -43,7 +45,7 @@ public:
 private:
     void changed();
     Settings current;
-    juce::TextButton automix{"AUTOMIX"}, queue{"QUEUE"}, repeat{"REPEAT"}, random{"RANDOM"}, beats{"16 BEATS"},
+    juce::TextButton automix{"AUTOMIX"}, queue{"QUEUE"}, repeat{"REPEAT"}, random{"RANDOM"}, smart{"SMART"}, beats{"16 BEATS"},
         style{"BLEND"};
     juce::String status{"Queue some tracks: select them in the browser, then QUEUE."};
     juce::Rectangle<int> statusArea;

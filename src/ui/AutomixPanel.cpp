@@ -19,7 +19,7 @@ const char* styleName(int style)
 
 AutomixPanel::AutomixPanel()
 {
-    for (auto* b : {&automix, &queue, &repeat, &random, &beats, &style})
+    for (auto* b : {&automix, &queue, &repeat, &random, &smart, &beats, &style})
     {
         b->setColour(juce::TextButton::buttonColourId, kPanel);
         b->setColour(juce::TextButton::buttonOnColourId, kOn);
@@ -52,6 +52,13 @@ AutomixPanel::AutomixPanel()
         current.random = !current.random;
         changed();
     };
+    smart.setTooltip("Smart: each next track is the queue's best match for the one playing (the Next Track panel's "
+                     "intent, preset and key policy) instead of the queue's order");
+    smart.onClick = [this]
+    {
+        current.smart = !current.smart;
+        changed();
+    };
     beats.setTooltip("Each transition's length");
     beats.onClick = [this]
     {
@@ -72,6 +79,7 @@ void AutomixPanel::setSettings(const Settings& s)
     current = s;
     repeat.setToggleState(current.repeat, juce::dontSendNotification);
     random.setToggleState(current.random, juce::dontSendNotification);
+    smart.setToggleState(current.smart, juce::dontSendNotification);
     beats.setButtonText(juce::String(current.beats) + " BEATS");
     style.setButtonText(styleName(current.style));
 }
@@ -100,9 +108,10 @@ void AutomixPanel::resized()
     area.removeFromLeft(6);
     auto options = area.removeFromRight(330);
     auto top = options.removeFromTop(options.getHeight() / 2);
-    queue.setBounds(top.removeFromLeft(110).reduced(2));
-    repeat.setBounds(top.removeFromLeft(110).reduced(2));
-    random.setBounds(top.reduced(2));
+    queue.setBounds(top.removeFromLeft(84).reduced(2));
+    repeat.setBounds(top.removeFromLeft(82).reduced(2));
+    random.setBounds(top.removeFromLeft(82).reduced(2));
+    smart.setBounds(top.reduced(2));
     beats.setBounds(options.removeFromLeft(165).reduced(2));
     style.setBounds(options.reduced(2));
     statusArea = area.reduced(4, 0);

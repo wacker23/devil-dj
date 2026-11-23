@@ -74,6 +74,7 @@ inline const SettingKey<bool> automixRepeat{"automixRepeat", false};
 inline const SettingKey<bool> automixRandom{"automixRandom", false};
 inline const SettingKey<int> automixBeats{"automixBeats", 16};
 inline const SettingKey<int> automixStyle{"automixStyle", 0};
+inline const SettingKey<bool> automixSmart{"automixSmart", false}; // P3-25
 // P3-21: touch mode (everything 1.25x: larger targets for fingers).
 inline const SettingKey<bool> touchMode{"touchMode", false};
 // P3-23: the layout - waveforms 0 across / 1 upright - and the enlarged browser.

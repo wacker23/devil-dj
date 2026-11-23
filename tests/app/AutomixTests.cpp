@@ -7,6 +7,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <vector>
@@ -134,4 +135,120 @@ TEST_CASE("Automix: the mix-in is the first downbeat; random plays each once; re
     REQUIRE(asked.size() == 1);
     CHECK(asked[0] >= 0);
     CHECK(asked[0] < 6);
+}
+
+TEST_CASE("Automix smart: 10 tracks unattended, each next one the best remaining pick, the order recorded",
+          "[app][automix][smart]")
+{
+    // Tempos out of order; the "matcher" here prefers the nearest tempo - smart order then follows the tempos.
+    const double bpms[] = {120.0, 126.0, 121.0, 125.0, 122.0, 127.0, 123.0, 124.0, 119.0, 128.0};
+    std::vector<Track> tracks;
+    for (int i = 0; i < 10; ++i)
+        tracks.push_back(makeTrack(bpms[i], 72, 0.04 + 0.02 * i, 220.0 + 30.0 * i));
+    engine::AudioEngine e;
+    e.prepare(kRate, kBlock);
+    float l[kBlock], r[kBlock];
+    float* outs[] = {l, r};
+    std::array<int, 2> onDeck{-1, -1};
+    app::Automix automix;
+    automix.load = [&](engine::DeckId deck, int index)
+    {
+        e.send(engine::LoadTrack{deck, tracks[static_cast<std::size_t>(index)].buffer.get(),
+                                 static_cast<engine::BufferId>(index + 1)});
+        e.send(engine::SetBeatgrid{deck, tracks[static_cast<std::size_t>(index)].grid});
+        onDeck[deck] = index;
+        automix.loaded(deck, index);
+    };
+    automix.gridOf = [&](engine::DeckId deck)
+    { return onDeck[deck] >= 0 ? tracks[static_cast<std::size_t>(onDeck[deck])].grid : util::Beatgrid(); };
+    int picks = 0;
+    automix.pickNext = [&](int current, const std::vector<int>& remaining)
+    {
+        ++picks;
+        int best = remaining.front();
+        for (const int i : remaining)
+            if (std::abs(bpms[i] - bpms[current]) < std::abs(bpms[best] - bpms[current]) ||
+                (std::abs(bpms[i] - bpms[current]) == std::abs(bpms[best] - bpms[current]) && bpms[i] > bpms[best]))
+                best = i;
+        return best;
+    };
+    app::Automix::Settings settings;
+    settings.smart = true;
+    automix.setSettings(settings);
+    automix.setQueue(10);
+    automix.start();
+    int transitions = 0;
+    bool wasActive = false;
+    for (int block = 0; block < static_cast<int>(600.0 * kRate / kBlock); ++block)
+    {
+        if (block % 16 == 0)
+            for (const auto& c : automix.tick(e.readState()))
+                e.send(c);
+        e.process(outs, 2, kBlock);
+        const auto& s = e.readState();
+        if (s.transition.active && !wasActive)
+            ++transitions;
+        wasActive = s.transition.active;
+        if (transitions == 9 && !s.transition.active && !s.decks[0].playing != !s.decks[1].playing &&
+            automix.nextIndex() < 0)
+            break;
+    }
+    CHECK(transitions == 9);
+    CHECK(picks == 9);
+    // From 120: 121, 122, 123, 124, 125, 126, 127, 128 (higher on a tie), then 119 last.
+    const std::vector<int> expected{0, 2, 4, 6, 7, 3, 1, 5, 9, 8};
+    CHECK(automix.playedOrder() == expected);
+}
+
+TEST_CASE("Automix: repeat goes round the whole queue again (plain and smart)", "[app][automix]")
+{
+    for (const bool smart : {false, true})
+    {
+        app::Automix automix;
+        std::array<int, 2> deckOf{-1, -1};
+        automix.load = [&](engine::DeckId deck, int index)
+        {
+            deckOf[deck] = index;
+            automix.loaded(deck, index);
+        };
+        automix.gridOf = [](engine::DeckId) { return util::Beatgrid::constant(0.0, 120.0, kRate); };
+        automix.pickNext = [](int, const std::vector<int>& remaining) { return remaining.back(); };
+        app::Automix::Settings settings;
+        settings.repeat = true;
+        settings.smart = smart;
+        automix.setSettings(settings);
+        automix.setQueue(3);
+        automix.start();
+        engine::EngineState state;
+        state.decks[0].hasGrid = state.decks[1].hasGrid = true;
+        state.decks[0].lengthSamples = state.decks[1].lengthSamples = static_cast<std::int64_t>(60.0 * kRate);
+        // Drive it by hand: each tick either plans a transition (jump the clock near the end) or finishes it.
+        int playing = 0;
+        for (int step = 0; step < 200 && automix.playedOrder().size() < 7; ++step)
+        {
+            state.decks[static_cast<std::size_t>(playing)].playing = true;
+            state.masterBeat = 1000.0 + step * 200.0;
+            state.decks[static_cast<std::size_t>(playing)].beat = 116.0;
+            const auto before = automix.transitionsPlanned();
+            automix.tick(state);
+            if (automix.transitionsPlanned() != before)
+            {
+                state.transition.active = false;
+                state.decks[static_cast<std::size_t>(playing)].playing = false;
+                playing = 1 - playing;
+                state.decks[static_cast<std::size_t>(playing)].playing = true;
+            }
+        }
+        const auto& order = automix.playedOrder();
+        REQUIRE(order.size() >= 7);
+        // Each round of three has every item once.
+        for (int round = 0; round < 2; ++round)
+        {
+            std::vector<int> items(order.begin() + round * 3, order.begin() + round * 3 + 3);
+            std::sort(items.begin(), items.end());
+            CHECK(items == std::vector<int>{0, 1, 2});
+        }
+        if (!smart)
+            CHECK(order == std::vector<int>{0, 1, 2, 0, 1, 2, 0});
+    }
 }

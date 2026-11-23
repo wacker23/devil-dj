@@ -11,6 +11,12 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P3-25 Automix smart mode
+- What changed: Automix option SMART (the AUTOMIX tab, remembered). At each track start the next one is the best-scoring remaining queue item against the one playing: the matcher's score with the Next Track panel's intent, preset and key policy, items passing the matcher's filters first. The scope is the queue. Automix keeps the order played, and the app writes each start to the log ("Automix smart #3: queue item 7 (...)"), so a smart run can be compared with plain order.
+- Fixed in passing: with REPEAT on, plain Automix went back to the first item after every track once the first round ended; it now goes round the whole queue again (a regression test covers plain and smart).
+- Tests: a 10-track smart run, unattended through the engine. A tempo-nearest picker gives the expected order 0 2 4 6 7 3 1 5 9 8, with 9 transitions and 9 picks. Repeat rounds hold every item once.
+- Notes: the owner should listen to a smart run on real tracks and compare the logged order with plain order.
+
 ## 2026-11-23 · P3-24 Next Track panel
 - What changed: `ui/NextTrackPanel` beside the browser (Layout > Next Track panel, remembered; hidden when the window is too narrow): scope / preset / key policy boxes, the four intent buttons, the top-10 list with score bars and up to 4 reason chips (green / amber / red by the feature's value), the full per-feature breakdown as the row's tooltip, the energy line (last 5 master tracks + the highlighted one) and a Camelot wheel (A's key, the highlighted key). Suggestions now carry chips and a breakdown. Click highlights, double-click loads. The matcher is asked at once on a load and on every setting change; the trigger timer runs at 10 Hz.
 - Keys: N load, Shift+N next, Ctrl+N held previews the highlighted track in the headphones on the idle deck (fader down, from a third in; restored on release), Ctrl+Shift+N intent, new Alt+N preset, Alt+Shift+N key policy, Ctrl+Alt+N scope. No conflicts in the default keymap.

@@ -150,6 +150,9 @@ private:
     ui::AutomixPanel automixPanel;
     std::vector<juce::File> automixFiles;
     std::vector<juce::String> automixNames;
+    std::vector<std::int64_t> automixIds; // the queue's library ids (smart mode scores them)
+    int automixLogged = 0;                // how much of the played order is in the log
+    int pickAutomixNext(int current, const std::vector<int>& remaining);
     std::array<int, 2> automixLoading{-1, -1}; // the queue item being loaded on each deck
     std::unique_ptr<juce::TimedCallback> automixTimer;
     void toggleAutomix();

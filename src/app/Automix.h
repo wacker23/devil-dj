@@ -27,6 +27,8 @@ public:
         engine::TransitionStyle style = engine::TransitionStyle::Blend;
         bool repeat = false;
         bool random = false;
+        // P3-25: at each transition the best-scoring remaining queue item (pickNext) instead of the queue's order.
+        bool smart = false;
         double mixOutBeats = 32.0; // before the end
     };
 
@@ -34,6 +36,9 @@ public:
     std::function<void(engine::DeckId deck, int index)> load;
     // The deck's beatgrid, in its buffer's samples (empty if none).
     std::function<util::Beatgrid(engine::DeckId deck)> gridOf;
+    // Smart mode: the queue item to play after `current` out of `remaining` (the app scores them with the matcher);
+    // anything not in `remaining` means the first of them.
+    std::function<int(int current, const std::vector<int>& remaining)> pickNext;
 
     void setQueue(int count);   // items 0 .. count - 1 (the app keeps what they are)
     void setSettings(const Settings& s) { settings = s; }
@@ -51,9 +56,11 @@ public:
     int nextIndex() const noexcept { return upcoming; }
     int transitionsPlanned() const noexcept { return transitions; }
     double lastTransitionStart() const noexcept { return lastStart; }
+    // Every queue item in the order it started playing (smart mode's choices; logged by the app).
+    const std::vector<int>& playedOrder() const noexcept { return played; }
 
 private:
-    int itemAfter(int position) const;
+    int itemAfter(int position); // smart mode chooses it (and moves it to the next place in `order`)
     void requestLoad(engine::DeckId deck);
 
     Settings settings;
@@ -68,6 +75,7 @@ private:
     bool transitionPlanned = false;
     int transitions = 0;
     double lastStart = -1.0;
+    std::vector<int> played;
     std::mt19937 rng{20261122u};
 };
 

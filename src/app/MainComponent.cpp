@@ -1,6 +1,7 @@
 #include "MainComponent.h"
 
 #include "analysis/Loudness.h"
+#include "matcher/CandidateQuery.h"
 #include "library/HistoryRepository.h"
 #include "ui/TrackColours.h"
 
@@ -281,11 +282,25 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
         loadFile(deck, automixFiles[static_cast<std::size_t>(index)]);
     };
     automix.gridOf = [this](engine::DeckId deck) { return deckGrid(deck); };
+    automix.pickNext = [this](int current, const std::vector<int>& remaining) { return pickAutomixNext(current, remaining); };
     automixTimer = std::make_unique<juce::TimedCallback>(
         [this]
         {
             for (const auto& c : automix.tick(engine.readState()))
                 engine.send(c);
+            // The order played, in the log (to compare smart with plain order).
+            if (const auto& order = automix.playedOrder(); static_cast<int>(order.size()) > automixLogged)
+            {
+                for (; automixLogged < static_cast<int>(order.size()); ++automixLogged)
+                {
+                    const int i = order[static_cast<std::size_t>(automixLogged)];
+                    util::logInfo("Automix{} #{}: queue item {} ({})", automix.getSettings().smart ? " smart" : "",
+                                  automixLogged + 1, i + 1,
+                                  i >= 0 && i < static_cast<int>(automixNames.size())
+                                      ? automixNames[static_cast<std::size_t>(i)].toStdString()
+                                      : std::string("?"));
+                }
+            }
             const int now = automix.running() ? automix.playingIndex() : -1;
             const int next = automix.running() ? automix.nextIndex() : -1;
             const auto name = [this](int i)
@@ -1731,6 +1746,7 @@ void MainComponent::applyAutomixSettings()
     s.repeat = p.repeat;
     s.random = p.random;
     s.transitionBeats = p.beats;
+    s.smart = p.smart;
     s.style = p.style == 1 ? engine::TransitionStyle::FilterSweep
               : p.style == 2 ? engine::TransitionStyle::EchoOut
                              : engine::TransitionStyle::Blend;
@@ -1741,6 +1757,7 @@ void MainComponent::queueAutomix()
 {
     automixFiles.clear();
     automixNames.clear();
+    automixIds.clear();
     if (gridReader != nullptr)
     {
         library::TrackRepository tracks(*gridReader);
@@ -1748,6 +1765,7 @@ void MainComponent::queueAutomix()
             if (const auto t = tracks.get(id))
             {
                 automixFiles.push_back(juce::File(juce::String::fromUTF8(t->path.c_str())));
+                automixIds.push_back(id);
                 automixNames.push_back(t->title.empty() ? automixFiles.back().getFileNameWithoutExtension()
                                                         : juce::String::fromUTF8(t->title.c_str()));
             }
@@ -1772,8 +1790,59 @@ void MainComponent::toggleAutomix()
     // Both decks free for it: they stop, the crossfader goes to deck A's side.
     engine.send(engine::Pause{0});
     engine.send(engine::Pause{1});
+    automixLogged = 0;
     automix.start();
     showPanel(3);
+}
+
+int MainComponent::pickAutomixNext(int current, const std::vector<int>& remaining)
+{
+    // Smart Automix (P3-25): the matcher's score (the Next Track panel's intent, preset and key policy) for each
+    // remaining queue item against the one playing; those passing the matcher's filters first.
+    const auto idOf = [this](int i)
+    { return i >= 0 && i < static_cast<int>(automixIds.size()) ? automixIds[static_cast<std::size_t>(i)] : std::int64_t{0}; };
+    if (gridReader == nullptr || remaining.empty())
+        return -1;
+    const auto now = static_cast<std::int64_t>(juce::Time::currentTimeMillis() / 1000);
+    const auto a = matcher::loadTrack(*gridReader, idOf(current), now);
+    if (!a)
+        return -1;
+    matcher::Context c;
+    c.a = *a;
+    c.aBpmNow = a->bpm;
+    c.intent = matcherIntent == 0 ? matcher::Intent::Down : matcherIntent == 2 ? matcher::Intent::Up
+              : matcherIntent == 3                       ? matcher::Intent::Switch
+                                                         : matcher::Intent::Hold;
+    c.keyPolicy = matcherKeyPolicy == 0 ? matcher::KeyPolicy::Strict : matcherKeyPolicy == 2 ? matcher::KeyPolicy::Off
+                                                                                           : matcher::KeyPolicy::Relaxed;
+    matcher::loadHistory(*gridReader, c, now);
+    std::vector<matcher::TrackInfo> tracks;
+    std::vector<int> items;
+    for (const int i : remaining)
+        if (auto t = matcher::loadTrack(*gridReader, idOf(i), now))
+        {
+            tracks.push_back(std::move(*t));
+            items.push_back(i);
+        }
+    if (tracks.empty())
+        return -1;
+    const auto [c10, c90] = matcher::soundPercentiles(tracks);
+    c.c10 = c10;
+    c.c90 = c90;
+    const auto& weights =
+        matcherPresets[static_cast<std::size_t>(std::clamp(matcherPreset, 0, static_cast<int>(matcherPresets.size()) - 1))].weights;
+    int best = -1;
+    double bestScore = -1e9;
+    for (std::size_t k = 0; k < tracks.size(); ++k)
+    {
+        const double s = matcher::score(c, tracks[k], weights).score + (matcher::passesFilters(c, tracks[k]) ? 10.0 : 0.0);
+        if (s > bestScore)
+        {
+            bestScore = s;
+            best = items[k];
+        }
+    }
+    return best;
 }
 
 juce::File MainComponent::recordingsFolder()

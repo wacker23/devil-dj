@@ -37,6 +37,7 @@ void Automix::start()
     loadAsked = {false, false};
     transitionPlanned = false;
     transitions = 0;
+    played.clear();
     playingDeck = 0;
     upcoming = order.front();
 }
@@ -46,13 +47,36 @@ void Automix::stop()
     on = false;
 }
 
-int Automix::itemAfter(int pos) const
+int Automix::itemAfter(int pos)
 {
-    if (order.empty())
+    const int n = static_cast<int>(order.size());
+    if (n == 0)
         return -1;
-    if (pos + 1 < static_cast<int>(order.size()))
-        return order[static_cast<std::size_t>(pos + 1)];
-    return settings.repeat ? order.front() : -1;
+    int next = pos + 1;
+    if (next >= n)
+    {
+        if (!settings.repeat)
+            return -1;
+        next = 0; // round again
+    }
+    if (settings.smart && pickNext && n > 1)
+    {
+        // This round's remaining items (a new round: all but the one playing).
+        const int current = pos >= 0 && pos < n ? order[static_cast<std::size_t>(pos)] : -1;
+        std::vector<int> remaining;
+        for (int i = next; i < n; ++i)
+            if (order[static_cast<std::size_t>(i)] != current)
+                remaining.push_back(order[static_cast<std::size_t>(i)]);
+        if (!remaining.empty())
+        {
+            int choice = pickNext(current, remaining);
+            if (std::find(remaining.begin(), remaining.end(), choice) == remaining.end())
+                choice = remaining.front();
+            const auto at = std::find(order.begin() + next, order.end(), choice);
+            std::iter_swap(order.begin() + next, at);
+        }
+    }
+    return order[static_cast<std::size_t>(next)];
 }
 
 void Automix::requestLoad(engine::DeckId deck)
@@ -97,6 +121,7 @@ std::vector<engine::EngineCommand> Automix::tick(const engine::EngineState& stat
         out.push_back(engine::Play{playingDeck});
         out.push_back(engine::SetParam{engine::ParamId::Crossfader, playingDeck == 0 ? 0.0f : 1.0f});
         position = 0;
+        played.push_back(deckItem[playingDeck]);
         upcoming = itemAfter(position);
         return out;
     }
@@ -107,7 +132,8 @@ std::vector<engine::EngineCommand> Automix::tick(const engine::EngineState& stat
     {
         transitionPlanned = false;
         playingDeck = other;
-        ++position;
+        position = position + 1 < static_cast<int>(order.size()) ? position + 1 : 0; // repeat: round again
+        played.push_back(deckItem[playingDeck]);
         deckReady[1 - playingDeck] = false;
         deckItem[1 - playingDeck] = -1;
         upcoming = itemAfter(position);
