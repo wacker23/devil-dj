@@ -5,6 +5,7 @@
 #include "beatmaker/DrumKits.h"
 #include "beatmaker/ProjectFile.h"
 #include "beatmaker/SynthPresets.h"
+#include "app/BeatRender.h"
 #include "library/HistoryRepository.h"
 #include "ui/TrackColours.h"
 
@@ -387,6 +388,7 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     };
     beatPanel.grid().onSwitchAt = [this](bool atEnd) { beatSwitchAtEnd = atEnd; };
     beatPanel.grid().onHit = [this](int track) { beatHit(track); };
+    beatPanel.grid().onExport = [this] { showBeatExportMenu(); };
     addChildComponent(beatStrip);
     beatStrip.setTempo(beatProject.followMaster, beatProject.ownBpm);
     beatStrip.onTempo = [this](bool follow, double bpm)
@@ -695,7 +697,7 @@ void MainComponent::registerActions()
                            });
     };
     // The Beat Maker's grid (P4-06): every Beat Maker action goes to it (held keys repeat where they may).
-    for (int a = static_cast<int>(GA::BeatMakerStartStop); a <= static_cast<int>(GA::BeatMakerRecord); ++a)
+    for (int a = static_cast<int>(GA::BeatMakerStartStop); a <= static_cast<int>(GA::BeatMakerExport); ++a)
         if (a < static_cast<int>(GA::CodeEvaluate) || a > static_cast<int>(GA::BrowserBigger))
             actions.setHandler(ui::globalCommand(static_cast<GA>(a)),
                                [this, a](Phase p)
@@ -1771,6 +1773,138 @@ void MainComponent::beatHit(int track)
     const auto at = beatProducer->hit(beatPanel.grid().pattern(), track, 100);
     if (at && beatPlaying && beatPanel.grid().recording())
         beatPanel.edit([&](beatmaker::Project& p) { beatmaker::recordHit(p, *at, track, 100); });
+}
+
+juce::File MainComponent::beatRendersFolder()
+{
+    return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+        .getChildFile("Devil-DJ")
+        .getChildFile("Beats")
+        .getChildFile("Renders");
+}
+
+void MainComponent::showBeatExportMenu()
+{
+    const int p = beatPanel.grid().pattern();
+    const auto letter = juce::String::charToString(static_cast<juce::juce_wchar>('A' + p));
+    const bool song = !beatProject.song.empty();
+    juce::PopupMenu m;
+    m.addSectionHeader("Export");
+    m.addItem("Pattern " + letter + " to a WAV file...", [this] { exportBeat(BeatExport::PatternWav); });
+    m.addItem("Pattern " + letter + " x 4 to a WAV file...", [this] { exportBeat(BeatExport::Pattern4Wav); });
+    m.addItem("The song to a WAV file...", song, false, [this] { exportBeat(BeatExport::SongWav); });
+    m.addSeparator();
+    m.addItem("Pattern " + letter + " to the sampler (a loop)", [this] { exportBeat(BeatExport::PatternSampler); });
+    m.addItem("Pattern " + letter + " to the library", [this] { exportBeat(BeatExport::PatternLibrary); });
+    m.addItem("The song to the library", song, false, [this] { exportBeat(BeatExport::SongLibrary); });
+    m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&beatPanel.grid().exportButton()));
+}
+
+void MainComponent::exportBeat(BeatExport what)
+{
+    // Rendered on a worker thread from a copy of the project (a song can take a moment), then handed back here.
+    const auto& es = engine.readState();
+    app::BeatRenderOptions o;
+    o.pattern = beatPanel.grid().pattern();
+    o.song = what == BeatExport::SongWav || what == BeatExport::SongLibrary;
+    o.passes = what == BeatExport::Pattern4Wav ? 4 : 1;
+    o.tailSeconds = what == BeatExport::PatternSampler ? 0.0 : 2.0; // a sampler loop: exactly the pattern
+    o.masterBpm = es.masterBpm;
+    o.sampleRate = es.sampleRate > 0.0 ? es.sampleRate : 48000.0;
+    o.blockSize = es.blockSize > 0 ? es.blockSize : 256;
+    auto project = std::make_shared<const beatmaker::Project>(beatProject);
+    const auto letter = juce::String::charToString(static_cast<juce::juce_wchar>('A' + o.pattern));
+    const auto stamp = juce::Time::getCurrentTime().formatted("%Y-%m-%d %H%M%S");
+    const auto baseName = juce::String("Beat ") + (o.song ? juce::String("song") : "pattern " + letter);
+    const auto safe = juce::Component::SafePointer<MainComponent>(this);
+    const auto renderTo = [project, o](const juce::File& file, std::function<void(juce::String error, double bpm)> done)
+    {
+        juce::Thread::launch(
+            [project, o, file, done]
+            {
+                const auto r = app::renderBeat(*project, o);
+                file.getParentDirectory().createDirectory();
+                const auto error = app::writeLoopWav(*r.audio, 0, r.audio->numSamples(), file, 24);
+                const double bpm = r.bpm;
+                juce::MessageManager::callAsync([done, error, bpm] { done(error, bpm); });
+            });
+    };
+    const auto report = [safe](const juce::String& text)
+    {
+        if (safe != nullptr)
+            safe->libraryBrowser->setStatus(text);
+        util::logInfo("Beat Maker export: {}", text.toStdString());
+    };
+    switch (what)
+    {
+        case BeatExport::PatternWav:
+        case BeatExport::Pattern4Wav:
+        case BeatExport::SongWav:
+        {
+            beatRendersFolder().createDirectory();
+            beatExportChooser = std::make_unique<juce::FileChooser>(
+                "Export the beat as a WAV file", beatRendersFolder().getChildFile(juce::File::createLegalFileName(baseName + ".wav")),
+                "*.wav");
+            beatExportChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
+                                           [renderTo, report](const juce::FileChooser& fc)
+                                           {
+                                               auto file = fc.getResult();
+                                               if (file == juce::File())
+                                                   return;
+                                               if (!file.hasFileExtension("wav"))
+                                                   file = file.withFileExtension("wav");
+                                               renderTo(file, [file, report](juce::String error, double)
+                                                        { report(error.isEmpty() ? "saved " + file.getFullPathName() : error); });
+                                           });
+            break;
+        }
+        case BeatExport::PatternLibrary:
+        case BeatExport::SongLibrary:
+        {
+            const auto file = beatRendersFolder().getChildFile(juce::File::createLegalFileName(baseName + " " + stamp + ".wav"));
+            renderTo(file, [safe, file, report](juce::String error, double)
+                     {
+                         if (error.isNotEmpty())
+                             report(error);
+                         else if (safe != nullptr)
+                             safe->importToLibrary({file}); // added (and analyzed) like any other track
+                     });
+            break;
+        }
+        case BeatExport::PatternSampler:
+            juce::Thread::launch(
+                [safe, project, o, letter]
+                {
+                    std::shared_ptr<const engine::TrackBuffer> loop = app::renderBeat(*project, o).audio;
+                    const double bpm = project->followMaster ? o.masterBpm : project->ownBpm;
+                    juce::MessageManager::callAsync(
+                        [safe, loop, bpm, letter]
+                        {
+                            if (safe == nullptr)
+                                return;
+                            auto& self = *safe;
+                            // The shown bank's first empty slot, else any empty one, else the bank's first.
+                            const auto& st = self.engine.readState();
+                            const int bank = self.samplerPanel.bank() * engine::Sampler::kSlotsPerBank;
+                            int slot = -1;
+                            for (int i = 0; i < engine::Sampler::kSlots && slot < 0; ++i)
+                                if (const int c = (bank + i) % engine::Sampler::kSlots; !st.sampler[static_cast<std::size_t>(c)].loaded)
+                                    slot = c;
+                            if (slot < 0)
+                                slot = bank;
+                            const auto* raw = loop.get();
+                            const auto id = self.registry.add(loop);
+                            if (!self.engine.send(engine::SamplerLoad{static_cast<std::uint8_t>(slot), raw, id, static_cast<float>(bpm)}))
+                            {
+                                self.registry.release(id);
+                                return;
+                            }
+                            self.samplerPanel.setSlotName(slot, "Beat " + letter + " " + juce::String(bpm, 1));
+                            self.libraryBrowser->setStatus("Pattern " + letter + " is in sampler slot " + juce::String(slot + 1));
+                        });
+                });
+            break;
+    }
 }
 
 void MainComponent::stopBeatMaker()

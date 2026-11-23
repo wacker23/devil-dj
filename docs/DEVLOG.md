@@ -11,6 +11,26 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-12 Export
+- What changed:
+  - `app/BeatRender` renders the pattern (1 or more passes) or the song once round, offline and faster than real time. It uses a private AudioEngine of its own:
+    - the internal clock at the project's tempo (the master's when following);
+    - the same sound commands;
+    - every sequencer event at its sample from beat 0, pushed a little ahead of each block;
+    - then the same voices, sends, BEATS channel and master path as playback.
+  - It has an optional tail for decays and the sends: 2 s for files, 0 for sampler loops.
+  - EXPORT (Ctrl+E) in the pattern bar opens a menu:
+    - pattern / pattern × 4 / song to a WAV file (24-bit, a save dialog in `Documents\Devil-DJ\Beats\Renders`);
+    - pattern to the sampler: an exact-length loop with its BPM, into the bank's first free slot;
+    - pattern / song to the library: written to Renders and imported and analyzed like any track.
+  - It renders on a worker thread and finishes on the message thread.
+- Tests: 2 cases.
+  - **Bit-identical:** a deterministic pattern (kick, a late snare, a ratchet, swung hats with a choke, a pluck synth line, reverb and echo sends) is rendered offline and played back through a fresh engine with the producer ticking every 5 blocks. All 192,000 stereo frames are equal, with no late events.
+  - Lengths: 4 beats at 128 BPM is 90,000 samples plus the tail, which holds the decays. The song length is correct, and a 4-pass loop at its own 100 BPM with no tail is exactly the loop.
+- Notes:
+  - Bit-identical holds for the same block size (the export uses the device's) and for events on whole samples. A position falling exactly on half a sample could round differently between the two clock snapshots; no test hit that.
+  - The owner should check an export by ear in the app.
+
 ## 2026-11-23 · P4-11 Live record
 - What changed: you can play hits on the drum tracks and have them recorded.
   - Ways to hit a track: 1–8 while REC is on (otherwise they only select a track), a click on a track's name, or the deck pads in the new BEAT PADS mode (pads 1–8 = drum tracks 1–8, named after them, red while REC is on).

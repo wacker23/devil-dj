@@ -48,6 +48,8 @@ public:
     // P4-11: a hit on a drum track - a click on its name, or 1-8 while REC is on (they select the track otherwise).
     std::function<void(int track)> onHit;
     std::function<void(bool on)> onRecord; // REC
+    std::function<void()> onExport;        // EXPORT (P4-12)
+    juce::TextButton& exportButton() { return exportNow; }
     bool recording() const noexcept { return recordOn; }
     void setRecording(bool on);
     juce::TextButton& recordButton() { return rec; }
@@ -149,7 +151,7 @@ private:
     juce::TextButton play{"PLAY"}, length{"16 STEPS"}, pageButton{"PAGE 1/1"};
     juce::TextButton songToggle{"SONG"}, songAdd{"+"}, songRemove{"-"}, switchAt{"ON BAR"};
     bool song = false, atEnd = false, recordOn = false;
-    juce::TextButton rec{"REC"};
+    juce::TextButton rec{"REC"}, exportNow{"EXPORT"};
     int playingPatternNow = -1, queuedPatternNow = -1;
     juce::Rectangle<int> songArea;
     std::array<juce::TextButton, beatmaker::kPatternCount> patternButtons;

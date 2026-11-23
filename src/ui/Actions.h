@@ -199,6 +199,7 @@ namespace devildj::ui
     X(BeatMakerSongRemove, "Beat Maker: remove the song's last pattern", false)                                        \
     X(BeatMakerSwitchAt, "Beat Maker: switch patterns on the bar / at the end", false)                                 \
     X(BeatMakerRecord, "Beat Maker: record hits (1-8, pads) on / off", false)                                          \
+    X(BeatMakerExport, "Beat Maker: export (WAV, sampler, library)", false)                                            \
     X(CodeEvaluate, "Code Beat: evaluate", false)                                                                      \
     X(CodeEvaluateNow, "Code Beat: evaluate immediately", false)                                                       \
     X(CodeHush, "Code Beat: hush", false)                                                                              \

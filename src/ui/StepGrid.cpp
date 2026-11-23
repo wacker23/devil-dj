@@ -107,7 +107,7 @@ const std::vector<StepGrid::SoundChoice>& StepGrid::soundChoices()
 StepGrid::StepGrid()
 {
     setWantsKeyboardFocus(true);
-    for (auto* b : {&play, &rec, &length, &pageButton, &songToggle, &songAdd, &songRemove, &switchAt})
+    for (auto* b : {&play, &rec, &exportNow, &length, &pageButton, &songToggle, &songAdd, &songRemove, &switchAt})
     {
         styleButton(*b);
         addAndMakeVisible(*b);
@@ -116,6 +116,8 @@ StepGrid::StepGrid()
     rec.setTooltip("Record: while playing, hits (1-8, a click on a track's name, the BEAT PADS pads) go into the "
                    "nearest step, on top of what is there (Ctrl+R)");
     rec.onClick = [this] { perform(GA::BeatMakerRecord); };
+    exportNow.setTooltip("Export the pattern or the song: to a WAV file, a sampler slot or the library (Ctrl+E)");
+    exportNow.onClick = [this] { perform(GA::BeatMakerExport); };
     songToggle.setTooltip("Song mode: play the song list round and round (B)");
     songToggle.onClick = [this] { perform(GA::BeatMakerSongMode); };
     songAdd.setTooltip("Add the pattern shown to the end of the song (Shift+B)");
@@ -553,6 +555,10 @@ bool StepGrid::perform(GlobalAction a)
                 edited();
             }
             return true;
+        case GA::BeatMakerExport:
+            if (onExport)
+                onExport();
+            return true;
         case GA::BeatMakerRecord:
             recordOn = !recordOn;
             refresh();
@@ -749,6 +755,7 @@ void StepGrid::resized()
     auto bar = area.removeFromTop(30);
     play.setBounds(bar.removeFromLeft(70).reduced(2));
     rec.setBounds(bar.removeFromLeft(50).reduced(2));
+    exportNow.setBounds(bar.removeFromLeft(66).reduced(2));
     bar.removeFromLeft(8);
     for (auto& b : patternButtons)
         b.setBounds(bar.removeFromLeft(30).reduced(2));

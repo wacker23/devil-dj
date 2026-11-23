@@ -191,6 +191,20 @@ private:
     void stopBeatMaker();
     void beatProjectChanged(); // the producer's copy and the voices' sounds follow the project
     void beatHit(int track);   // P4-11: heard now; recorded into the nearest step while REC is on and playing
+    // P4-12: export the pattern shown / the song - to a WAV file, a sampler slot or the library.
+    enum class BeatExport
+    {
+        PatternWav,
+        Pattern4Wav,
+        SongWav,
+        PatternSampler,
+        PatternLibrary,
+        SongLibrary,
+    };
+    void showBeatExportMenu();
+    void exportBeat(BeatExport what);
+    static juce::File beatRendersFolder();
+    std::unique_ptr<juce::FileChooser> beatExportChooser;
     std::unique_ptr<juce::TimedCallback> beatTimer, beatSaveTimer;
     void switchBottomPanel();
     static juce::File beatProjectFile();
