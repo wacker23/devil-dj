@@ -6,6 +6,8 @@
 #include "beatmaker/ProjectFile.h"
 #include "beatmaker/SynthPresets.h"
 #include "app/BeatRender.h"
+#include "app/AutoTransition.h"
+#include "app/TransitionPresets.h"
 #include "library/HistoryRepository.h"
 #include "ui/TrackColours.h"
 
@@ -405,9 +407,64 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
                        });
     };
     beatProjectChanged();
+    // The transition editor (P4-17).
+    addChildComponent(mixEditor);
+    loadMixPresetNames();
+    mixEditor.onChanged = [this](const ui::TransitionEditor::Edit& e)
+    {
+        if (mixPlan)
+            mixPlan->edit = e;
+    };
+    mixEditor.onAuto = [this] { refreshMix(true); };
+    mixEditor.onPreset = [this](int index)
+    {
+        if (!mixPlan)
+            return;
+        auto e = mixPlan->edit;
+        const float beats = e.curves.beats;
+        if (index < app::kTransitionPresetCount)
+        {
+            const auto p = static_cast<app::TransitionPreset>(index);
+            e.curves = app::makePreset(p, beats);
+            e.preset = app::presetName(p);
+        }
+        else
+        {
+            const auto user = app::loadUserPresets();
+            const auto u = static_cast<std::size_t>(index - app::kTransitionPresetCount);
+            if (u >= user.size())
+                return;
+            e.curves = app::scaled(user[u].shape, beats);
+            e.preset = user[u].name;
+        }
+        e.reasons.clear();
+        mixPlan->edit = e;
+        mixEditor.setEdit(e);
+    };
+    mixEditor.onSavePreset = [this](const juce::String& name)
+    {
+        if (!mixPlan)
+            return;
+        if (const auto error = app::saveUserPreset(mixPlan->edit.curves, name); error.isNotEmpty())
+            libraryBrowser->setStatus("Transition preset: " + error);
+        loadMixPresetNames();
+    };
+    mixEditor.onPreview = [this](const ui::TransitionEditor::Edit& e)
+    {
+        if (mixPlan)
+            startPlannedTransition(e, mixPlan->from, true);
+    };
     beatTimer = std::make_unique<juce::TimedCallback>(
         [this]
         {
+            // The transition editor follows the decks: new tracks, a new plan (P4-17).
+            if (mixEditor.isVisible())
+            {
+                const auto& st = engine.readState();
+                if (!mixPlan || st.decks[mixPlan->from].bufferId != mixPlan->fromBuffer ||
+                    st.decks[1 - mixPlan->from].bufferId != mixPlan->toBuffer)
+                    refreshMix(false);
+            }
             // The producer's clock: the engine's sample clock, master beat and tempo, and when (P4-10).
             const auto& es = engine.readState();
             beatProducer->setClock({es.sampleClock, es.masterBeat, es.masterBpm, es.sampleRate, es.hostTimeSeconds});
@@ -684,7 +741,9 @@ bool MainComponent::onPhysicalKey(const ui::KeyboardController::KeyEvent& e)
     // The Beat Maker's keys while its grid has the keyboard (P4-06).
     const bool inBeatMaker = beatPanel.isVisible() && focused != nullptr &&
                              (focused == &beatPanel || beatPanel.isParentOf(focused));
-    return keyboard.handle(e, inBeatMaker ? ui::KeyContext::BeatMaker : ui::KeyContext::Main, typing);
+    const bool inMix = mixEditor.isVisible() && focused != nullptr && (focused == &mixEditor || mixEditor.isParentOf(focused));
+    return keyboard.handle(e, inBeatMaker ? ui::KeyContext::BeatMaker : inMix ? ui::KeyContext::Transition : ui::KeyContext::Main,
+                           typing);
 }
 
 void MainComponent::registerActions()
@@ -711,6 +770,14 @@ void MainComponent::registerActions()
                                        beatPanel.perform(static_cast<GA>(a));
                                });
     onPress(ui::globalCommand(GA::SwitchPanel), [this] { switchBottomPanel(); });
+    // The transition editor's keys (P4-17).
+    for (int a = static_cast<int>(GA::TransLane1); a <= static_cast<int>(GA::TransSavePreset); ++a)
+        actions.setHandler(ui::globalCommand(static_cast<GA>(a)),
+                           [this, a](Phase p)
+                           {
+                               if (p != Phase::Release)
+                                   mixEditor.perform(static_cast<GA>(a));
+                           });
 
     for (engine::DeckId d = 0; d < 2; ++d)
     {
@@ -1697,6 +1764,13 @@ void MainComponent::autoTransition()
         from = s.decks[0].playing ? 0 : s.decks[1].playing ? 1 : -1;
     if (from < 0 || !s.decks[1 - from].loaded)
         return;
+    // The transition edited in the MIX panel, if it is for these two tracks (P4-17).
+    if (mixPlan && mixPlan->from == from && mixPlan->fromBuffer == s.decks[from].bufferId &&
+        mixPlan->toBuffer == s.decks[1 - from].bufferId)
+    {
+        startPlannedTransition(mixPlan->edit, from, false);
+        return;
+    }
     const auto style = transitionStyle == 1   ? engine::TransitionStyle::FilterSweep
                        : transitionStyle == 2 ? engine::TransitionStyle::EchoOut
                                               : engine::TransitionStyle::Blend;
@@ -2010,13 +2084,127 @@ juce::File MainComponent::beatProjectFile()
 
 void MainComponent::switchBottomPanel()
 {
-    // Browser -> Beat Maker -> (Code Beat, Phase 5) -> browser.
-    bottomPanel = (bottomPanel + 1) % 2;
+    // Browser -> Beat Maker -> transition editor -> (Code Beat, Phase 5) -> browser.
+    bottomPanel = (bottomPanel + 1) % 3;
     resized();
     if (bottomPanel == 1)
         beatPanel.showView(beatPanel.view());
+    else if (bottomPanel == 2)
+    {
+        refreshMix(false);
+        mixEditor.grabKeyboardFocus();
+    }
     else
         grabKeyboardFocus();
+}
+
+void MainComponent::loadMixPresetNames()
+{
+    juce::StringArray builtIn, user;
+    for (int i = 0; i < app::kTransitionPresetCount; ++i)
+        builtIn.add(app::presetName(static_cast<app::TransitionPreset>(i)));
+    for (const auto& u : app::loadUserPresets())
+        user.add(u.name);
+    mixEditor.setPresetNames(builtIn, user);
+}
+
+void MainComponent::refreshMix(bool replan)
+{
+    // The next transition: from the deck leading (else playing) to the other, both loaded and analyzed.
+    const auto& s = engine.readState();
+    int from = s.masterSource >= 0 && s.masterSource < 2 ? s.masterSource : -1;
+    if (from < 0)
+        from = s.decks[0].playing ? 0 : s.decks[1].playing ? 1 : 0;
+    const int to = 1 - from;
+    const auto outTrack = registry.get(s.decks[from].bufferId), inTrack = registry.get(s.decks[to].bufferId);
+    if (outTrack == nullptr || inTrack == nullptr)
+    {
+        mixPlan.reset();
+        mixOutTrack = mixInTrack = nullptr;
+        mixEditor.setTracks({}, {});
+        mixEditor.setMessage("Load a track on each deck (one playing): the transition between them is edited here.");
+        return;
+    }
+    const auto title = [](const engine::TrackBuffer& t) { return t.title.isNotEmpty() ? t.title : t.file.getFileNameWithoutExtension(); };
+    mixOutTrack = outTrack;
+    mixInTrack = inTrack;
+    const auto& og = deckGrids[static_cast<std::size_t>(from)];
+    const auto& ig = deckGrids[static_cast<std::size_t>(to)];
+    mixEditor.setTracks({&outTrack->waveform, og.grid, outTrack->numSamples(), title(*outTrack)},
+                        {&inTrack->waveform, ig.grid, inTrack->numSamples(), title(*inTrack)});
+    const bool same = mixPlan && mixPlan->from == from && mixPlan->fromBuffer == s.decks[from].bufferId &&
+                      mixPlan->toBuffer == s.decks[to].bufferId;
+    if (same && !replan)
+        return;
+    app::AutoInput a{&outTrack->waveform, og.grid, outTrack->numSamples(), og.musicalKey, og.grid.firstBpm()};
+    app::AutoInput b{&inTrack->waveform, ig.grid, inTrack->numSamples(), ig.musicalKey, ig.grid.firstBpm()};
+    const auto plan = app::planAutoTransition(a, b);
+    MixPlan m;
+    m.from = from;
+    m.fromBuffer = s.decks[from].bufferId;
+    m.toBuffer = s.decks[to].bufferId;
+    m.fromTrack = og.trackId;
+    m.toTrack = ig.trackId;
+    if (plan.ok)
+    {
+        m.edit.curves = plan.curves;
+        m.edit.outBeat = plan.outBeat;
+        m.edit.inBeat = plan.inBeat;
+        m.edit.preset = juce::String("Auto: ") + app::presetName(plan.preset);
+    }
+    else
+    {
+        // Not analyzed enough for Auto: a smooth blend from the next phrase.
+        m.edit.curves = app::makePreset(app::TransitionPreset::SmoothBlend, 32.0f);
+        m.edit.outBeat = std::ceil(s.decks[from].beat / 16.0) * 16.0;
+        m.edit.inBeat = app::firstDownbeatBeat(ig.grid);
+        m.edit.preset = "Smooth blend";
+    }
+    m.edit.reasons = plan.reasons;
+    mixPlan = m;
+    mixEditor.setEdit(m.edit);
+}
+
+void MainComponent::startPlannedTransition(const ui::TransitionEditor::Edit& edit, int from, bool isPreview)
+{
+    const auto& s = engine.readState();
+    const auto f = static_cast<engine::DeckId>(from), t = static_cast<engine::DeckId>(1 - from);
+    const auto& og = deckGrids[f].grid;
+    const auto& ig = deckGrids[t].grid;
+    if (og.empty() || ig.empty())
+        return;
+    // The incoming deck cued where it comes in from.
+    const double inSample = ig.sampleAt(edit.inBeat);
+    engine.send(engine::SetCuePoint{t, inSample});
+    engine.send(engine::Seek{t, inSample});
+    engine.send(engine::SetSync{t, true});
+    auto curves = std::make_shared<const engine::TransitionCurves>(edit.curves);
+    const auto begin = [this, f, t, curves, outBeat = edit.outBeat]
+    {
+        // The outgoing track's beat in master-clock beats (the clock follows the leading deck plus whole bars).
+        const auto& st = engine.readState();
+        const double toMaster = st.masterBeat - st.decks[f].beat;
+        double start = outBeat + toMaster;
+        if (start < st.masterBeat + 0.5) // already past it: the next phrase line
+            start = std::ceil((st.masterBeat + 0.5) / 16.0) * 16.0;
+        engine.startTransition(engine::StartTransition{f, t, 0.0f, engine::TransitionStyle::Blend, start}, curves);
+    };
+    if (!isPreview)
+    {
+        begin();
+        return;
+    }
+    // Preview: the outgoing track from 2 bars before, then the transition on its beat (once the seek is in).
+    engine.send(engine::CancelTransition{});
+    engine.send(engine::Pause{t});
+    engine.send(engine::Seek{f, og.sampleAt(edit.outBeat - 8.0)});
+    engine.send(engine::Play{f});
+    juce::Timer::callAfterDelay(150, [safe = juce::Component::SafePointer<MainComponent>(this), begin]
+                                {
+                                    if (safe != nullptr)
+                                        begin();
+                                });
+    (void)s;
 }
 
 void MainComponent::showSuggestions()
@@ -3111,6 +3299,8 @@ void MainComponent::resized()
         beatPanel.setBounds(area);
         beatPanel.setVisible(bottomPanel == 1);
         beatStrip.setVisible(bottomPanel == 1);
+        mixEditor.setBounds(l.nextTrack.isEmpty() ? l.browser : l.browser.getUnion(l.nextTrack));
+        mixEditor.setVisible(bottomPanel == 2);
     }
     deckA.setBounds(l.deckA);
     deckB.setBounds(l.deckB);

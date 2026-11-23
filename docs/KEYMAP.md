@@ -147,6 +147,27 @@ In the synth view (piano roll) the same keys mean: arrows move the cursor (by th
 
 Mouse (drums): click a step to toggle it, drag along a row to paint, Alt-drag on a step for its velocity, drag in the velocity lane under the grid, right-click a step for its editor. Mouse (synth): click to draw a note or chord (drag on to draw it longer), drag a note to move it, drag its right edge to resize, right-click to delete, drag in the velocity lane, the wheel scrolls the rows.
 
+## Transition editor (the MIX panel: Ctrl+Tab to it)
+
+| Action | Key |
+| --- | --- |
+| Lane: volume / low / mid / high / filter / FX | 1 / 2 / 3 / 4 / 5 / 6 |
+| The outgoing / incoming deck's lanes | Tab |
+| Cursor a beat / a bar | Left / Right, Shift+Left / Shift+Right |
+| Previous / next point | Ctrl+Left / Ctrl+Right |
+| Point value up / down (adds a point at the cursor if there is none; an EQ below its range = kill) | Up / Down |
+| Add / delete the point at the cursor | Enter / Delete |
+| Point shape (linear, ease in, ease out, S-curve, hold) | S |
+| Length (1, 2, 4, 8, 12, 16, 24, 32 bars; the curves stretch) | L |
+| Next / previous preset | P / Shift+P |
+| Auto (plan it from the tracks) | A |
+| Incoming track a beat earlier / later | , / . |
+| Start a bar earlier / later | Shift+, / Shift+. |
+| Preview from 2 bars before | Space |
+| Save as a preset | Ctrl+S |
+
+Mouse: click a lane point and drag it (quarter beats; Alt: free), click elsewhere to add one, right-click to delete, double-click for its shape, Shift-drag a track to move it against the other. The T key plays the transition shown here while it is for the two tracks on the decks.
+
 ## Code Beat (when the editor has focus)
 
 | Action | Key |

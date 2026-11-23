@@ -201,6 +201,34 @@ namespace devildj::ui
     X(BeatMakerRecord, "Beat Maker: record hits (1-8, pads) on / off", false)                                          \
     X(BeatMakerExport, "Beat Maker: export (WAV, sampler, library)", false)                                            \
     X(BeatMakerLoadSample, "Beat Maker: a sample file on the track", false)                                            \
+    X(TransLane1, "Transition: volume lane", false)                                                                    \
+    X(TransLane2, "Transition: low EQ lane", false)                                                                    \
+    X(TransLane3, "Transition: mid EQ lane", false)                                                                    \
+    X(TransLane4, "Transition: high EQ lane", false)                                                                   \
+    X(TransLane5, "Transition: filter lane", false)                                                                    \
+    X(TransLane6, "Transition: FX lane", false)                                                                        \
+    X(TransSide, "Transition: outgoing / incoming deck's lanes", false)                                                \
+    X(TransCursorLeft, "Transition: cursor a beat back", true)                                                         \
+    X(TransCursorRight, "Transition: cursor a beat on", true)                                                          \
+    X(TransCursorBarLeft, "Transition: cursor a bar back", true)                                                       \
+    X(TransCursorBarRight, "Transition: cursor a bar on", true)                                                        \
+    X(TransPointPrevious, "Transition: previous point", true)                                                          \
+    X(TransPointNext, "Transition: next point", true)                                                                  \
+    X(TransAddPoint, "Transition: add a point", false)                                                                 \
+    X(TransDeletePoint, "Transition: delete the point", false)                                                         \
+    X(TransValueUp, "Transition: point value up", true)                                                                \
+    X(TransValueDown, "Transition: point value down", true)                                                            \
+    X(TransShape, "Transition: point shape", false)                                                                    \
+    X(TransLength, "Transition: length", false)                                                                        \
+    X(TransPresetNext, "Transition: next preset", false)                                                               \
+    X(TransPresetPrevious, "Transition: previous preset", false)                                                       \
+    X(TransAuto, "Transition: Auto", false)                                                                            \
+    X(TransMoveInEarlier, "Transition: incoming track a beat earlier", true)                                           \
+    X(TransMoveInLater, "Transition: incoming track a beat later", true)                                               \
+    X(TransMoveOutEarlier, "Transition: start a bar earlier", true)                                                    \
+    X(TransMoveOutLater, "Transition: start a bar later", true)                                                        \
+    X(TransPreview, "Transition: preview", false)                                                                      \
+    X(TransSavePreset, "Transition: save as a preset", false)                                                          \
     X(CodeEvaluate, "Code Beat: evaluate", false)                                                                      \
     X(CodeEvaluateNow, "Code Beat: evaluate immediately", false)                                                       \
     X(CodeHush, "Code Beat: hush", false)                                                                              \

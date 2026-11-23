@@ -174,6 +174,8 @@ std::string contextName(KeyContext context)
             return "beatmaker";
         case KeyContext::CodeBeat:
             return "codebeat";
+        case KeyContext::Transition:
+            return "transition";
         case KeyContext::Main:
         default:
             return "main";
@@ -182,7 +184,7 @@ std::string contextName(KeyContext context)
 
 std::optional<KeyContext> parseContext(const std::string& text)
 {
-    for (auto c : {KeyContext::Main, KeyContext::BeatMaker, KeyContext::CodeBeat})
+    for (auto c : {KeyContext::Main, KeyContext::BeatMaker, KeyContext::CodeBeat, KeyContext::Transition})
         if (contextName(c) == text)
             return c;
     return std::nullopt;
@@ -475,6 +477,33 @@ std::vector<KeyBinding> defaultKeymap()
     key(R, mods::Ctrl, GA::BeatMakerRecord, bm); // P4-11
     key(E, mods::Ctrl, GA::BeatMakerExport, bm); // P4-12
     key(O, mods::Ctrl, GA::BeatMakerLoadSample, bm); // P4-13
+
+    // The transition editor (P4-17).
+    constexpr auto tr = KeyContext::Transition;
+    for (int i = 0; i < 6; ++i)
+        key(eight[i], mods::None, static_cast<GA>(static_cast<int>(GA::TransLane1) + i), tr);
+    key(Tab, mods::None, GA::TransSide, tr);
+    key(Left, mods::None, GA::TransCursorLeft, tr);
+    key(Right, mods::None, GA::TransCursorRight, tr);
+    key(Left, mods::Shift, GA::TransCursorBarLeft, tr);
+    key(Right, mods::Shift, GA::TransCursorBarRight, tr);
+    key(Left, mods::Ctrl, GA::TransPointPrevious, tr);
+    key(Right, mods::Ctrl, GA::TransPointNext, tr);
+    key(Enter, mods::None, GA::TransAddPoint, tr);
+    key(Delete, mods::None, GA::TransDeletePoint, tr);
+    key(Up, mods::None, GA::TransValueUp, tr);
+    key(Down, mods::None, GA::TransValueDown, tr);
+    key(S, mods::None, GA::TransShape, tr);
+    key(L, mods::None, GA::TransLength, tr);
+    key(P, mods::None, GA::TransPresetNext, tr);
+    key(P, mods::Shift, GA::TransPresetPrevious, tr);
+    key(A, mods::None, GA::TransAuto, tr);
+    key(Comma, mods::None, GA::TransMoveInEarlier, tr);
+    key(Period, mods::None, GA::TransMoveInLater, tr);
+    key(Comma, mods::Shift, GA::TransMoveOutEarlier, tr);
+    key(Period, mods::Shift, GA::TransMoveOutLater, tr);
+    key(Space, mods::None, GA::TransPreview, tr);
+    key(S, mods::Ctrl, GA::TransSavePreset, tr);
 
     // Code Beat editor.
     constexpr auto cb = KeyContext::CodeBeat;

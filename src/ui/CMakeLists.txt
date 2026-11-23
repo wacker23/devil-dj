@@ -17,6 +17,8 @@ target_sources(devildj_ui INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/BeatMakerPanel.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/PianoRoll.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/PianoRoll.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/TransitionEditor.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/TransitionEditor.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/StepGrid.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/StepGrid.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/NextTrackPanel.cpp"

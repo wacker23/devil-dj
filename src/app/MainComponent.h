@@ -20,6 +20,7 @@
 #include "ui/KeymapEditor.h"
 #include "ui/NextTrackPanel.h"
 #include "ui/BeatChannelStrip.h"
+#include "ui/TransitionEditor.h"
 #include "ui/BeatMakerPanel.h"
 #include "app/BeatMakerProducer.h"
 #include "app/SampleBank.h"
@@ -180,7 +181,22 @@ private:
     // edit) and the step grid, shown in the browser's place (Ctrl+Tab switches).
     beatmaker::Project beatProject;
     ui::BeatMakerPanel beatPanel;
-    int bottomPanel = 0; // 0 the browser, 1 the Beat Maker
+    int bottomPanel = 0; // 0 the browser, 1 the Beat Maker, 2 the transition editor (P4-17)
+    // The transition editor (P4-17): the next transition, from the deck playing to the other one - Auto, then as
+    // edited; the T key plays it while it is for the two tracks on the decks.
+    ui::TransitionEditor mixEditor;
+    struct MixPlan
+    {
+        std::int64_t fromTrack = 0, toTrack = 0;
+        engine::BufferId fromBuffer = 0, toBuffer = 0;
+        int from = 0;
+        ui::TransitionEditor::Edit edit;
+    };
+    std::optional<MixPlan> mixPlan;
+    std::shared_ptr<const engine::TrackBuffer> mixOutTrack, mixInTrack; // kept while the editor shows them
+    void refreshMix(bool replan);
+    void startPlannedTransition(const ui::TransitionEditor::Edit& edit, int from, bool isPreview);
+    void loadMixPresetNames();
     bool beatPlaying = false;
     bool beatSongMode = false, beatSwitchAtEnd = false;
     // P4-10: the producer thread that plays the patterns into the engine, and the BEATS channel strip.

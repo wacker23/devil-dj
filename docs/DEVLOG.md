@@ -11,6 +11,24 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-17 Transition editor UI
+- What changed:
+  - `ui/TransitionEditor` is a third bottom panel, MIX (Ctrl+Tab: Browser → Beat Maker → MIX).
+    - The outgoing track's waveform (from its start beat) sits above the incoming track's (from its in beat), on one transition-beat grid running from 2 bars before to 1 bar after, with bars marked and the transition span lit.
+    - The 12 lanes are drawn over their halves in our own colours. The chosen lane is bold with its points; the reasons and preset show along the bottom.
+    - Toolbar: AUTO, the preset box (built-ins, then the owner's), length, the six lanes, PREVIEW, SAVE PRESET.
+    - Mouse: click a point and drag it (snapped to quarter beats; Alt for free), click elsewhere to add one, right-click to delete, double-click to change its shape, Shift-drag a half to move that track (the incoming by beats, the outgoing by bars).
+  - A new key context, `KeyContext::Transition`, with 28 actions; every control has a key (see KEYMAP.md).
+  - In the app the next transition goes from the leading (or playing) deck to the other one. Auto is planned when the two tracks change (Smooth blend when they aren't analyzed), and the editor's changes are kept.
+  - T plays the edited transition when it is for the two tracks on the decks: the incoming deck is cued and synced at its in beat, and it starts at the outgoing track's start beat in master-clock beats (the next phrase line if that has passed). Otherwise T plays P3-17's style as before.
+  - Preview: the outgoing deck jumps to 2 bars before, then the transition starts on its beat. It plays on the master (the owner's headphones can CUE the decks).
+  - User presets are saved from the editor (a name dialog) and listed straight away.
+- Tests: 3 cases.
+  - Keyboard: lanes, sides, the cursor by beats and bars, add / next / previous / delete points, values with clamping and the EQ kill, shapes, length stretching the curves, moving both tracks, presets / Auto / preview reaching the app.
+  - Mouse: add (snapped), drag to a new beat and the bottom value, double-click for the shape, right-click delete, a point on the incoming half, Shift-drag moving the incoming track by beats and the outgoing one by bars, the length box. An empty editor paints its message.
+  - Keys: all 28 bound in the Transition context, no conflicts, Ctrl+Tab still switching panels.
+- Manual test (owner): load two analyzed tracks, play one, Ctrl+Tab twice, look at Auto's reasons, edit, Space to preview, T for the real thing. Then the P4-16 rating: is Auto usable on at least 7 of 10 of the owner's tracks?
+
 ## 2026-11-23 · P4-16 Auto transition
 - What changed: `app/AutoTransition` plans a transition by analysis and rules, not a trained model.
   - **Bar profile:** from the waveform (150 points per second, 3 bands) and the grid, the low / mid / high level of every bar from the first downbeat.

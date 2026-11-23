@@ -50,6 +50,7 @@ enum class KeyContext : std::uint8_t
     Main,
     BeatMaker,
     CodeBeat,
+    Transition, // P4-17: the transition editor (the MIX panel)
 };
 
 struct KeyChord
