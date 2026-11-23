@@ -25,6 +25,7 @@
 #include "app/BeatMakerProducer.h"
 #include "app/SampleBank.h"
 #include "app/TransitionStore.h"
+#include "app/SpotifyAuth.h"
 #include "beatmaker/Model.h"
 #include "beatmaker/Sequencer.h"
 #include "ui/RecorderPanel.h"
@@ -202,6 +203,9 @@ private:
     std::optional<ui::TransitionEditor::Edit> transitionFor(int from, bool* saved = nullptr);
     app::TransitionLabels transitionLabels;
     std::unique_ptr<juce::TimedCallback> mixSaveTimer;
+    std::unique_ptr<app::SpotifyAuth> spotify; // P4-20
+    juce::String spotifyClientId;
+    int spotifyPort = 43879;
     void saveMixPlan();
     bool beatPlaying = false;
     bool beatSongMode = false, beatSwitchAtEnd = false;
@@ -432,6 +436,13 @@ public:
     // P3-23: the layout (0 horizontal waveforms, 1 vertical) and the enlarged browser; changes reported to save.
     void setLayout(int waveforms, bool bigBrowser);
     void setNextTrackPanel(bool show); // P3-24
+    // P4-20: Spotify sign-in (the Client ID and port from the settings).
+    void setSpotifyApp(const juce::String& clientId, int redirectPort);
+    void spotifyMenu(int op); // 0 the Client ID (asks), 1 sign in, 2 sign out
+    std::function<void(const juce::String& clientId)> onSpotifyClientIdChanged;
+    std::function<void()> onSpotifyStateChanged; // signed in / out: the menu follows
+    bool spotifySignedIn() const { return spotify != nullptr && spotify->signedIn(); }
+    bool spotifyHasClientId() const { return spotifyClientId.isNotEmpty(); }
     std::function<void(bool show)> onNextTrackPanelChanged;
     std::function<void(int waveforms, bool bigBrowser)> onLayoutChanged;
     std::function<void(const juce::String& json)> onPadFxPresetsChanged;

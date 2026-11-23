@@ -131,6 +131,11 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
         layout.addItem(LayoutBigBrowser, "Enlarged browser (Ctrl+B)", true, layoutBigBrowser);
         layout.addItem(LayoutNextTrack, "Next Track panel (beside the browser)", true, layoutNextTrack);
         menu.addSubMenu("Layout", layout);
+        juce::PopupMenu spotify; // P4-20: playlists' track lists only; Spotify audio is never played
+        spotify.addItem(SpotifyClientId, spotifyHasClientId ? "Client ID (set)..." : "Client ID (needed first)...");
+        spotify.addItem(SpotifySignIn, spotifySignedIn ? "Signed in - sign in again" : "Sign in (in your browser)", spotifyHasClientId);
+        spotify.addItem(SpotifySignOut, "Sign out", spotifySignedIn);
+        menu.addSubMenu("Spotify", spotify);
         menu.addSeparator();
         juce::PopupMenu keyMenu;
         keyMenu.addItem(KeyMusical, "Musical (Am, F#)", true, keyNotation == 0);
@@ -364,6 +369,13 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
             highQuality = !highQuality;
             if (onHighQualityResampling)
                 onHighQualityResampling(highQuality);
+            break;
+
+        case SpotifyClientId:
+        case SpotifySignIn:
+        case SpotifySignOut:
+            if (onSpotify)
+                onSpotify(menuItemID == SpotifyClientId ? 0 : menuItemID == SpotifySignIn ? 1 : 2);
             break;
 
         case LayoutNextTrack:

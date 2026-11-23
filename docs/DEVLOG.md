@@ -11,6 +11,21 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-20 Spotify sign-in
+- What changed:
+  - `app/SpotifyAuth` does OAuth 2 authorization code with PKCE (RFC 7636), so there is no client secret.
+    - A 64-character verifier; the challenge is base64url of its SHA-256 (JUCE's `juce_cryptography`).
+    - The authorize URL carries the client id, the scopes (playlist-read-private and playlist-read-collaborative only), S256 and a random state. It opens in the system browser.
+    - A listener on `127.0.0.1:<port>` waits up to 3 minutes for `/callback`. It checks the state and handles `error=access_denied`, then answers the browser with a short page.
+    - The code and verifier are swapped for tokens at `/api/token` (JUCE networking, no new library).
+  - Tokens are sealed for the Windows user with DPAPI (`app/SecretBox`, crypt32, kept apart from the JUCE code) in `%LOCALAPPDATA%\Devil-DJ\spotify.tok`, loaded at start, and refreshed when within a minute of expiry (the refresh token is kept when the reply has none). Sign out deletes them. Tokens are never logged.
+  - Menu: Decks > Spotify > Client ID... (with instructions: create the app, register `http://127.0.0.1:43879/callback`), Sign in, Sign out. Settings: `spotifyClientId`, `spotifyRedirectPort` (decision D8).
+- Tests: 3 cases, all against a fake accounts server on 127.0.0.1 (nothing talks to Spotify).
+  - The RFC 7636 challenge vector, the verifier charset, and sealing (the text isn't in the file, and it opens again).
+  - Sign-in: the authorize parameters are right; the token request carries the code, client id, redirect and a verifier matching the challenge (the fake refuses otherwise); the tokens are back after a restart; a refresh within the minute (grant_type=refresh_token, the refresh token kept); a refused refresh says to sign in again; sign out removes the file.
+  - Errors: cancelled at Spotify, a wrong state, a refused exchange, no Client ID.
+- Owner (D8): create the Spotify app, register the redirect, enter the Client ID, sign in once in the real app.
+
 ## 2026-11-23 · P4-19 Saved transitions in Automix
 - What changed:
   - Library schema v3 adds the `transitions` table: one row per (outgoing track, incoming track), with the curves as JSON (a 0..1 shape plus its length), the start and in beats, and the preset.

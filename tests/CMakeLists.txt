@@ -30,6 +30,7 @@ target_sources(DevilDJTests PRIVATE
     app/TransitionPresetTests.cpp
     app/AutoTransitionTests.cpp
     app/SavedTransitionTests.cpp
+    app/SpotifyAuthTests.cpp
     app/LayoutTests.cpp
     app/SettingsTests.cpp
     app/SoakTestTests.cpp

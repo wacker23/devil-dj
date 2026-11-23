@@ -82,3 +82,5 @@ Machine-readable allowlist read by `tools/check_licenses.py`. `Package id` is th
 | xxhash | vcpkg | BSD-2-Clause | yes |
 | catch2 | vcpkg | BSL-1.0 | no (tests) |
 - `THIRD_PARTY_NOTICES.txt` is generated from this table and installed with the app; the About box shows it.
+
+- P4-20: the JUCE module `juce_cryptography` (SHA-256 for PKCE) - part of JUCE, same licence (D6); Windows' own `crypt32` (DPAPI) for sealing the Spotify tokens. No new third-party library.

@@ -2246,6 +2246,75 @@ std::optional<ui::TransitionEditor::Edit> MainComponent::transitionFor(int from,
     return e;
 }
 
+void MainComponent::setSpotifyApp(const juce::String& clientId, int redirectPort)
+{
+    spotifyClientId = clientId.trim();
+    spotifyPort = std::clamp(redirectPort, 1024, 65535);
+    app::SpotifyAuth::Config c;
+    c.clientId = spotifyClientId;
+    c.redirectPort = spotifyPort;
+    c.tokenFile = cacheFolder().getParentDirectory().getChildFile("spotify.tok"); // sealed for this Windows user
+    spotify = std::make_unique<app::SpotifyAuth>(c);
+    if (onSpotifyStateChanged)
+        onSpotifyStateChanged();
+}
+
+void MainComponent::spotifyMenu(int op)
+{
+    if (op == 0)
+    {
+        // The Client ID of the owner's own Spotify app (developer.spotify.com > Dashboard > Create app; its Redirect
+        // URI must be exactly the one shown here).
+        auto* w = new juce::AlertWindow(
+            "Spotify app",
+            "Create a free app at developer.spotify.com (Dashboard > Create app), add this Redirect URI to it:\n\n"
+            "    http://127.0.0.1:" + juce::String(spotifyPort) + "/callback\n\n"
+            "tick \"Web API\", save, and paste its Client ID here. Devil-DJ only reads your playlists' track lists "
+            "and matches them to your own files; it never plays Spotify audio.",
+            juce::MessageBoxIconType::NoIcon);
+        w->addTextEditor("id", spotifyClientId, "Client ID");
+        w->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
+        w->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+        w->enterModalState(true, juce::ModalCallbackFunction::create(
+                                     [this, w](int result)
+                                     {
+                                         if (result != 1)
+                                             return;
+                                         const auto id = w->getTextEditorContents("id").trim();
+                                         setSpotifyApp(id, spotifyPort);
+                                         if (onSpotifyClientIdChanged)
+                                             onSpotifyClientIdChanged(id);
+                                     }),
+                           true);
+        return;
+    }
+    if (spotify == nullptr)
+        setSpotifyApp(spotifyClientId, spotifyPort);
+    if (op == 2)
+    {
+        spotify->signOut();
+        libraryBrowser->setStatus("Signed out of Spotify.");
+        if (onSpotifyStateChanged)
+            onSpotifyStateChanged();
+        return;
+    }
+    libraryBrowser->setStatus("Signing in to Spotify in your browser...");
+    spotify->beginSignIn([](const juce::URL& url) { url.launchInDefaultBrowser(); },
+                         [safe = juce::Component::SafePointer<MainComponent>(this)](bool ok, juce::String message)
+                         {
+                             juce::MessageManager::callAsync(
+                                 [safe, ok, message]
+                                 {
+                                     if (safe == nullptr)
+                                         return;
+                                     safe->libraryBrowser->setStatus(message);
+                                     util::logInfo("Spotify: {}", ok ? "signed in" : message.toStdString());
+                                     if (safe->onSpotifyStateChanged)
+                                         safe->onSpotifyStateChanged();
+                                 });
+                         });
+}
+
 void MainComponent::saveMixPlan()
 {
     if (!mixPlan || libraryDb == nullptr || mixPlan->fromTrack == 0 || mixPlan->toTrack == 0)

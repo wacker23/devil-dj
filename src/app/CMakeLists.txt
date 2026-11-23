@@ -25,6 +25,10 @@ target_sources(devildj_app_core INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/TransitionStore.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/TransitionPresets.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/TransitionPresets.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SpotifyAuth.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SpotifyAuth.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SecretBox.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SecretBox.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/SampleBank.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/SampleBank.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/BeatRender.cpp"
@@ -43,7 +47,8 @@ target_sources(devildj_app_core INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/Settings.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/SettingsKeys.h")
 target_include_directories(devildj_app_core INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
-target_link_libraries(devildj_app_core INTERFACE juce::juce_data_structures juce::juce_gui_basics devildj::engine
+target_link_libraries(devildj_app_core INTERFACE juce::juce_data_structures juce::juce_gui_basics juce::juce_cryptography
+                                                $<$<PLATFORM_ID:Windows>:crypt32> devildj::engine
                                                 devildj::library devildj::matcher)
 
 juce_add_gui_app(DevilDJ

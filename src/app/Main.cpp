@@ -247,6 +247,16 @@ public:
         menu->onLayout = [this](int waves, bool big) { mainComponent->setLayout(waves, big); };
         menu->setNextTrackPanel(settings->get(keys::nextTrackPanel));
         mainComponent->setNextTrackPanel(settings->get(keys::nextTrackPanel));
+        // Spotify (P4-20).
+        mainComponent->setSpotifyApp(settings->get(keys::spotifyClientId), settings->get(keys::spotifyRedirectPort));
+        menu->onSpotify = [this](int op) { mainComponent->spotifyMenu(op); };
+        mainComponent->onSpotifyClientIdChanged = [this](const juce::String& id) { settings->set(keys::spotifyClientId, id); };
+        mainComponent->onSpotifyStateChanged = [this]
+        {
+            menu->setSpotifyState(mainComponent->spotifyHasClientId(), mainComponent->spotifySignedIn());
+            menu->menuItemsChanged();
+        };
+        menu->setSpotifyState(mainComponent->spotifyHasClientId(), mainComponent->spotifySignedIn());
         menu->onNextTrackPanel = [this](bool show)
         {
             settings->set(keys::nextTrackPanel, show);

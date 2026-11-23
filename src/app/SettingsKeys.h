@@ -82,6 +82,10 @@ inline const SettingKey<int> waveLayout{"waveLayout", 0};
 inline const SettingKey<bool> browserBig{"browserBig", false};
 // P3-24: the Next Track panel beside the browser.
 inline const SettingKey<bool> nextTrackPanel{"nextTrackPanel", true};
+// P4-20: the owner's own Spotify app (decision D8): its Client ID (not a secret: PKCE) and the redirect port
+// registered with it (http://127.0.0.1:<port>/callback).
+inline const SettingKey<juce::String> spotifyClientId{"spotifyClientId", {}};
+inline const SettingKey<int> spotifyRedirectPort{"spotifyRedirectPort", 43879};
 inline const SettingKey<double> brakeSeconds{"brakeSeconds", 1.0};
 inline const SettingKey<double> spinBackSeconds{"spinBackSeconds", 1.0};
 
