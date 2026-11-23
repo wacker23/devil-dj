@@ -33,6 +33,8 @@ target_sources(devildj_engine INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/Recorder.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/Sampler.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Sampler.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ScheduledEvent.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Scheduler.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/Sequencer.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Sequencer.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/TrackBuffer.h"

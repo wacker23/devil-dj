@@ -11,6 +11,20 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-02 Beat Maker event source
+- What changed:
+  - `engine/ScheduledEvent.h` follows ARCHITECTURE §3.7.
+  - `engine/Scheduler.h` holds three things:
+    - `ScheduleCursor`: exact Fraction windows from the cursor to the look-ahead point; it re-anchors when the clock jumps.
+    - `EventBuffer`: fixed capacity, sorted inserts, and `takeDue` per block, which drops and counts late events.
+    - `EventQueue`: an SPSC queue for each producer.
+  - `beatmaker/Sequencer`: `playPattern` / `playSong` and `emit(project, begin, end)`. Steps get swing, then micro-timing, then probability (`hash(seed, pattern, track, step, loop)`), then ratchets (10 % quieter per hit). Solo and mute apply. Synth notes play as written, or through the arpeggiator: up, down, up-down, random or as-played, 1–4 octaves, 1/8 to 1/32. `toScheduled` converts beats to samples with a ClockSnapshot.
+- Decision: an event belongs to the window that its shifted time falls in. The spec said its nominal step time, but that way any window size gives each event exactly once, and a negative micro-timing can never push an event into the past.
+- Tests:
+  - At 90 / 120 / 128 / 174 BPM, swing 0 and 0.5, with and without micro-timing of ±50 %: a simulated producer (25 ms ticks, 100 ms look-ahead) puts every hit over 32 beats on its exact sample, with none missing or doubled.
+  - Random window sizes give the same events. Probability is the same for a given seed (0 % and 100 % exact). Also covered: ratchet times and velocities, solo and mute, notes, the arp modes, song order, the cursor and the event buffer.
+- Not yet: nothing plays the events. The engine's EventBuffer drain and the voices come with P4-03, and the Beat Maker channel with P4-10.
+
 ## 2026-11-23 · P4-01 Beat Maker model + serialization
 - Started Phase 4 at the owner's request, before they had run the Phase 3 MVP gate. The gate stays open in PLAN.md; the owner will run it later.
 - What changed: a new module, `src/beatmaker/`. It is an INTERFACE library like engine, because it uses juce_core for JSON.

@@ -446,7 +446,7 @@ Goal: everything needed for a real set: cues, loops, pads, FX, sampler, recordin
 Spec: `docs/BEATMAKER_SPEC.md`.
 
 - [x] **P4-01 Model + serialization** — `beatmaker/Project`, `Pattern`, `DrumTrack`, `SynthTrack`, `Step`, `Note`; JSON `.ddjbeat` save/load with schema version. Done when: round-trip tests.
-- [ ] **P4-02 Event source** — `beatmaker/Sequencer` converts the active pattern/song into timed events for a window (PPQ 96, swing, micro-timing, probability with a seeded RNG, ratchets), feeding the shared `engine/Scheduler`. Done when: event-timing tests at 120/174 BPM with swing.
+- [x] **P4-02 Event source** — `beatmaker/Sequencer` converts the active pattern/song into timed events for a window (PPQ 96, swing, micro-timing, probability with a seeded RNG, ratchets), feeding the shared `engine/Scheduler`. Done when: event-timing tests at 120/174 BPM with swing.
 - [ ] **P4-03 Voices** — `engine/Voices`: polyphonic sample voices (64) and synth voices (32), voice stealing, choke groups, per-voice gain/pan/filter, sends to the module's delay and reverb. Done when: 64 voices at 48 kHz within CPU budget; stealing tests.
 - [ ] **P4-04 Drum synths** — kick, snare, clap, closed/open hat, toms ×3, rim, cowbell, shaker per BEATMAKER_SPEC §4; parameters (tune, decay, tone, snap, drive); rendered live (not sampled). Done when: each sound has a parameter-sweep test (no NaN, bounded output) and a listening note.
 - [ ] **P4-05 Synths** — subtractive (2 osc + sub + noise, SVF LP/BP/HP with env, ADSR ×2, glide), 2-operator FM, sub-bass (sine + drive + glide). 10 presets each. Done when: tests + listening notes.
