@@ -39,6 +39,8 @@ public:
     bool redoLast();
     // The project was replaced from outside (a file loaded): history starts again.
     void projectReplaced();
+    // An edit from outside the panel (the BEATS strip's tempo): applied and recorded like the panel's own.
+    void edit(const std::function<void(beatmaker::Project&)>& change);
 
     void resized() override;
     void paint(juce::Graphics& g) override;

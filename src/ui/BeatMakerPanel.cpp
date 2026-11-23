@@ -114,6 +114,15 @@ void BeatMakerPanel::projectReplaced()
     dragging = false;
 }
 
+void BeatMakerPanel::edit(const std::function<void(beatmaker::Project&)>& change)
+{
+    if (project == nullptr)
+        return;
+    dragging = false;
+    change(*project);
+    record();
+}
+
 void BeatMakerPanel::record()
 {
     if (project == nullptr || *project == snapshot)

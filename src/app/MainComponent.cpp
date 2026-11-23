@@ -4,6 +4,7 @@
 #include "matcher/CandidateQuery.h"
 #include "beatmaker/DrumKits.h"
 #include "beatmaker/ProjectFile.h"
+#include "beatmaker/SynthPresets.h"
 #include "library/HistoryRepository.h"
 #include "ui/TrackColours.h"
 
@@ -358,45 +359,57 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
             if (const auto r = beatmaker::saveProject(beatProject, beatProjectFile().getFullPathName().toWideCharPointer()); !r)
                 util::logWarning("Beat Maker: {}", r.error());
         });
-    beatPanel.onChanged = [this] { beatSaveTimer->startTimer(1000); };
+    // The producer (P4-10): its own thread, pushing into the engine's Beat Maker queue.
+    beatProducer = std::make_unique<app::BeatMakerProducer>(
+        [this](const engine::ScheduledEvent& e) { return engine.beatMakerEvents().tryPush(e); });
+    beatPanel.onChanged = [this]
+    {
+        beatSaveTimer->startTimer(1000);
+        beatProjectChanged();
+    };
     beatPanel.onPlayStop = [this]
     {
-        // Until the Beat Maker has its channel (P4-10) this runs the grid's playhead on the master clock, from the
-        // next bar.
         if (beatPlaying)
-            beatPlaying = false;
+            stopBeatMaker();
         else
             startBeatMaker();
     };
     beatPanel.onPatternShown = [this](int p)
     {
         if (beatPlaying && !beatSongMode)
-            queueBeatPattern(p);
+            beatProducer->queuePattern(p, beatSwitchAtEnd);
     };
     beatPanel.grid().onSongMode = [this](bool on)
     {
         beatSongMode = on;
-        if (!beatPlaying)
-            return;
-        const auto now = util::Fraction::fromDouble(engine.readState().masterBeat, 96000);
-        const auto at = beatSwitchAtEnd ? beatSequencer.patternEnd(beatProject, now) : beatmaker::Sequencer::nextBar(now);
-        if (on)
-            beatSequencer.queueSong(at);
-        else
-            beatSequencer.queuePattern(beatPanel.grid().pattern(), at);
+        if (beatPlaying)
+            beatProducer->queueSong(on, beatPanel.grid().pattern(), beatSwitchAtEnd);
     };
     beatPanel.grid().onSwitchAt = [this](bool atEnd) { beatSwitchAtEnd = atEnd; };
+    addChildComponent(beatStrip);
+    beatStrip.setTempo(beatProject.followMaster, beatProject.ownBpm);
+    beatStrip.onTempo = [this](bool follow, double bpm)
+    {
+        beatPanel.edit([&](beatmaker::Project& p)
+                       {
+                           p.followMaster = follow;
+                           p.ownBpm = bpm;
+                       });
+    };
+    beatProjectChanged();
     beatTimer = std::make_unique<juce::TimedCallback>(
         [this]
         {
+            // The producer's clock: the engine's sample clock, master beat and tempo, and when (P4-10).
+            const auto& es = engine.readState();
+            beatProducer->setClock({es.sampleClock, es.masterBeat, es.masterBpm, es.sampleRate, es.hostTimeSeconds});
             if (!beatPanel.isVisible() && padModes[0] != ui::PadMode::BeatPatterns && padModes[1] != ui::PadMode::BeatPatterns)
                 return;
-            // What the sequencer plays now: the shown pattern's step lit, the playing / queued patterns marked.
-            const auto now = util::Fraction::fromDouble(engine.readState().masterBeat, 96000);
-            beatSequencer.prune(now);
-            const auto pos = beatPlaying ? beatSequencer.position(beatProject, now) : beatmaker::Sequencer::Position{};
-            const auto queued = beatPlaying ? beatSequencer.queuedAfter(now) : std::nullopt;
-            const int queuedPattern = queued ? (queued->song ? -2 : queued->pattern) : -1;
+            beatStrip.refresh();
+            // What plays now: the shown pattern's step lit, the playing / queued patterns marked.
+            const auto status = beatProducer->status();
+            const auto pos = status.playing ? status.position : beatmaker::Sequencer::Position{};
+            const int queuedPattern = status.playing ? status.queued : -1;
             beatPanel.grid().setPlayback(beatPlaying, pos.pattern == beatPanel.grid().pattern() ? pos.step : -1);
             beatPanel.grid().setPatternStates(pos.pattern, queuedPattern);
             for (auto* deck : {&deckA, &deckB})
@@ -1729,20 +1742,46 @@ std::optional<double> MainComponent::energyOf(std::int64_t trackId)
 
 void MainComponent::startBeatMaker()
 {
-    // From the next bar: the song (song mode) or the pattern shown.
-    const auto start = beatmaker::Sequencer::nextBar(util::Fraction::fromDouble(engine.readState().masterBeat, 96000));
-    beatSequencer.playPattern(beatPanel.grid().pattern(), start);
-    if (beatSongMode)
-        beatSequencer.playSong(start);
-    beatStartBeat = start.toDouble();
+    // From the next bar of its timeline: the song (song mode) or the pattern shown.
+    const auto& es = engine.readState();
+    beatProducer->setClock({es.sampleClock, es.masterBeat, es.masterBpm, es.sampleRate, es.hostTimeSeconds});
+    beatProducer->play(beatPanel.grid().pattern(), beatSongMode);
     beatPlaying = true;
 }
 
-void MainComponent::queueBeatPattern(int pattern)
+void MainComponent::stopBeatMaker()
 {
-    const auto now = util::Fraction::fromDouble(engine.readState().masterBeat, 96000);
-    beatSequencer.queuePattern(pattern, beatSwitchAtEnd ? beatSequencer.patternEnd(beatProject, now)
-                                                        : beatmaker::Sequencer::nextBar(now));
+    beatProducer->stop();
+    engine.send(engine::BeatMakerStop{}); // what is already queued goes too; what sounds fades out
+    beatPlaying = false;
+}
+
+void MainComponent::beatProjectChanged()
+{
+    // The producer reads its own copy (on its thread).
+    beatProducer->setProject(std::make_shared<const beatmaker::Project>(beatProject));
+    beatStrip.setTempo(beatProject.followMaster, beatProject.ownBpm);
+    // The voices' sounds, pattern x 16 + track: only those that changed.
+    for (int p = 0; p < beatmaker::kPatternCount; ++p)
+    {
+        const auto& pat = beatProject.patterns[static_cast<std::size_t>(p)];
+        for (std::size_t t = 0; t < pat.drums.size() && t < 16; ++t)
+        {
+            const auto index = static_cast<std::size_t>(p * 16) + t;
+            const auto& sound = pat.drums[t].sound;
+            if (sentDrumSounds[index] != sound && engine.send(engine::SetDrumSound{static_cast<std::uint16_t>(index),
+                                                                                   beatmaker::engineDrumSound(sound)}))
+                sentDrumSounds[index] = sound;
+        }
+        for (std::size_t t = 0; t < pat.synths.size() && t < 16; ++t)
+        {
+            const auto index = static_cast<std::size_t>(p * 16) + t;
+            const auto& preset = pat.synths[t].preset;
+            if (sentSynthSounds[index] != preset && engine.send(engine::SetSynthSound{static_cast<std::uint16_t>(index),
+                                                                                      beatmaker::synthParamsOf(preset)}))
+                sentSynthSounds[index] = preset;
+        }
+    }
 }
 
 juce::File MainComponent::beatProjectFile()
@@ -2848,8 +2887,14 @@ void MainComponent::resized()
     const auto l = app::computeLayout(getLocalBounds(), waveLayout, browserBig, sizes, showNextTrack);
     nextTrackPanel.setBounds(l.nextTrack);
     nextTrackPanel.setVisible(!l.nextTrack.isEmpty() && bottomPanel == 0);
-    beatPanel.setBounds(l.nextTrack.isEmpty() ? l.browser : l.browser.getUnion(l.nextTrack));
-    beatPanel.setVisible(bottomPanel == 1);
+    {
+        // The Beat Maker and, at its right, its channel strip (P4-10).
+        auto area = l.nextTrack.isEmpty() ? l.browser : l.browser.getUnion(l.nextTrack);
+        beatStrip.setBounds(area.removeFromRight(std::min(140, area.getWidth() / 6)));
+        beatPanel.setBounds(area);
+        beatPanel.setVisible(bottomPanel == 1);
+        beatStrip.setVisible(bottomPanel == 1);
+    }
     deckA.setBounds(l.deckA);
     deckB.setBounds(l.deckB);
     mixer.setBounds(l.mixer);

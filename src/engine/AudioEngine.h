@@ -15,8 +15,10 @@
 #include "engine/OutputRouter.h"
 #include "engine/RecordTap.h"
 #include "engine/Sampler.h"
+#include "engine/Scheduler.h"
 #include "engine/Sequencer.h"
 #include "engine/TrackBuffer.h"
+#include "engine/Voices.h"
 #include "util/SpscQueue.h"
 #include "util/TripleBuffer.h"
 
@@ -78,6 +80,10 @@ public:
 
     // Latest published state. One reader thread only (the UI); the reference stays valid until the next call.
     const EngineState& readState() noexcept { return state.read(); }
+
+    // The Beat Maker's events (P4-10): its producer thread (only that one) pushes them; the audio thread plays
+    // them at their samples on the BEATS channel.
+    EventQueue& beatMakerEvents() noexcept { return beatMaker->queue; }
 
     // The master clock (P2-18), for code on the audio thread (sync, quantize, the scheduler).
     const MasterClock& masterClock() const noexcept { return clock; }
@@ -162,6 +168,9 @@ private:
     void apply(const SequencerEvents& command) noexcept;
     void apply(const StartTransition& command) noexcept;
     void apply(const CancelTransition& command) noexcept;
+    void apply(const SetDrumSound& command) noexcept;
+    void apply(const SetSynthSound& command) noexcept;
+    void apply(const BeatMakerStop& command) noexcept;
     void runTransition() noexcept; // the automation lanes, once a block (after the clock)
     void endTransition(bool finished) noexcept;
     void setLowEq(DeckId deck, bool kill) noexcept;
@@ -170,6 +179,7 @@ private:
     // the FX units on it, meter, cue, fader, crossfader).
     void mixChannel(int channel, float* l, float* r, int numSamples) noexcept;
     void renderSampler(int numSamples) noexcept;
+    void renderBeatMaker(int numSamples) noexcept;
     dsp::fx::BeatContext beatContext() const noexcept;
     void processFx(FxTarget target, float* left, float* right, int numSamples) noexcept;
     void retireEffect(dsp::fx::Effect* effect) noexcept;
@@ -275,9 +285,21 @@ private:
     // Color FX (P3-10): one per channel, after the strip's filter; the FILTER knob drives the strip's filter
     // or, with another character chosen, the color FX (the strip's filter then stays at its centre).
     std::array<dsp::fx::ColorFx, kMaxChannels> colorFx;
-    std::array<double, kMaxChannels> filterKnob{0.5, 0.5, 0.5, 0.5, 0.5};
+    std::array<double, kMaxChannels> filterKnob{0.5, 0.5, 0.5, 0.5, 0.5, 0.5};
     // The sampler (P3-13) and its quantized presses waiting for their beat.
     Sampler sampler;
+    // The Beat Maker (P4-10), on the heap (its voices and queues are big): the voices, the events from its
+    // producer, the events due, and its own echo / reverb for the tracks' sends.
+    struct BeatMakerParts
+    {
+        Voices voices;
+        EventQueue queue;
+        EventBuffer<2048> due;
+        juce::AudioBuffer<float> scratch; // 6 x capacity: dry L / R, delay send L / R, reverb send L / R
+        std::unique_ptr<dsp::fx::Effect> delay, reverb;
+        std::uint64_t late = 0;
+    };
+    std::unique_ptr<BeatMakerParts> beatMaker = std::make_unique<BeatMakerParts>();
     std::array<double, Sampler::kSlots> samplerPendingBeat{}; // < 0 = none
     bool samplerPending = false;
     // The sequencer (P3-15) and its metronome click (into the headphones while recording).

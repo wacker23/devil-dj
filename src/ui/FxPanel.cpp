@@ -159,6 +159,8 @@ juce::String FxPanel::targetText(engine::FxTarget target)
             return "DECK D";
         case engine::FxTarget::Sampler:
             return "SAMPLER";
+        case engine::FxTarget::BeatMaker:
+            return "BEATS";
         case engine::FxTarget::CodeDeck:
             return "CODE";
         case engine::FxTarget::Master:
@@ -214,9 +216,12 @@ void FxPanel::nextEffect(int unit)
 void FxPanel::cycleTarget(int unit)
 {
     const auto now = engine.readState().fx[static_cast<std::size_t>(unit)].target;
-    const auto next = now == engine::FxTarget::Deck0   ? engine::FxTarget::Deck1
-                      : now == engine::FxTarget::Deck1 ? engine::FxTarget::Master
-                                                       : engine::FxTarget::Deck0;
+    // Deck A -> deck B -> the sampler -> the Beat Maker -> the master -> deck A.
+    const auto next = now == engine::FxTarget::Deck0       ? engine::FxTarget::Deck1
+                      : now == engine::FxTarget::Deck1     ? engine::FxTarget::Sampler
+                      : now == engine::FxTarget::Sampler   ? engine::FxTarget::BeatMaker
+                      : now == engine::FxTarget::BeatMaker ? engine::FxTarget::Master
+                                                           : engine::FxTarget::Deck0;
     sendFx(unit, engine::FxOp::Target, 0, 0, static_cast<float>(next));
 }
 
@@ -270,7 +275,8 @@ void FxPanel::showTargetMenu(int unit)
 {
     juce::PopupMenu m;
     const auto now = engine.readState().fx[static_cast<std::size_t>(unit)].target;
-    for (const auto t : {engine::FxTarget::Deck0, engine::FxTarget::Deck1, engine::FxTarget::Master})
+    for (const auto t : {engine::FxTarget::Deck0, engine::FxTarget::Deck1, engine::FxTarget::Sampler,
+                         engine::FxTarget::BeatMaker, engine::FxTarget::Master})
         m.addItem(targetText(t), true, now == t,
                   [this, unit, t] { sendFx(unit, engine::FxOp::Target, 0, 0, static_cast<float>(t)); });
     m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&units[static_cast<std::size_t>(unit)].target));

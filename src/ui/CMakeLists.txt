@@ -11,6 +11,8 @@ target_sources(devildj_ui INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/DeckView.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/FxPanel.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/FxPanel.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/BeatChannelStrip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/BeatChannelStrip.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/BeatMakerPanel.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/BeatMakerPanel.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/PianoRoll.cpp"

@@ -368,7 +368,7 @@ engine::ScheduledEvent toScheduled(const BeatEvent& e, const engine::ClockSnapsh
     s.sampleTime = clock.sampleAt(e.beat);
     s.source = engine::SourceId::BeatMaker;
     s.kind = e.kind;
-    s.soundIndex = static_cast<std::uint16_t>(e.track);
+    s.soundIndex = static_cast<std::uint16_t>(e.pattern * 16 + e.track); // the voices' sound tables (P4-10)
     s.note = static_cast<float>(e.pitch);
     s.velocity = e.velocity;
     s.gain = e.gain;

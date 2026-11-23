@@ -19,7 +19,9 @@
 #include "ui/FxPanel.h"
 #include "ui/KeymapEditor.h"
 #include "ui/NextTrackPanel.h"
+#include "ui/BeatChannelStrip.h"
 #include "ui/BeatMakerPanel.h"
+#include "app/BeatMakerProducer.h"
 #include "beatmaker/Model.h"
 #include "beatmaker/Sequencer.h"
 #include "ui/RecorderPanel.h"
@@ -179,11 +181,15 @@ private:
     ui::BeatMakerPanel beatPanel;
     int bottomPanel = 0; // 0 the browser, 1 the Beat Maker
     bool beatPlaying = false;
-    double beatStartBeat = 0.0;
-    beatmaker::Sequencer beatSequencer; // what plays when (P4-09: live switching, song mode)
     bool beatSongMode = false, beatSwitchAtEnd = false;
+    // P4-10: the producer thread that plays the patterns into the engine, and the BEATS channel strip.
+    std::unique_ptr<app::BeatMakerProducer> beatProducer;
+    ui::BeatChannelStrip beatStrip{engine};
+    std::array<std::optional<beatmaker::SoundRef>, 128> sentDrumSounds;
+    std::array<std::optional<beatmaker::SynthPreset>, 128> sentSynthSounds;
     void startBeatMaker();
-    void queueBeatPattern(int pattern);
+    void stopBeatMaker();
+    void beatProjectChanged(); // the producer's copy and the voices' sounds follow the project
     std::unique_ptr<juce::TimedCallback> beatTimer, beatSaveTimer;
     void switchBottomPanel();
     static juce::File beatProjectFile();

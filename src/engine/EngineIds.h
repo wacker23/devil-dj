@@ -15,9 +15,10 @@ constexpr char deckLetter(DeckId deck) noexcept
     return static_cast<char>('A' + deck);
 }
 
-// Mixer channels: one per deck, then the sampler (P3-13; Beat Maker / Code Beat / mic channels come later).
+// Mixer channels: one per deck, then the sampler (P3-13), the Beat Maker "BEATS" (P4-10); Code Beat / mic later.
 constexpr int kSamplerChannel = kMaxDecks;
-constexpr int kMaxChannels = kMaxDecks + 1;
+constexpr int kBeatMakerChannel = kMaxDecks + 1;
+constexpr int kMaxChannels = kMaxDecks + 2;
 
 // Per-channel continuous parameters. Units: Trim and EQ bands in dB (EQ <= -100 = kill), Filter 0..1 (0.5 = off),
 // FilterResonance 0..1, Fader 0..1, EqMode 0 = EQ / 1 = isolator, FaderCurve 0 smooth / 1 linear / 2 sharp,
@@ -50,11 +51,12 @@ enum class FxTarget : std::uint8_t
     Deck1,
     Deck2,
     Deck3,
-    Sampler,  // the sampler channel (P3-13; until it exists the unit has nothing to process)
-    CodeDeck, // the code deck channel (Phase 5; likewise)
-    Master,   // the master bus, before master gain and the limiter
+    Sampler,   // the sampler channel (P3-13)
+    BeatMaker, // the Beat Maker channel (P4-10)
+    CodeDeck,  // the code deck channel (Phase 5; until it exists the unit has nothing to process)
+    Master,    // the master bus, before master gain and the limiter
 };
-constexpr int kFxTargetCount = 7;
+constexpr int kFxTargetCount = 8;
 // Pad FX (P3-12): an effect slot per pad, per channel (the pads' current bank).
 constexpr int kPadFxSlots = 8;
 

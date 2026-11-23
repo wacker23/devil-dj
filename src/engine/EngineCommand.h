@@ -5,6 +5,7 @@
 #include "engine/Sequencer.h"
 #include "engine/MasterClock.h"
 #include "engine/OutputRouter.h"
+#include "engine/Voices.h"
 #include "util/Beatgrid.h"
 
 #include <array>
@@ -503,6 +504,22 @@ struct CancelTransition
 {
 };
 
+// The Beat Maker (P4-10): the voices' sound tables (index = pattern x 16 + track), and a stop that drops the
+// events still waiting and fades out what sounds.
+struct SetDrumSound
+{
+    std::uint16_t index = 0;
+    DrumSound sound;
+};
+struct SetSynthSound
+{
+    std::uint16_t index = 0;
+    dsp::SynthParams sound;
+};
+struct BeatMakerStop
+{
+};
+
 // Beat sync (P2-19): the deck follows the master clock's tempo (half / double aware) and phase.
 struct SetSync
 {
@@ -517,7 +534,7 @@ using EngineCommand =
                  SetClockSource, SetInternalTempo, SetSync, SetQuantize, BeatJump, JumpBy, SetHotCues, HotCue,
                  SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle, SetSlicer, SlicerPad, FxSetEffect, FxCommand, SetColorFx, ReleaseFxCommand, PadFxSetEffect, PadFxCommand,
                  SamplerLoad, SamplerPad, SamplerSet, SequencerCommand, SequencerEvents,
-                 StartTransition, CancelTransition>;
+                 StartTransition, CancelTransition, SetDrumSound, SetSynthSound, BeatMakerStop>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

@@ -80,6 +80,7 @@ public:
     std::uint64_t start(const ScheduledEvent& e, int offset) noexcept;
     bool playing(std::uint64_t id) const noexcept; // still sounding (not stolen, choked away or finished)
     void process(const VoiceBuses& buses, int numSamples) noexcept;
+    void releaseAll() noexcept; // every voice fades out (2 ms)
 
     int activeSampleVoices() const noexcept;
     int activeSynthVoices() const noexcept;

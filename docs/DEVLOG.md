@@ -11,6 +11,36 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-10 Mixer integration
+- What changed: the Beat Maker can be heard.
+  - Engine:
+    - A new channel, `kBeatMakerChannel` (BEATS). It goes through the same `mixChannel` path as the others: strip, color FX, pad FX, release FX, FX units (new target `FxTarget::BeatMaker`, which the FX panel now cycles to along with the sampler), meter, cue, fader, crossfader.
+    - Its parts live on the heap: `Voices`, the producer's `EventQueue`, an `EventBuffer` of what's due, and its own echo (3/4 beat) and reverb for the tracks' sends.
+    - New commands: `SetDrumSound` / `SetSynthSound` (sound index = pattern × 16 + track) and `BeatMakerStop`, which drops what's queued and fades the voices.
+    - `EngineState` gains `beatLateEvents` and `beatVoices`. `Voices::releaseAll` added.
+  - `app/BeatMakerProducer`: its own thread, every 25 ms, with a 100 ms look-ahead.
+    - It owns the sequencer and a copy of the project. A switch is queued from the first beat it hasn't sent yet, so nothing already in the engine is contradicted.
+    - Its timeline is either the master clock (follow) or its own BPM, anchored where the master was, so the beat carries on across the change.
+    - The app gives it the engine's sample clock, beat, tempo and timestamp at 30 Hz; it extrapolates "now" from the wall clock.
+  - App:
+    - The P4-09 stand-in sequencer is gone; play, stop, queueing, song mode and the PATTERNS pads all go through the producer.
+    - Only changed sounds are sent to the engine.
+    - `ui/BeatChannelStrip` beside the Beat Maker: level, filter, CUE, A / THRU / B, FOLLOW / OWN and BPM. The tempo is part of the project, and changing it is undoable.
+- Tests: 3 cases.
+  - **Crossfade:** a deck playing 300 Hz on side A, the Beat Maker holding C7 on side B. Measured levels:
+
+    | Crossfader | Deck | Beats |
+    | --- | --- | --- |
+    | A side | 0.40 | 0.0004 |
+    | Centre | 0.28 | 0.50 |
+    | B side | 0.0007 | 0.71 |
+
+  - **Timing:** following the master at 120 BPM, every pushed 16th is a multiple of 6,000 samples from the first, which falls on a bar. At its own 100 BPM the 16ths are 7,200 samples apart, and the beat is continuous at the change.
+  - **Stop:** nothing more is sent and the voices go silent. No late events anywhere.
+  - Sound commands reach the voices.
+- The owner should listen in the app: Ctrl+Tab, PLAY, then crossfade the BEATS channel (set to B) against a deck.
+- Not yet: user samples on drum tracks (P4-13). The sends' echo and reverb use their default settings.
+
 ## 2026-11-23 · P4-09 Song mode + live switching
 - What changed:
   - `beatmaker::Sequencer` now keeps a plan of placements (a pattern or the song, from a beat on).

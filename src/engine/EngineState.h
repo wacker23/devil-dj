@@ -213,6 +213,10 @@ struct EngineState
     // Sampler (P3-13): its 4 banks x 8 slots (its mixer channel is channels[kSamplerChannel]).
     std::array<SamplerSlotState, 32> sampler{};
     SequencerState sequencer; // P3-15
+
+    // The Beat Maker (P4-10): its channel is channels[kBeatMakerChannel].
+    std::uint64_t beatLateEvents = 0; // events that arrived after their sample
+    int beatVoices = 0;               // sounding now (drums + synths + samples)
     TransitionState transition; // P3-17
 };
 

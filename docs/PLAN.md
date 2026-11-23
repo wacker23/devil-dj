@@ -454,7 +454,7 @@ Spec: `docs/BEATMAKER_SPEC.md`.
 - [x] **P4-07 Piano roll UI** — notes draw/move/resize, velocity, scale lock, chord stamp, quantize, arpeggiator per synth track. Done when: manual test; undo works.
 - [x] **P4-08 Undo/redo** — `juce::UndoManager` across Beat Maker edits. Done when: 100-step undo test.
 - [x] **P4-09 Song mode + live switching** — chain patterns, queue next pattern to switch on the next bar, pad grid triggers patterns. Done when: switching is sample-accurate on the bar.
-- [ ] **P4-10 Mixer integration** — Beat Maker bus = its own mixer channel (strip, cue, crossfader, FX target); follows master BPM or its own tempo. Done when: beat crossfades against a deck.
+- [x] **P4-10 Mixer integration** — Beat Maker bus = its own mixer channel (strip, cue, crossfader, FX target); follows master BPM or its own tempo. Done when: beat crossfades against a deck.
 - [ ] **P4-11 Live record** — record pad/keyboard hits into steps (quantized, overdub). Done when: manual test.
 - [ ] **P4-12 Export** — render pattern/song offline to WAV; to sampler slot; to a library track. Done when: offline render bit-identical to real-time output for a deterministic pattern.
 - [ ] **P4-13 User samples** — drag WAVs into drum tracks; sample folder `Documents\Devil-DJ\Samples`. Done when: missing-sample handling tested.

@@ -361,6 +361,30 @@ void Voices::process(const VoiceBuses& buses, int numSamples) noexcept
                 render(v, buses, numSamples);
 }
 
+void Voices::releaseAll() noexcept
+{
+    const auto fade = [&](auto& pool)
+    {
+        for (auto& v : pool)
+            if (v.stage != Stage::Idle)
+            {
+                if (v.delay > 0)
+                    v.stage = Stage::Idle;
+                else if (v.stage != Stage::Fade)
+                {
+                    v.stage = Stage::Fade;
+                    v.fadeStep = std::max(v.level, 1e-6f) * stepFor(kStealFadeSeconds, rate);
+                }
+            }
+    };
+    fade(samples);
+    fade(sampleTails);
+    fade(synths);
+    fade(synthTails);
+    fade(drums);
+    fade(drumTails);
+}
+
 int Voices::activeDrumVoices() const noexcept
 {
     return static_cast<int>(std::count_if(drums.begin(), drums.end(), [](const Voice& v) { return v.stage != Stage::Idle; }));

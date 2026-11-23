@@ -1,5 +1,7 @@
 #include "engine/AudioEngine.h"
 
+#include "dsp/fx/BeatFx.h"
+
 #include "util/RealtimeGuard.h"
 
 #include <algorithm>
@@ -50,6 +52,19 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
     for (auto& strip : strips)
         strip.prepare(sampleRate, capacity);
     sampler.prepare(sampleRate, capacity); // P3-13
+    // The Beat Maker (P4-10): its voices and its send effects (a 3/4-beat echo and the reverb, fully wet).
+    beatMaker->voices.prepare(sampleRate, capacity);
+    beatMaker->scratch.setSize(6, capacity, false, true, false);
+    if (beatMaker->delay == nullptr)
+    {
+        beatMaker->delay = dsp::fx::makeEffect(dsp::fx::EffectType::Echo);
+        beatMaker->reverb = dsp::fx::makeEffect(dsp::fx::EffectType::Reverb);
+    }
+    beatMaker->delay->prepare(sampleRate, capacity);
+    beatMaker->delay->setBeats(0.75);
+    beatMaker->reverb->prepare(sampleRate, capacity);
+    beatMaker->reverb->setBeats(1.0);
+    beatMaker->due.clear();
     sequencer.reset();                      // P3-15
     if (!tapPrepared) // P3-16: once, for the fastest rate (the recorder thread may be reading it later)
     {
@@ -1812,6 +1827,52 @@ void AudioEngine::renderDecks(int numSamples) noexcept
         }
     }
     renderSampler(numSamples); // its own channel (P3-13)
+    renderBeatMaker(numSamples); // and the Beat Maker's (P4-10)
+}
+
+void AudioEngine::renderBeatMaker(int numSamples) noexcept
+{
+    auto& b = *beatMaker;
+    // The events its producer has sent, then those due in this block - each voice starts on its own sample.
+    b.due.drain(b.queue);
+    const auto lateBefore = b.due.lateEvents();
+    b.due.takeDue(clock.blockStart(), numSamples,
+                  [&](const ScheduledEvent& e, int offset) { b.voices.start(e, offset); });
+    b.late += b.due.lateEvents() - lateBefore;
+    auto& s = b.scratch;
+    for (int c = 0; c < 6; ++c)
+        juce::FloatVectorOperations::clear(s.getWritePointer(c), numSamples);
+    float* l = s.getWritePointer(0);
+    float* r = s.getWritePointer(1);
+    b.voices.process({l, r, s.getWritePointer(2), s.getWritePointer(3), s.getWritePointer(4), s.getWritePointer(5)},
+                     numSamples);
+    // The sends: through the echo and the reverb (wet only), back into the dry mix.
+    const auto ctx = beatContext();
+    b.delay->process(s.getWritePointer(2), s.getWritePointer(3), numSamples, ctx);
+    b.reverb->process(s.getWritePointer(4), s.getWritePointer(5), numSamples, ctx);
+    for (int c = 2; c < 6; ++c)
+        juce::FloatVectorOperations::add(c % 2 == 0 ? l : r, s.getReadPointer(c), numSamples);
+    mixChannel(kBeatMakerChannel, l, r, numSamples);
+}
+
+void AudioEngine::apply(const SetDrumSound& command) noexcept
+{
+    beatMaker->voices.setDrumSound(command.index, command.sound);
+}
+
+void AudioEngine::apply(const SetSynthSound& command) noexcept
+{
+    beatMaker->voices.setSynthSound(command.index, command.sound);
+}
+
+void AudioEngine::apply(const BeatMakerStop&) noexcept
+{
+    beatMaker->due.clear();
+    EventQueue::value_type e{};
+    while (beatMaker->queue.tryPop(e))
+    {
+    }
+    beatMaker->voices.releaseAll();
 }
 
 void AudioEngine::renderSampler(int numSamples) noexcept
@@ -1865,8 +1926,10 @@ void AudioEngine::mixChannel(int channel, float* l, float* r, int numSamples) no
         for (auto& pad : padFx[i])                              // Pad FX (P3-12)
             pad.process(l, r, numSamples, beatContext());
         releaseFx[i].process(l, r, numSamples, beatContext()); // Release FX (P3-11)
-        processFx(channel < kMaxDecks ? static_cast<FxTarget>(channel) : FxTarget::Sampler, l, r,
-                  numSamples); // FX units on this channel (P3-08)
+        processFx(channel < kMaxDecks              ? static_cast<FxTarget>(channel)
+                  : channel == kBeatMakerChannel ? FxTarget::BeatMaker
+                                                 : FxTarget::Sampler,
+                  l, r, numSamples); // FX units on this channel (P3-08)
         m.meter.process(l, r, numSamples);
         if (m.cueSend.isRamping() || m.cueSend.value() > 0.0)
         {
@@ -1951,6 +2014,8 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
     current.outputChannels = numChannels;
     current.cueRouted = cueIsRouted(layout, numChannels);
     current.buffersAwaitingRelease = static_cast<std::uint32_t>(numPendingReleases);
+    current.beatLateEvents = beatMaker->late; // P4-10
+    current.beatVoices = beatMaker->voices.activeSampleVoices() + beatMaker->voices.activeSynthVoices() + beatMaker->voices.activeDrumVoices();
     {
         int kept = 0; // replaced effects that didn't fit into the queue: try again
         for (int i = 0; i < numPendingEffects; ++i)
