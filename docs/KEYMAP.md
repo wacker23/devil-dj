@@ -116,6 +116,17 @@ The same tools are on each deck's GRID button (and TAP); editing a grid locks it
 | Select pattern A–H | Ctrl+1…8 |
 | Copy / paste / clear steps | Ctrl+C / Ctrl+V / Delete |
 | Undo / redo | Ctrl+Z / Ctrl+Y |
+| Step probability − / + (10 %) | Alt+Down / Alt+Up |
+| Step micro-timing earlier / later (10 %) | Alt+Left / Alt+Right |
+| Step ratchet 1 → 2 → 3 → 4 | R |
+| Step editor (probability, micro-timing, ratchet; also right-click a step) | Shift+Enter |
+| Mute / solo the cursor track | M / S |
+| Previous / next sound on the cursor track | Shift+Left / Shift+Right |
+| Pattern length 16 → 32 → 64 | L |
+| Previous / next page of 16 steps | Page Up / Page Down |
+| Swing − / + (5 %) | - / = |
+
+Mouse: click a step to toggle it, drag along a row to paint, Alt-drag on a step for its velocity, drag in the velocity lane under the grid, right-click a step for its editor.
 
 ## Code Beat (when the editor has focus)
 

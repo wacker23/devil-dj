@@ -11,6 +11,8 @@ target_sources(devildj_ui INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/DeckView.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/FxPanel.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/FxPanel.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/StepGrid.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/StepGrid.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/NextTrackPanel.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/NextTrackPanel.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/PadModes.cpp"
@@ -54,4 +56,5 @@ target_include_directories(devildj_ui INTERFACE "${PROJECT_SOURCE_DIR}/src")
 target_link_libraries(devildj_ui INTERFACE
     juce::juce_gui_basics
     devildj::engine
+    devildj::beatmaker
     devildj::library)

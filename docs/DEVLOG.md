@@ -11,6 +11,23 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-06 Step grid UI
+- What changed: `ui/StepGrid`.
+  - Pattern bar: PLAY, A–H, length 16 / 32 / 64, page, and a swing knob.
+  - Eight track headers: number and name, a sound picker listing every drum preset, M and S buttons.
+  - The grid: 16 steps per page, bar and beat shading, the cursor, and the playing step. Small marks show probability below 100 %, ratchets and micro-timing.
+  - The cursor track's velocity lane.
+  - Mouse: click toggles a step, a drag along the row paints, Alt-drag sets velocity, dragging in the lane sets velocities, and a right-click opens a call-out with probability, micro-timing and ratchet.
+  - New patterns get pattern A's sounds with empty steps.
+- Keyboard: 15 new Beat Maker actions and keys (see KEYMAP.md). MainComponent now uses the Beat Maker key context while the grid has focus, so Space, the arrows and 1–8 belong to the grid there. Ctrl+Tab (SwitchPanel) swaps the browser and the Beat Maker in the bottom area.
+- The project lives in `Documents\Devil-DJ\Beats\Current.ddjbeat`. It is saved 1 s after each edit and loaded at start; a new one gets the Club kit on pattern A.
+- Until P4-10 adds the Beat Maker's channel, PLAY only moves the grid's playhead on the master clock from the next bar. Nothing sounds yet.
+- Tests: 3 cases.
+  - Keyboard: every edit, plus cursor wrap-around, copy / paste / clear, and a new pattern taking pattern A's sounds.
+  - Mouse: click, paint on and off, staying on its row, Alt velocity, the lane, the headers, the pattern bar, the knob, the editor, and paint on page 2.
+  - Every Beat Maker action except undo / redo (P4-08) has a key, with no conflicts.
+- The owner should try the grid in the app: Ctrl+Tab, then click or use the keys.
+
 ## 2026-11-23 · P4-05 Synths
 - What changed: `dsp/Synth` has three engines:
   - **Subtractive:** two PolyBLEP oscillators (saw / square / triangle / sine, detune, octave), a sub oscillator (−1 octave square or sine) and noise, into a TPT SVF (LP / BP / HP, 12 or 24 dB, resonance, envelope amount, key tracking, cutoff updated every 16 samples). It has separate amp and filter ADSRs, glide, and unison of up to 8 detuned copies.

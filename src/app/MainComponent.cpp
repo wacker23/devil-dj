@@ -2,6 +2,8 @@
 
 #include "analysis/Loudness.h"
 #include "matcher/CandidateQuery.h"
+#include "beatmaker/DrumKits.h"
+#include "beatmaker/ProjectFile.h"
 #include "library/HistoryRepository.h"
 #include "ui/TrackColours.h"
 
@@ -336,6 +338,47 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     }
     // The Next Track panel (P3-24).
     addAndMakeVisible(nextTrackPanel);
+    // The Beat Maker (P4-06): the last project, else the Club kit on pattern A.
+    {
+        auto loaded = beatmaker::loadProject(beatProjectFile().getFullPathName().toWideCharPointer());
+        if (loaded)
+            beatProject = std::move(loaded).value();
+        else
+        {
+            beatProject = beatmaker::defaultProject();
+            beatProject.patterns[0].drums = beatmaker::kitTracks(beatmaker::drumKits()[0]);
+        }
+    }
+    addChildComponent(stepGrid);
+    stepGrid.setProject(&beatProject);
+    beatSaveTimer = std::make_unique<juce::TimedCallback>(
+        [this]
+        {
+            beatSaveTimer->stopTimer();
+            if (const auto r = beatmaker::saveProject(beatProject, beatProjectFile().getFullPathName().toWideCharPointer()); !r)
+                util::logWarning("Beat Maker: {}", r.error());
+        });
+    stepGrid.onChanged = [this] { beatSaveTimer->startTimer(1000); };
+    stepGrid.onPlayStop = [this]
+    {
+        // Until the Beat Maker has its channel (P4-10) this runs the grid's playhead on the master clock, from the
+        // next bar.
+        beatPlaying = !beatPlaying;
+        beatStartBeat = std::ceil(engine.readState().masterBeat / 4.0) * 4.0;
+    };
+    beatTimer = std::make_unique<juce::TimedCallback>(
+        [this]
+        {
+            if (!stepGrid.isVisible())
+                return;
+            const auto& pat = beatProject.patterns[static_cast<std::size_t>(stepGrid.pattern())];
+            const double beat = engine.readState().masterBeat - beatStartBeat;
+            const int stepIndex = beatPlaying && beat >= 0.0
+                                      ? static_cast<int>(std::floor(beat * pat.stepsPerBeat)) % std::max(1, pat.lengthSteps)
+                                      : -1;
+            stepGrid.setPlayback(beatPlaying, stepIndex);
+        });
+    beatTimer->startTimerHz(30);
     {
         auto s = nextTrackPanel.state();
         for (const auto& p : matcherPresets)
@@ -583,7 +626,10 @@ bool MainComponent::onPhysicalKey(const ui::KeyboardController::KeyEvent& e)
     }
     const auto* focused = juce::Component::getCurrentlyFocusedComponent();
     const bool typing = dynamic_cast<const juce::TextInputTarget*>(focused) != nullptr;
-    return keyboard.handle(e, ui::KeyContext::Main, typing);
+    // The Beat Maker's keys while its grid has the keyboard (P4-06).
+    const bool inBeatMaker = stepGrid.isVisible() && focused != nullptr &&
+                             (focused == &stepGrid || stepGrid.isParentOf(focused));
+    return keyboard.handle(e, inBeatMaker ? ui::KeyContext::BeatMaker : ui::KeyContext::Main, typing);
 }
 
 void MainComponent::registerActions()
@@ -600,6 +646,16 @@ void MainComponent::registerActions()
                                    f();
                            });
     };
+    // The Beat Maker's grid (P4-06): every Beat Maker action goes to it (held keys repeat where they may).
+    for (int a = static_cast<int>(GA::BeatMakerStartStop); a <= static_cast<int>(GA::BeatMakerSwingUp); ++a)
+        if (a < static_cast<int>(GA::CodeEvaluate) || a > static_cast<int>(GA::BrowserBigger))
+            actions.setHandler(ui::globalCommand(static_cast<GA>(a)),
+                               [this, a](Phase p)
+                               {
+                                   if (p != Phase::Release)
+                                       stepGrid.perform(static_cast<GA>(a));
+                               });
+    onPress(ui::globalCommand(GA::SwitchPanel), [this] { switchBottomPanel(); });
 
     for (engine::DeckId d = 0; d < 2; ++d)
     {
@@ -1636,6 +1692,25 @@ std::optional<double> MainComponent::energyOf(std::int64_t trackId)
         return e;
     }
     return std::nullopt;
+}
+
+juce::File MainComponent::beatProjectFile()
+{
+    return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+        .getChildFile("Devil-DJ")
+        .getChildFile("Beats")
+        .getChildFile(juce::String("Current") + beatmaker::kFileExtension);
+}
+
+void MainComponent::switchBottomPanel()
+{
+    // Browser -> Beat Maker -> (Code Beat, Phase 5) -> browser.
+    bottomPanel = (bottomPanel + 1) % 2;
+    resized();
+    if (bottomPanel == 1)
+        stepGrid.grabKeyboardFocus();
+    else
+        grabKeyboardFocus();
 }
 
 void MainComponent::showSuggestions()
@@ -2721,7 +2796,9 @@ void MainComponent::resized()
     sizes.panelHeight = ui::FxPanel::kPreferredHeight;
     const auto l = app::computeLayout(getLocalBounds(), waveLayout, browserBig, sizes, showNextTrack);
     nextTrackPanel.setBounds(l.nextTrack);
-    nextTrackPanel.setVisible(!l.nextTrack.isEmpty());
+    nextTrackPanel.setVisible(!l.nextTrack.isEmpty() && bottomPanel == 0);
+    stepGrid.setBounds(l.nextTrack.isEmpty() ? l.browser : l.browser.getUnion(l.nextTrack));
+    stepGrid.setVisible(bottomPanel == 1);
     deckA.setBounds(l.deckA);
     deckB.setBounds(l.deckB);
     mixer.setBounds(l.mixer);
@@ -2742,6 +2819,7 @@ void MainComponent::resized()
         wave->setVisible(l.wavesVisible);
     }
     libraryBrowser->setBounds(l.browser);
+    libraryBrowser->setVisible(bottomPanel == 0);
     juce::TextButton* tabs[] = {&fxTab, &samplerTab, &recordTab, &automixTab};
     for (std::size_t i = 0; i < 4; ++i)
     {

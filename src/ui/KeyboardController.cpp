@@ -436,6 +436,22 @@ std::vector<KeyBinding> defaultKeymap()
     key(Delete, mods::None, GA::BeatMakerClear, bm);
     key(Z, mods::Ctrl, GA::BeatMakerUndo, bm);
     key(Y, mods::Ctrl, GA::BeatMakerRedo, bm);
+    // P4-06: the rest of the step grid.
+    key(Down, mods::Alt, GA::BeatMakerProbabilityDown, bm);
+    key(Up, mods::Alt, GA::BeatMakerProbabilityUp, bm);
+    key(Left, mods::Alt, GA::BeatMakerMicroEarlier, bm);
+    key(Right, mods::Alt, GA::BeatMakerMicroLater, bm);
+    key(R, mods::None, GA::BeatMakerRatchet, bm);
+    key(Enter, mods::Shift, GA::BeatMakerStepEditor, bm);
+    key(M, mods::None, GA::BeatMakerMute, bm);
+    key(S, mods::None, GA::BeatMakerSolo, bm);
+    key(Left, mods::Shift, GA::BeatMakerSoundPrevious, bm);
+    key(Right, mods::Shift, GA::BeatMakerSoundNext, bm);
+    key(L, mods::None, GA::BeatMakerLength, bm);
+    key(PageUp, mods::None, GA::BeatMakerPagePrevious, bm);
+    key(PageDown, mods::None, GA::BeatMakerPageNext, bm);
+    key(Minus, mods::None, GA::BeatMakerSwingDown, bm);
+    key(Equals, mods::None, GA::BeatMakerSwingUp, bm);
 
     // Code Beat editor.
     constexpr auto cb = KeyContext::CodeBeat;

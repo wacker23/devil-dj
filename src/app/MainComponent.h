@@ -19,6 +19,8 @@
 #include "ui/FxPanel.h"
 #include "ui/KeymapEditor.h"
 #include "ui/NextTrackPanel.h"
+#include "ui/StepGrid.h"
+#include "beatmaker/Model.h"
 #include "ui/RecorderPanel.h"
 #include "ui/SamplerPanel.h"
 #include "engine/Recorder.h"
@@ -170,6 +172,16 @@ private:
     void loadSuggestion();
     // The Next Track panel (P3-24) and the matcher's settings it shows.
     ui::NextTrackPanel nextTrackPanel;
+    // The Beat Maker (P4-06): its project (saved to Documents\Devil-DJ\Beats\Current.ddjbeat a moment after each
+    // edit) and the step grid, shown in the browser's place (Ctrl+Tab switches).
+    beatmaker::Project beatProject;
+    ui::StepGrid stepGrid;
+    int bottomPanel = 0; // 0 the browser, 1 the Beat Maker
+    bool beatPlaying = false;
+    double beatStartBeat = 0.0;
+    std::unique_ptr<juce::TimedCallback> beatTimer, beatSaveTimer;
+    void switchBottomPanel();
+    static juce::File beatProjectFile();
     bool showNextTrack = true;
     int matcherIntent = 1, matcherKeyPolicy = 1, matcherScope = 0, matcherPreset = 0;
     std::vector<double> energyHistory;

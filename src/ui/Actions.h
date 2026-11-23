@@ -165,6 +165,21 @@ namespace devildj::ui
     X(BeatMakerClear, "Beat Maker: clear steps", false)                                                                \
     X(BeatMakerUndo, "Beat Maker: undo", false)                                                                        \
     X(BeatMakerRedo, "Beat Maker: redo", false)                                                                        \
+    X(BeatMakerProbabilityDown, "Beat Maker: step probability -", true)                                                \
+    X(BeatMakerProbabilityUp, "Beat Maker: step probability +", true)                                                  \
+    X(BeatMakerMicroEarlier, "Beat Maker: step earlier (micro-timing)", true)                                          \
+    X(BeatMakerMicroLater, "Beat Maker: step later (micro-timing)", true)                                              \
+    X(BeatMakerRatchet, "Beat Maker: step ratchet 1-4", false)                                                         \
+    X(BeatMakerStepEditor, "Beat Maker: step editor", false)                                                           \
+    X(BeatMakerMute, "Beat Maker: mute track", false)                                                                  \
+    X(BeatMakerSolo, "Beat Maker: solo track", false)                                                                  \
+    X(BeatMakerSoundPrevious, "Beat Maker: previous sound", true)                                                      \
+    X(BeatMakerSoundNext, "Beat Maker: next sound", true)                                                              \
+    X(BeatMakerLength, "Beat Maker: pattern length 16 / 32 / 64", false)                                               \
+    X(BeatMakerPagePrevious, "Beat Maker: previous page", false)                                                       \
+    X(BeatMakerPageNext, "Beat Maker: next page", false)                                                               \
+    X(BeatMakerSwingDown, "Beat Maker: swing -", true)                                                                 \
+    X(BeatMakerSwingUp, "Beat Maker: swing +", true)                                                                   \
     X(CodeEvaluate, "Code Beat: evaluate", false)                                                                      \
     X(CodeEvaluateNow, "Code Beat: evaluate immediately", false)                                                       \
     X(CodeHush, "Code Beat: hush", false)                                                                              \
