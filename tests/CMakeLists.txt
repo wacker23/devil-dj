@@ -28,6 +28,7 @@ target_sources(DevilDJTests PRIVATE
     app/BeatRenderTests.cpp
     app/SampleBankTests.cpp
     app/TransitionPresetTests.cpp
+    app/AutoTransitionTests.cpp
     app/LayoutTests.cpp
     app/SettingsTests.cpp
     app/SoakTestTests.cpp

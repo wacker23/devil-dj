@@ -11,6 +11,28 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-23 · P4-16 Auto transition
+- What changed: `app/AutoTransition` plans a transition by analysis and rules, not a trained model.
+  - **Bar profile:** from the waveform (150 points per second, 3 bands) and the grid, the low / mid / high level of every bar from the first downbeat.
+  - **Track shape:**
+    - Intro end: the first 4-bar phrase line in the first 45 % where the bass steps up 6 dB and is really there.
+    - Outro start: the last phrase line in the last 45 % after which the bass stays at least 6 dB down to the end.
+    - Content end: the last bar with sound.
+  - **Timing:** the incoming bass entry lands on the outgoing bass exit, with the basses swapped there. The transition starts at outro − intro (on a phrase line, not before the middle of the track) and lasts to the content end (4–32 bars).
+  - **Preset:**
+    - no outro, or tempi more than 8 % apart → Echo out over the last 4 bars;
+    - keys that clash → High-pass out, at most 8 bars;
+    - a 16-bar intro with keys that fit → Long blend;
+    - more energy coming → Filter rise;
+    - an intro without bass → Bass swap;
+    - otherwise → Smooth blend.
+  - The chosen preset's bass swap is moved onto the swap bar. Every decision comes with a plain-language reason (shown in the editor, P4-17).
+- Tests: 4 cases on generated tracks with known structure.
+  - Intro, outro and end are found. The main case (bass bars 8–55, a 16-bar intro coming in) gives bar 41, 24 bars, the swap at bar 16 of them, on a phrase line, as a Long blend.
+  - Each preset rule is checked: smooth blend, filter rise, bass swap, key clash, no outro, tempo gap.
+  - A grid whose first beat isn't a downbeat, and missing analysis (refused with a reason).
+- Not yet: the owner rating Auto on real tracks from `DEVILDJ_EVAL_DIR` (7 of 10 usable) happens in the app, once the editor (P4-17) shows the plan and its reasons.
+
 ## 2026-11-23 · P4-15 Transition presets
 - What changed: `app/TransitionPresets` holds 8 presets of our own, each drawn on a 0..1 timeline and stretched to the length chosen:
 
