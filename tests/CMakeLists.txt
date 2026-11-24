@@ -43,6 +43,7 @@ target_sources(DevilDJTests PRIVATE
     app/StemDeckLoaderTests.cpp
     app/DrumSwapBankTests.cpp
     app/PhraseEditTests.cpp
+    app/SmartCueTests.cpp
     app/CodeRenderTests.cpp
     app/LayoutTests.cpp
     app/SettingsTests.cpp

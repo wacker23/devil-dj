@@ -64,6 +64,12 @@ public:
         repaint();
     }
     const std::vector<PhraseMark>& phraseMarks() const noexcept { return phrases; }
+    // Smart cues (P6-07): suggested hot cues as dashed flags (buffer samples, the pad letter + reason).
+    void setCueSuggestions(std::vector<std::pair<double, juce::String>> marks)
+    {
+        suggestions = std::move(marks);
+        repaint();
+    }
     // Right-click: the app's menu for that position (buffer samples) - phrase editing.
     std::function<void(double sample)> onContextMenu;
     double sampleAtX(float x) const; // the deck's position under x (as last drawn)
@@ -116,6 +122,7 @@ private:
     std::array<std::uint32_t, 16> hotCueColours{};
     std::vector<std::pair<double, std::uint32_t>> memoryCues;
     std::vector<PhraseMark> phrases;
+    std::vector<std::pair<double, juce::String>> suggestions;
     bool phrasesEdited = false;
     double drawnLeftSample = 0.0, drawnSpp = 1.0; // the last paint's mapping, for sampleAtX
     LatencySource latency;

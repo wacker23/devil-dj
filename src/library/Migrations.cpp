@@ -172,7 +172,20 @@ CREATE TABLE phrases (
 );
 )sql";
 
-constexpr std::array<std::string_view, 4> kMigrations{kSchemaV1, kSchemaV2, kSchemaV3, kSchemaV4};
+// Schema v5 (P6-07): the owner's answers to smart cue suggestions (the habit model's labels, the acceptance rate).
+constexpr std::string_view kSchemaV5 = R"sql(
+CREATE TABLE cue_feedback (
+  id INTEGER PRIMARY KEY,
+  track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+  start_seconds REAL NOT NULL,
+  reason TEXT NOT NULL,
+  accepted INTEGER NOT NULL,
+  at INTEGER NOT NULL
+);
+CREATE INDEX cue_feedback_track ON cue_feedback(track_id);
+)sql";
+
+constexpr std::array<std::string_view, 5> kMigrations{kSchemaV1, kSchemaV2, kSchemaV3, kSchemaV4, kSchemaV5};
 } // namespace
 
 std::span<const std::string_view> migrations() noexcept

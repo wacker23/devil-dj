@@ -78,6 +78,8 @@ public:
                        const std::array<bool, 8>& release, int bank);
     std::function<void(int pad)> onPadFxMenu; // right-click a pad in Pad FX mode: edit its preset
     std::function<void(int pad)> onDrumSwapMenu; // right-click a pad in Drum Swap mode: capture, Beat Maker, clear
+    // Smart cues (P6-07): a suggestion's reason ("DROP", ...) on an empty hot cue pad ("" = none), shown dimmed.
+    void setCueSuggestions(const std::array<juce::String, 16>& reasons);
     // Drum Swap (P6-05): the slots' names ("" = empty) and whether the deck layers them (multi).
     void setDrumSwapLooks(const std::array<juce::String, 8>& names, bool multi);
     // Sampler pads (P3-13): which bank the pads play.
@@ -159,6 +161,7 @@ private:
     int beatPlaying = -1, beatQueued = -1;
     std::array<juce::String, 8> beatPadNames;
     std::array<juce::String, 8> drumSwapNames;
+    std::array<juce::String, 16> cueSuggestions;
     bool drumSwapMulti = false;
     bool beatRecording = false;
     std::array<std::uint32_t, 16> hotCueColours{};

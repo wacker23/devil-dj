@@ -11,6 +11,26 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-25 · P6-07 Smart cues
+- Owner decisions:
+  - Suggestions show on empty pads and as dashed flags on the waveform.
+  - Answers are kept in a library table (schema v5 `cue_feedback`).
+- What changed:
+  - `app/SmartCues`: every phrase start is a candidate (START, DROP, RISE, BREAK, OUTRO or PHRASE), with a rule score and 9 features.
+  - A logistic regression learns the owner's habit from every track they cued or answered. It trains on a background thread at start and after every 5 answers, and counts once it has 12 cued and 12 not-cued examples. The score is then half rule, half model.
+  - Up to 8 suggestions, at least 0.35, skipping set cues and rejected ones, on the empty pads A-H in time order.
+  - UI: a suggested pad reads "A ? DROP" (dimmed in its colour) and a dashed "A?" flag marks it on the waveform. Pad = take it as a hot cue named by its reason; Shift+pad = reject. The pad menu has take all / reject all (on what is shown at that moment).
+  - Every answer goes into `cue_feedback` and is logged with the running acceptance rate. The status overlay shows the rate and whether the habits are learnt yet.
+- Tests / measurements:
+  - Candidates and reasons on a typical track; suggestions skip set and rejected cues and keep time order; a flat track only gets START; pad assignment.
+  - The model learns an owner who cues breaks rather than drops: break p > 0.8, drop < 0.3, and the break then outranks the drop.
+  - Examples are gathered from library cues and answers (unlabelled tracks are left out); answers are stored and counted.
+  - Acceptance rate: no answers yet, so it starts at 0 of 0. It is logged as the owner answers.
+- Notes / follow-ups:
+  - Not tried in the app by the owner yet.
+  - A pad showing a suggestion takes the suggestion, not the playhead; reject it first to cue the playhead on that pad.
+  - Full suites: Release 664/664. Debug 669/670: once, the P5-09 code deck test counted one slow pattern query (over its 50 ms Debug limit) under the suite's load. Kick timing was still exact (0 samples) and it passes alone. It is an existing timing-sensitive check, not touched here.
+
 ## 2026-11-25 · P6-06 Phrase detection
 - Owner decisions:
   - Evaluate on a generated set now, plus the owner's tracks once their markers are corrected in the app.

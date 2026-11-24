@@ -23,6 +23,7 @@
 #include "library/PlaylistFiles.h"
 #include "library/TrackRepository.h"
 #include "app/PhraseEdit.h"
+#include "library/CueFeedbackRepository.h"
 #include "MainLayout.h"
 #include "RecordingSheets.h"
 #include "util/Log.h"
@@ -719,6 +720,7 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
         if (analysisTotal > 0)
             util::logInfo("Analysis: {} tracks to analyze", analysisTotal);
         analysisProgress = std::make_unique<juce::TimedCallback>([this] { showAnalysisProgress(); });
+        trainCueHabits(); // P6-07
         historyTimer = std::make_unique<juce::TimedCallback>([this] { trackHistory(); });
         historyTimer->startTimerHz(4);
         analysisProgress->startTimer(500);
@@ -1621,6 +1623,8 @@ void MainComponent::loadHotCues(engine::DeckId deck)
     hotCuesInEngine[deck] = false;
     engine.send(toEngine(deck, hotCues[deck]));
     showHotCueLooks(deck);
+    rejectedHere[deck].clear();
+    updateCueSuggestions(deck);
 }
 
 void MainComponent::syncHotCues()
@@ -1648,6 +1652,7 @@ void MainComponent::syncHotCues()
             continue;
         showHotCueLooks(deck);
         saveHotCues(deck, std::move(changes));
+        updateCueSuggestions(deck); // a pad was set or emptied (P6-07)
     }
 }
 
@@ -1776,6 +1781,13 @@ void MainComponent::padAction(engine::DeckId deck, int pad, bool alternate, bool
         const auto& preset = padFxPresets[static_cast<std::size_t>(padFxBank)][static_cast<std::size_t>(pad)];
         for (const auto& c : app::padFxCommands(preset, deck, pad, release, state))
             engine.send(c);
+        return;
+    }
+    if (padModes[deck] == ui::PadMode::HotCue && hotCuePage == 0 && pad >= 0 && pad < 8 &&
+        suggestionPads[deck][static_cast<std::size_t>(pad)] >= 0 && !hotCues[deck][static_cast<std::size_t>(pad)].set)
+    {
+        if (!release) // press: take the suggestion; Shift + pad: reject it (P6-07)
+            answerSuggestion(deck, pad, !alternate);
         return;
     }
     for (const auto& c : ui::padCommands(padModes[deck], deck, pad, hotCuePage, alternate, release, state))
@@ -3598,6 +3610,32 @@ void MainComponent::showHotCueMenu(engine::DeckId deck, int pad)
                   saveHotCues(deck, std::move(all));
               });
     m.addItem(hotCuePage == 0 ? "Show pads I-P (F1)" : "Show pads A-H (F1)", [this] { setHotCuePage(1 - hotCuePage); });
+    // Smart cues (P6-07): every suggestion on the pads at once.
+    int offered = 0;
+    for (const int k : suggestionPads[deck])
+        offered += k >= 0 ? 1 : 0;
+    m.addSeparator();
+    m.addItem("Suggested cues: take all (" + juce::String(offered) + ")", offered > 0, false, [this, deck]
+              {
+                  std::vector<std::pair<int, CueCandidate>> shown; // as they are now
+                  for (int p = 0; p < 8; ++p)
+                      if (const int k = suggestionPads[deck][static_cast<std::size_t>(p)]; k >= 0)
+                          shown.push_back({p, cueSuggestions[deck][static_cast<std::size_t>(k)]});
+                  for (const auto& [p, c] : shown)
+                      answerCandidate(deck, c, p, true, false);
+                  updateCueSuggestions(deck);
+              });
+    m.addItem("Suggested cues: reject all", offered > 0, false, [this, deck]
+              {
+                  // The ones shown now (others would take their place as each goes).
+                  std::vector<CueCandidate> shown;
+                  for (const int k : suggestionPads[deck])
+                      if (k >= 0)
+                          shown.push_back(cueSuggestions[deck][static_cast<std::size_t>(k)]);
+                  for (const auto& c : shown)
+                      answerCandidate(deck, c, -1, false, false);
+                  updateCueSuggestions(deck);
+              });
     m.showMenuAsync(juce::PopupMenu::Options().withMousePosition());
 }
 
@@ -4023,6 +4061,7 @@ juce::StringArray MainComponent::statusLines()
         lines.add(soak.statusLine());
     if (const auto stems = stemActivity(); stems.isNotEmpty())
         lines.add(stems);
+    lines.add(smartCueStatus()); // P6-07
     lines.add("Mixer: Ctrl+A/S/D, Ctrl+J/K/L kill; hold Shift+3/4, Shift+9/0 filter; Shift+5, Shift+- reset");
     lines.add("Waveforms: drag = scratch (playing) / scrub (paused), wheel = nudge, Ctrl+wheel = zoom");
     for (const auto* w : {&waveA, &waveB})
@@ -4478,6 +4517,145 @@ void MainComponent::reloadGrid(engine::DeckId deck)
 
 // ---- phrases (P6-06) ----
 
+// ---- smart cues (P6-07) ----
+
+void MainComponent::trainCueHabits()
+{
+    if (libraryDb == nullptr)
+        return;
+    answersSinceTraining = 0;
+    auto reader = libraryDb->openReader();
+    if (!reader)
+        return;
+    std::shared_ptr<library::Connection> connection = std::move(reader).value();
+    const auto safe = juce::Component::SafePointer<MainComponent>(this);
+    juce::Thread::launch(
+        [safe, connection]
+        {
+            const auto examples = gatherCueExamples(*connection);
+            CueHabits habits;
+            habits.train(examples);
+            library::CueFeedbackRepository answers(*connection);
+            CueAnswers counts{answers.count(true), answers.count(false)};
+            juce::MessageManager::callAsync(
+                [safe, habits, counts]
+                {
+                    if (safe == nullptr)
+                        return;
+                    safe->cueHabits = habits;
+                    safe->cueAnswers = counts;
+                    util::logInfo("Smart cues: habits {} ({} cued / {} not), answers {} accepted / {} rejected ({:.0f} %)",
+                                  habits.trained() ? "learnt" : "not yet (rules only)", habits.positives(),
+                                  habits.negatives(), counts.accepted, counts.rejected, 100.0 * counts.rate());
+                    for (engine::DeckId d = 0; d < 2; ++d)
+                        safe->updateCueSuggestions(d);
+                });
+        });
+}
+
+void MainComponent::updateCueSuggestions(engine::DeckId deck)
+{
+    if (deck >= 2)
+        return;
+    const auto& d = deckGrids[deck];
+    auto& list = cueSuggestions[deck];
+    list.clear();
+    auto& pads = suggestionPads[deck];
+    pads.fill(-1);
+    if (d.trackId != 0 && d.bufferRate > 0.0 && !d.phrases.phrases.empty())
+    {
+        std::vector<double> existing, rejected = rejectedHere[deck];
+        for (const auto& c : hotCues[deck])
+            if (c.set)
+                existing.push_back(c.start / d.bufferRate);
+        if (gridReader != nullptr)
+            for (const auto& a : library::CueFeedbackRepository(*gridReader).forTrack(d.trackId))
+                if (!a.accepted)
+                    rejected.push_back(a.startSeconds);
+        const double duration = engine.readState().decks[deck].lengthSamples / d.bufferRate;
+        std::array<bool, 8> taken{};
+        int free = 0;
+        for (int s = 0; s < 8; ++s)
+        {
+            taken[static_cast<std::size_t>(s)] = hotCues[deck][static_cast<std::size_t>(s)].set;
+            free += taken[static_cast<std::size_t>(s)] ? 0 : 1;
+        }
+        list = suggestCues(d.phrases.phrases, duration, cueHabits, existing, rejected, 1.0, free);
+        pads = padsForSuggestions(taken, static_cast<int>(list.size()));
+    }
+    std::array<juce::String, 16> reasons;
+    std::vector<std::pair<double, juce::String>> marks;
+    for (int s = 0; s < 8; ++s)
+        if (const int k = pads[static_cast<std::size_t>(s)]; k >= 0)
+        {
+            const auto& c = list[static_cast<std::size_t>(k)];
+            reasons[static_cast<std::size_t>(s)] = cueReasonName(c.reason);
+            marks.push_back({c.seconds * d.bufferRate, juce::String::charToString(static_cast<juce::juce_wchar>('A' + s)) + "?"});
+        }
+    (deck == 0 ? deckA : deckB).setCueSuggestions(reasons);
+    (deck == 0 ? waveA : waveB).setCueSuggestions(std::move(marks));
+}
+
+void MainComponent::answerSuggestion(engine::DeckId deck, int pad, bool accept)
+{
+    if (deck >= 2 || pad < 0 || pad >= 8)
+        return;
+    const int k = suggestionPads[deck][static_cast<std::size_t>(pad)];
+    if (k < 0 || k >= static_cast<int>(cueSuggestions[deck].size()))
+        return;
+    answerCandidate(deck, cueSuggestions[deck][static_cast<std::size_t>(k)], pad, accept, true);
+}
+
+void MainComponent::answerCandidate(engine::DeckId deck, const CueCandidate& c, int pad, bool accept, bool refresh)
+{
+    auto& d = deckGrids[deck];
+    if (accept && (pad < 0 || pad >= 8))
+        return;
+    if (accept) // a real hot cue on the pad, at the suggestion, named by its reason
+    {
+        auto& known = hotCues[deck];
+        auto& slot = known[static_cast<std::size_t>(pad)];
+        slot.set = true;
+        slot.start = c.seconds * d.bufferRate;
+        slot.length = 0.0;
+        slot.colour = defaultHotCueColour(pad);
+        slot.label = cueReasonName(c.reason);
+        hotCuesInEngine[deck] = false; // until the engine shows it
+        engine.send(toEngine(deck, known));
+        const double fileRate = d.fileRate > 0.0 ? d.fileRate : d.bufferRate;
+        saveHotCues(deck, {changeFor(known, pad, fileRate, d.bufferRate)});
+        showHotCueLooks(deck);
+        ++cueAnswers.accepted;
+    }
+    else
+    {
+        rejectedHere[deck].push_back(c.seconds);
+        ++cueAnswers.rejected;
+    }
+    if (libraryDb != nullptr && d.trackId != 0)
+    {
+        library::CueAnswer a{d.trackId, c.seconds, cueReasonName(c.reason), accept,
+                             static_cast<std::int64_t>(juce::Time::currentTimeMillis() / 1000)};
+        libraryDb->write([a](library::Connection& conn) { library::CueFeedbackRepository(conn).add(a); });
+    }
+    util::logInfo("Smart cues: {} {} at {:.1f} s - acceptance {} of {} ({:.0f} %)", accept ? "accepted" : "rejected",
+                  cueReasonName(c.reason), c.seconds, cueAnswers.accepted, cueAnswers.accepted + cueAnswers.rejected,
+                  100.0 * cueAnswers.rate());
+    if (refresh)
+        updateCueSuggestions(deck);
+    if (++answersSinceTraining >= 5)
+        trainCueHabits(); // what was just answered counts
+}
+
+juce::String MainComponent::smartCueStatus() const
+{
+    const int n = cueAnswers.accepted + cueAnswers.rejected;
+    return "Smart cues: " + juce::String(cueAnswers.accepted) + " of " + juce::String(n) + " accepted (" +
+           juce::String(juce::roundToInt(100.0 * cueAnswers.rate())) + " %), habits " +
+           (cueHabits.trained() ? "learnt from " + juce::String(cueHabits.positives()) + " cues"
+                                : juce::String("not yet (rules)"));
+}
+
 void MainComponent::showPhrases(engine::DeckId deck)
 {
     if (deck >= 2)
@@ -4488,6 +4666,7 @@ void MainComponent::showPhrases(engine::DeckId deck)
         for (const auto& p : d.phrases.phrases)
             marks.push_back({p.startSeconds * d.bufferRate, p.bars, static_cast<float>(p.energy)});
     (deck == 0 ? waveA : waveB).setPhrases(std::move(marks), d.phrases.edited);
+    updateCueSuggestions(deck); // P6-07: they come from the phrases
 }
 
 void MainComponent::savePhrases(engine::DeckId deck, std::vector<library::StoredPhrase> phrases)

@@ -59,6 +59,8 @@ target_sources(devildj_app_core INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/PlayTracker.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/Settings.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/SoakTest.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SmartCues.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SmartCues.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/PhraseEdit.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/PhraseEdit.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/DrumSwapBank.cpp"

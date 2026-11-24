@@ -224,6 +224,24 @@ void WaveformView::paint(juce::Graphics& g)
             }
         }
 
+        // Smart cue suggestions (P6-07): a dashed line and an outlined flag.
+        if (preview == nullptr)
+        {
+            g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+            for (const auto& [at, label] : suggestions)
+            {
+                const auto x = static_cast<float>((at - leftSample) / spp);
+                if (x < area.getX() - 60.0f || x > area.getRight() + 2.0f)
+                    continue;
+                g.setColour(juce::Colours::white.withAlpha(0.7f));
+                for (float y = area.getY(); y < area.getBottom() - 15.0f; y += 8.0f)
+                    g.fillRect(x - 0.5f, y, 1.0f, 4.0f);
+                const juce::Rectangle<float> flag(x, area.getBottom() - 15.0f, 8.0f + 6.0f * static_cast<float>(label.length()), 15.0f);
+                g.drawRect(flag, 1.0f);
+                g.drawText(label, flag, juce::Justification::centred);
+            }
+        }
+
         // The loop (P3-03): its span shaded green, its ends as lines.
         if (preview == nullptr && s.loopActive && s.loopEnd > s.loopStart)
         {

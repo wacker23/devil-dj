@@ -28,6 +28,7 @@
 #include "app/CodeBuffers.h"
 #include "app/CodeDeckProducer.h"
 #include "app/BeatRender.h"
+#include "app/SmartCues.h"
 #include "library/PhraseRepository.h"
 #include "app/DrumSwapBank.h"
 #include "app/StemDeckLoader.h"
@@ -366,6 +367,20 @@ private:
         float autoGainTrim = 0.0f;    // the trim Auto Gain set (a later analysis result only replaces that)
         library::StoredPhrases phrases; // P6-06 (seconds)
     };
+    // Smart cues (P6-07): suggestions on the empty pads A-H; the habits learnt from the library at start (and again
+    // every few answers); the answers saved (cue_feedback) and the acceptance rate logged.
+    CueHabits cueHabits;
+    CueAnswers cueAnswers;
+    int answersSinceTraining = 0;
+    std::array<std::vector<CueCandidate>, 2> cueSuggestions;
+    std::array<std::array<int, 8>, 2> suggestionPads{};
+    std::array<std::vector<double>, 2> rejectedHere; // this session's rejections (the library's are read too)
+    void trainCueHabits();
+    void updateCueSuggestions(engine::DeckId deck);
+    void answerSuggestion(engine::DeckId deck, int pad, bool accept);
+    // One answer: accept puts it on `pad`; `refresh` recomputes the pads after it.
+    void answerCandidate(engine::DeckId deck, const CueCandidate& c, int pad, bool accept, bool refresh);
+    juce::String smartCueStatus() const;
     // Phrases (P6-06): shown on the deck's waveform; right-click there to edit (saved as the owner's).
     void showPhrases(engine::DeckId deck);
     void showPhraseMenu(engine::DeckId deck, double sample);

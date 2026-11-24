@@ -2,6 +2,7 @@
 add_library(devildj_library STATIC
     BeatgridRepository.cpp
     PhraseRepository.cpp
+    CueFeedbackRepository.cpp
     Connection.cpp
     ContentHash.cpp
     Database.cpp
@@ -26,6 +27,7 @@ target_sources(devildj_library PUBLIC
     FILES
         BeatgridRepository.h
         PhraseRepository.h
+        CueFeedbackRepository.h
         Connection.h
         ContentHash.h
         Database.h

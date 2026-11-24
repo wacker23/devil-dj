@@ -657,6 +657,14 @@ void DeckView::setBeatPadNames(const std::array<juce::String, 8>& names, bool re
         refreshPads();
 }
 
+void DeckView::setCueSuggestions(const std::array<juce::String, 16>& reasons)
+{
+    if (reasons == cueSuggestions)
+        return;
+    cueSuggestions = reasons;
+    refreshPads();
+}
+
 void DeckView::setDrumSwapLooks(const std::array<juce::String, 8>& names, bool multi)
 {
     if (names == drumSwapNames && multi == drumSwapMulti)
@@ -770,13 +778,18 @@ void DeckView::refreshPads()
         juce::String text = juce::String::charToString(static_cast<juce::juce_wchar>('A' + slot));
         if (set && hotCueLabels[static_cast<std::size_t>(slot)].isNotEmpty())
             text << " " << hotCueLabels[static_cast<std::size_t>(slot)];
+        const auto& suggested = cueSuggestions[static_cast<std::size_t>(slot)];
+        const bool suggestion = !set && state.loaded && suggested.isNotEmpty(); // P6-07: press = take it
+        if (suggestion)
+            text << " ? " << suggested;
         if (p.getButtonText() != text)
             p.setButtonText(text);
-        const auto colour = set ? juce::Colour(0xff000000u | hotCueColours[static_cast<std::size_t>(slot)]) : kPanel;
+        const auto cueColour = juce::Colour(0xff000000u | hotCueColours[static_cast<std::size_t>(slot)]);
+        const auto colour = set ? cueColour : suggestion ? cueColour.withMultipliedBrightness(0.35f) : kPanel;
         if (p.findColour(juce::TextButton::buttonColourId) != colour)
         {
             p.setColour(juce::TextButton::buttonColourId, colour);
-            p.setColour(juce::TextButton::textColourOffId, set ? juce::Colours::black : kDim);
+            p.setColour(juce::TextButton::textColourOffId, set ? juce::Colours::black : suggestion ? cueColour.brighter(0.5f) : kDim);
         }
         p.setEnabled(state.loaded);
     }

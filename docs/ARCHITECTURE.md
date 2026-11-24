@@ -362,6 +362,10 @@ Migrations live in `library/Migrations.cpp` as an ordered list of SQL strings; `
 
 Schema v4 (P6-06): `phrases(track_id, idx, start_seconds, bars, energy, edited)` - a track's phrases in order, the start in seconds from the start of the audio (so editing the grid doesn't move them), the length in bars, energy 0..1; `edited = 1` when the owner changed them (`library::PhraseRepository`): the analysis writer then leaves the track's phrases alone.
 
+Schema v5 (P6-07): `cue_feedback(id, track_id, start_seconds, reason, accepted, at)` - the owner's answers to smart cue suggestions (`library::CueFeedbackRepository`): the habit model's labels and the acceptance rate.
+
+Smart cues (P6-07, `app/SmartCues`): every phrase start is a candidate with a reason (START the first, DROP the biggest energy rise, RISE / BREAK a change of 0.15 or more, OUTRO the last fall in the last third, else PHRASE), a rule score and 9 features (position, energy after / before / change, first, nearness to the end, main drop, length, energy against the loudest). A logistic regression (class-balanced, L2) on the candidates of every track the owner cued or answered - a candidate within 1 s of a hot cue or an accepted suggestion is cued, a rejected one isn't - is trained on a background thread at start and after every 5 answers; once it has 12 cued and 12 not, the score is half rule, half model. Suggestions: score 0.35 or more, not within 1 s of a set cue or a rejected one, the best that fit the empty pads A-H, in time order. Pressing such a pad sets the hot cue there (named by its reason); Shift + pad rejects it; both are written to `cue_feedback` and logged with the acceptance rate.
+
 Schema v2 (P2-24, in `library/Migrations.cpp`; also `feature_stats` and an index on history transitions) adds `track_features`, `track_embeddings`, `choice_log`, `matcher_models` and `track_neighbors` — defined in `docs/MATCHER_SPEC.md` §11. History rows also record the previous track so transitions can be counted.
 
 ## 8. Files and folders
