@@ -57,7 +57,7 @@ test("§3 early(1/4): b [1/4,3/4), a [3/4,5/4), and the tail of the previous a",
 });
 
 test.todo("§3 every(2, rev) - P5-05");
-test.todo("§3 s(\"kick\").off(1/8, x => x.gain(0.5)) - P5-04 / P5-05");
+test.todo("§3 s(\"kick\").off(1/8, x => x.gain(0.5)) - off is P5-05 (controls are in since P5-04)");
 
 // --- the rest of the core ---
 

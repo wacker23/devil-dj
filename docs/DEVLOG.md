@@ -11,6 +11,20 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P5-04 Controls
+- What changed:
+  - `js/codebeat/controls.js` has every control as a function and as a method, with structure from the left and fields merged (the later one wins).
+    - The controls: `s` / `sound`, `n`, `note`, `gain`, `pan`, `speed`, `lpf` / `cutoff`, `hpf`, `resonance`, `attack` / `decay` / `sustain` / `release`, `legato`, `room`, `delay`, `crush`, `cut` (choke group), `bank`.
+    - Arguments may be values, patterns or mini-notation.
+  - Note names become MIDI numbers: c3 = 48, a4 = 69, `#` / `s` sharp, `b` flat, several allowed, octave 3 by default; MIDI numbers (also fractional) pass.
+  - Values are kept inside the §5.6 ranges: gain 0-1.5, pan 0-1, speed +-4, filters 20 Hz-20 kHz, crush 1-16 ...
+    - Anything that isn't a number (or a whole number where one is needed) is a `ControlError` naming the control: `gain needs a number, got "loud"`.
+  - Plain mini-notation takes controls too: words become `s`, numbers `n`. So `mini("kick hat").gain(0.5)` works, and `"bd:2"` keeps its sample number.
+- Tests: 9 new (75 in total, 2 todo for P5-05 transforms).
+  - Every control and alias, and note names with their edge cases.
+  - Clamping, the error messages, merging and chains, patterned controls keeping the left's structure, and source locations carried.
+- The §3 `off` row now needs only `off` itself (P5-05).
+
 ## 2026-11-24 · P5-03 Mini-notation parser
 - What changed:
   - `js/codebeat/mini.js`: a hand-written tokenizer and recursive-descent parser for the §4.1 grammar.
