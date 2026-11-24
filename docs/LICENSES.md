@@ -28,6 +28,7 @@ GPL (any version), AGPL, LGPL used via static linking (unless an alternative lic
 | Windows Media Foundation | MP3/AAC/M4A/ALAC decoding | Part of Windows | System component |
 | libFLAC, libogg, libvorbis (bundled inside JUCE's juce_audio_formats) | FLAC and Ogg Vorbis decoding | BSD-3-Clause | Comes with JUCE; list in notices file |
 | ONNX Runtime (Phase 6) | ML inference, DirectML | MIT | Notices file |
+| DirectML (Microsoft.AI.DirectML, with ONNX Runtime) | GPU inference on DirectX 12 | Microsoft DirectML licence (not open source; redistribution with an app allowed, Windows / Xbox only) | Owner approved 2026-11-24 (P6-01); ship DirectML.dll unmodified with its LICENSE.txt in the notices |
 | Beat This! weights (Phase 6, optional) | Beat tracking | MIT (code and published weights, per model cards) | Re-verify at integration time |
 | HTDemucs weights (Phase 6) | Stem separation | **Unclear** — sources disagree (MIT vs. non-commercial) | Owner decision before shipping; fall back to another model if not clearly commercial-friendly |
 
@@ -76,6 +77,8 @@ Machine-readable allowlist read by `tools/check_licenses.py`. `Package id` is th
 | signalsmith-linear | FetchContent (header-only) | MIT | yes |
 | signalsmith-stretch | FetchContent (header-only) | MIT | yes |
 | quickjs-ng | FetchContent | MIT | yes |
+| onnxruntime-directml | FetchContent (NuGet, prebuilt) | MIT | yes |
+| directml | FetchContent (NuGet, prebuilt) | LicenseRef-Microsoft-DirectML | yes |
 | sqlite3 | vcpkg | Public-Domain | yes |
 | taglib | vcpkg | MPL-1.1 | yes |
 | zlib | vcpkg (via taglib) | Zlib | yes |

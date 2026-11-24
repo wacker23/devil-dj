@@ -8,6 +8,7 @@ juce_add_console_app(DevilDJTests
 
 target_sources(DevilDJTests PRIVATE
     analysis/AnalysisServiceTests.cpp
+    analysis/InferenceSessionTests.cpp
     analysis/AnalysisSmokeTests.cpp
     analysis/BeatTrackerTests.cpp
     analysis/KeyDetectorTests.cpp
@@ -170,6 +171,8 @@ target_link_libraries(DevilDJTests PRIVATE
     devildj::dsp
     devildj::compile_options
     juce::juce_recommended_config_flags)
+
+devildj_copy_inference_dlls(DevilDJTests) # P6-01
 
 catch_discover_tests(DevilDJTests
     DISCOVERY_MODE PRE_TEST

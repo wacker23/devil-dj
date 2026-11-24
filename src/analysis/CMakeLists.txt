@@ -4,6 +4,7 @@ add_library(devildj_analysis STATIC
     AnalysisService.cpp
     BeatTracker.cpp
     FeatureNormalizer.cpp
+    InferenceSession.cpp
     KeyDetector.cpp
     Loudness.cpp
     WaveformBuilder.cpp
@@ -19,6 +20,7 @@ target_sources(devildj_analysis PUBLIC
         BeatTracker.h
         FeatureNormalizer.h
         Fft.h
+        InferenceSession.h
         KeyDetector.h
         Loudness.h
         WaveformBuilder.h
@@ -29,5 +31,5 @@ target_include_directories(devildj_analysis PUBLIC "${PROJECT_SOURCE_DIR}/src")
 target_compile_features(devildj_analysis PUBLIC cxx_std_20)
 target_link_libraries(devildj_analysis
     PUBLIC devildj::util devildj::library
-    PRIVATE devildj::dsp
+    PRIVATE devildj::dsp devildj::onnxruntime
     PRIVATE devildj::compile_options)

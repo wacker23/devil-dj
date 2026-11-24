@@ -520,7 +520,7 @@ Spec: `docs/CODEBEAT_SPEC.md`. The pattern language is written from scratch in p
 
 ## Phase 6 — Stems and smart features (weeks 23–27)
 
-- [ ] **P6-01 ONNX Runtime integration** — add ONNX Runtime with the DirectML execution provider (prebuilt package), `analysis/InferenceSession` wrapper with CPU fallback. **Before merging, confirm the licence of every model weight file (owner decision).** Done when: a toy model runs on CPU and DirectML.
+- [x] **P6-01 ONNX Runtime integration** — add ONNX Runtime with the DirectML execution provider (prebuilt package), `analysis/InferenceSession` wrapper with CPU fallback. **Before merging, confirm the licence of every model weight file (owner decision).** Done when: a toy model runs on CPU and DirectML.
 - [ ] **P6-02 Beat tracker v2 (optional upgrade)** — Beat This! (MIT code + weights) as an alternative analyzer: port its spectrogram front-end exactly from the reference repo and verify against reference outputs; choose per track by confidence. Done when: eval set accuracy beats v1 or v2 is dropped.
 - [ ] **P6-03 Stem separation job** — HTDemucs ONNX in the background, chunked with overlap-add, 4 stems (vocals, drums, bass, other) stored as 16-bit FLAC in the cache; progress UI; "fast" vs "quality" setting. Done when: separation of a 5-min track completes and stems sum back to the original within −30 dB error; timing on the target laptop logged.
 - [ ] **P6-04 Stem playback** — a deck plays up to 4 synchronized stem buffers (streamed from cache, 16-bit in RAM); per-stem mute/solo, level (stem ISO), and FX send; stem waveform view. Done when: 2 decks × 4 stems within CPU/RAM budget (log numbers).

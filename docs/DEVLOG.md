@@ -11,6 +11,29 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P6-01 ONNX Runtime integration
+- Owner decision (2026-11-24): ONNX Runtime with DirectML.
+  - ONNX Runtime 1.24.4 is MIT, already on the approved list.
+  - DirectML 1.15.4 (`DirectML.dll`) is under Microsoft's DirectML licence: not open source, but redistribution with an app is allowed, Windows / Xbox only.
+  - The licence check allows it as an explicit exception (`LicenseRef-Microsoft-DirectML`); LICENSES.md has both packages.
+- What changed:
+  - Both NuGet packages come in as FetchContent URLs with pinned SHA-256 hashes. They are unpacked only (no CMake in them).
+    - The imported target `devildj::onnxruntime` gives the headers and the import library.
+    - `devildj_copy_inference_dlls(<target>)` copies `onnxruntime.dll`, `onnxruntime_providers_shared.dll` and `DirectML.dll` next to Devil-DJ.exe and the tests.
+  - `analysis/InferenceSession` opens an ONNX model.
+    - It runs on DirectML when preferred (DirectML needs memory patterns off and sequential execution), and falls back to the CPU on any failure, keeping the reason.
+    - It reports its input / output names, and runs float tensors in model order, checking element counts.
+    - Errors (no model, a broken model, wrong inputs) come back as Result errors.
+    - It is for analysis threads only, never the audio thread.
+  - `tools/make_toy_onnx.py` writes our own 159-byte toy model, `tests/data/toy_scale_add.onnx` (y = 2x + 1 over float[1, 8]), as raw protobuf with the standard library only (no onnx package).
+- Tests: 3 new Catch2 cases (Release and Debug).
+  - The toy model on the CPU, and **on DirectML on this laptop** (exact results; 3 runs on one session).
+  - ONNX Runtime reports version 1.24.4.
+  - Errors: no model, a broken file, a wrong input count, values not filling the shape, the wrong shape.
+- For later:
+  - The installer (Phase 8) must ship the three DLLs and DirectML's LICENSE.txt in the notices.
+  - Every real model's weight licence still needs the owner's OK before it is merged (P6-02, P6-03).
+
 ## 2026-11-24 · P5-17 Render
 - What changed:
   - `app/CodeRender::renderCode(code, options)` renders N cycles offline.

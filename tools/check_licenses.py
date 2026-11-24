@@ -36,6 +36,7 @@ ALLOWED_LICENCES = {
     "MPL-1.1",
     "MPL-2.0",
     "JUCE-EULA",  # approved explicitly in docs/LICENSES.md (decision D6)
+    "LicenseRef-Microsoft-DirectML",  # DirectML.dll: approved explicitly by the owner (2026-11-24, P6-01)
 }
 
 # Checked before the allowlist so e.g. "LGPL-2.1" or "CC-BY-NC-4.0" can never slip through.

@@ -88,6 +88,8 @@ target_compile_definitions(DevilDJ PRIVATE
     JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:DevilDJ,JUCE_PRODUCT_NAME>"
     JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:DevilDJ,JUCE_VERSION>")
 
+devildj_copy_inference_dlls(DevilDJ) # onnxruntime.dll and DirectML.dll next to the program (P6-01)
+
 target_link_libraries(DevilDJ
     PRIVATE
         devildj::app_core

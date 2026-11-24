@@ -55,6 +55,40 @@ if(MSVC)
 endif()
 unset(CMAKE_POLICY_DEFAULT_CMP0091)
 
+# ONNX Runtime with DirectML (P6-01; owner approved 2026-11-24): prebuilt from NuGet, hashes pinned. ONNX Runtime is
+# MIT; DirectML.dll is under Microsoft's DirectML licence (redistributable with an app, Windows only). Imported as
+# `devildj::onnxruntime`; devildj_copy_inference_dlls(<target>) puts the three DLLs next to an executable.
+FetchContent_Declare(
+    onnxruntime-directml
+    URL https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/1.24.4
+    URL_HASH SHA256=57E9F11B73437BEF7A309496135D4C1F96B1A8E9DDBA60013FA27BFC1D788681
+    DOWNLOAD_NAME onnxruntime-directml-1.24.4.zip
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+FetchContent_Declare(
+    directml
+    URL https://www.nuget.org/api/v2/package/Microsoft.AI.DirectML/1.15.4
+    URL_HASH SHA256=4E7CB7DDCE8CF837A7A75DC029209B520CA0101470FCDF275C1F49736A3615B9
+    DOWNLOAD_NAME directml-1.15.4.zip
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+FetchContent_MakeAvailable(onnxruntime-directml directml) # no CMake in them: just unpacked
+set(DEVILDJ_ORT_DIR "${onnxruntime-directml_SOURCE_DIR}")
+set(DEVILDJ_DML_DIR "${directml_SOURCE_DIR}")
+add_library(devildj_onnxruntime SHARED IMPORTED GLOBAL)
+set_target_properties(devildj_onnxruntime PROPERTIES
+    IMPORTED_LOCATION "${DEVILDJ_ORT_DIR}/runtimes/win-x64/native/onnxruntime.dll"
+    IMPORTED_IMPLIB "${DEVILDJ_ORT_DIR}/runtimes/win-x64/native/onnxruntime.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${DEVILDJ_ORT_DIR}/build/native/include")
+add_library(devildj::onnxruntime ALIAS devildj_onnxruntime)
+function(devildj_copy_inference_dlls target)
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${DEVILDJ_ORT_DIR}/runtimes/win-x64/native/onnxruntime.dll"
+            "${DEVILDJ_ORT_DIR}/runtimes/win-x64/native/onnxruntime_providers_shared.dll"
+            "${DEVILDJ_DML_DIR}/bin/x64-win/DirectML.dll"
+            "$<TARGET_FILE_DIR:${target}>"
+        VERBATIM)
+endfunction()
+
 # vcpkg manifest packages (vcpkg.json). Triplet x64-windows-static: static libraries and static CRT.
 find_package(unofficial-sqlite3 CONFIG REQUIRED) # SQLite: public domain
 find_package(TagLib CONFIG REQUIRED)             # TagLib: MPL-1.1 (used unmodified); pulls in zlib + utfcpp
