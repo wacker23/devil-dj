@@ -8,6 +8,7 @@
 // (right-click or double-click: onRename / onClose). The app keeps the buffers on disk (app::CodeBuffers).
 // Ctrl+PageUp / Ctrl+PageDown switch tabs (through the app's key handling: nextTab).
 
+#include "ui/CodeHelp.h"
 #include "ui/CodeTokeniser.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -20,7 +21,7 @@
 namespace devildj::ui
 {
 
-class CodeEditorPanel final : public juce::Component
+class CodeEditorPanel final : public juce::Component, private juce::Timer
 {
 public:
     CodeEditorPanel();
@@ -72,6 +73,18 @@ public:
 
     // P5-15: the code sounding now, lit - character ranges [start, end) in `tab` (from the app's timer).
     void setHighlights(int tab, std::vector<std::pair<int, int>> ranges);
+
+    // P5-16: Ctrl+Space completes the word at the caret (one option: at once; more: a menu); hovering a Code Beat
+    // name shows its help; EXAMPLES opens one of the starter patterns (onExample: the app makes it a tab).
+    void setSoundNames(std::vector<juce::String> names);
+    void showCompletions();
+    bool completeWith(const juce::String& option); // replaces the word at the caret (for the menu and tests)
+    void showHelpFor(const juce::String& name, juce::Point<int> where); // where: in this component
+    void hideHelp();
+    bool helpShown() const noexcept { return bubble.isVisible(); }
+    juce::String helpText() const { return bubble.text; }
+    juce::TextButton& examplesButton() { return examples; }
+    std::function<void(const juce::String& title, const juce::String& code)> onExample;
     std::vector<juce::Rectangle<int>> highlightRects() const; // where they are drawn (for tests)
 
     void resized() override;
@@ -108,6 +121,20 @@ private:
     int litTab = 0;
     std::vector<std::pair<int, int>> litRanges;
     void placeLights();
+
+    juce::TextButton examples{"EXAMPLES"};
+    std::vector<juce::String> soundNames;
+    struct Bubble final : juce::Component
+    {
+        juce::String text, title;
+        void paint(juce::Graphics& g) override;
+    } bubble;
+    juce::String hoverWord;
+    juce::Point<int> hoverAt;
+    void mouseMove(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
+    void mouseDown(const juce::MouseEvent& e) override;
+    void timerCallback() override;
 };
 
 } // namespace devildj::ui

@@ -111,6 +111,7 @@ target_sources(DevilDJTests PRIVATE
     ui/FileBrowserTests.cpp
     ui/KeyboardControllerTests.cpp
     ui/CodeEditorTests.cpp
+    ui/CodeHelpTests.cpp
     ui/KeymapEditorTests.cpp
     ui/NextTrackPanelTests.cpp
     ui/StepGridTests.cpp

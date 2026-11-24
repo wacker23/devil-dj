@@ -828,6 +828,11 @@ void MainComponent::registerActions()
     onPress(ui::globalCommand(GA::CodeEvaluate), [this] { evaluateCode(false); });
     onPress(ui::globalCommand(GA::CodeEvaluateNow), [this] { evaluateCode(true); });
     onPress(ui::globalCommand(GA::CodeHush), [this] { hushCode(); });
+    onPress(ui::globalCommand(GA::CodeAutocomplete), [this]
+            {
+                codeEditor.setSoundNames(soundNamesForCompletion());
+                codeEditor.showCompletions();
+            });
     onPress(ui::globalCommand(GA::CodeNextBuffer), [this] { codeEditor.nextTab(1); });
     onPress(ui::globalCommand(GA::CodePreviousBuffer), [this] { codeEditor.nextTab(-1); });
     // The transition editor's keys (P4-17).
@@ -2292,6 +2297,12 @@ void MainComponent::setUpCodeEditor()
             codeEditor.renameTab(index, codeBuffers.at(index).name);
         saveSoon();
     };
+    codeEditor.onExample = [this, saveSoon](const juce::String& title, const juce::String& code)
+    {
+        const int i = codeBuffers.add(title, code);
+        codeEditor.addTab({codeBuffers.at(i).name, codeBuffers.at(i).text});
+        saveSoon();
+    };
     codeEditor.onClose = [this, saveSoon](int index)
     {
         codeBuffers.remove(index);
@@ -2314,6 +2325,14 @@ void MainComponent::hushCode()
     codeProducer->submit("hush()", true);
     engine.send(engine::CodeDeckStop{}); // what is queued goes now, what sounds fades out
     codeEditor.setNote("hushed - Ctrl+Enter plays the code again", false);
+}
+
+std::vector<juce::String> MainComponent::soundNamesForCompletion()
+{
+    std::vector<juce::String> names;
+    for (const auto& n : codeSounds->names())
+        names.push_back(juce::String::fromUTF8(n.c_str()));
+    return names;
 }
 
 void MainComponent::saveCodeBuffers()

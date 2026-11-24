@@ -8,6 +8,13 @@ juce_add_binary_data(devildj_codebeat_js
     NAMESPACE CodeBeatJs
     SOURCES ${devildj_codebeat_js_files})
 
+# The editor's help (P5-16): the reference table and the starter examples, embedded for the ui library.
+file(GLOB devildj_codebeat_examples CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/help/examples/*.js")
+juce_add_binary_data(devildj_codebeat_help
+    HEADER_NAME CodeBeatHelp.h
+    NAMESPACE CodeBeatHelp
+    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/help/reference.json" ${devildj_codebeat_examples})
+
 add_library(devildj_codebeat STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/CodeEvaluator.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/CodeEvaluator.h"

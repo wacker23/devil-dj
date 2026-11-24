@@ -233,6 +233,7 @@ private:
     void saveCodeBuffers();
     // P5-14: Ctrl+Enter (at the next cycle line) / Ctrl+Shift+Enter (now) / Ctrl+. (hush).
     void evaluateCode(bool now);
+    std::vector<juce::String> soundNamesForCompletion(); // P5-16: built-in names and sample folders
     void hushCode();
     int codeEvaluatedTab = 0;               // the tab the running evaluation came from
     std::uint64_t codeEvaluationsSeen = 0;  // the producer's evaluations already shown

@@ -38,6 +38,7 @@ public:
     juce::CodeEditorComponent::ColourScheme getDefaultColourScheme() override;
 
     static bool isApiName(const juce::String& word);
+    static std::vector<juce::String> apiNames(); // every name it colours as Code Beat's
     static bool isKeyword(const juce::String& word);
 };
 

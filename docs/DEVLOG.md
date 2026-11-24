@@ -11,6 +11,32 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P5-16 Autocomplete + help
+- What changed:
+  - `src/codebeat/help/reference.json` is a reference table of 85 names, written for Devil-DJ. Each has a kind (control, function, method, signal, program, hook), a signature, a line of help and a working example.
+  - `src/codebeat/help/examples/` holds 15 starter patterns, our own:
+    - beats: four on the floor, a house groove, euclid percussion, every-fourth-bar fills, random but repeatable hats, a broken beat;
+    - melody and bass: a minor bass, chords, a filter sweep, an arpeggio, acid, a palindrome melody;
+    - mixing and mood: named parts to mute, following the deck, ambient.
+  - Both are embedded (`juce_add_binary_data`, `devildj_codebeat_help`) for the ui library.
+  - `ui/CodeHelp`: the reference and the examples, read from the embedded data. `completionsAt(text, caret, sounds)` offers:
+    - in a string: the sound names (the bank's built-ins and sample folders), or the scale names after ":";
+    - after ".": the methods and controls;
+    - elsewhere: the functions, controls, signals, program functions and hooks.
+    - Matches are case-insensitive, with exact-case matches first. `wordAt()` finds the name under the mouse.
+  - `CodeEditorPanel`:
+    - Ctrl+Space completes: one option at once, more in a menu at the caret (with signatures, up to 40).
+    - Resting the mouse on a Code Beat name for 0.45 s shows its signature, help and example in a bubble, kept inside the panel.
+    - The EXAMPLES button opens a starter pattern in a new tab, saved like any buffer.
+  - The app passes the sound names (`CodeSoundBank::names()`) each time completion is asked for.
+- Tests: 5 new Catch2 cases (Release and Debug).
+  - The reference covers every name the editor colours, once each, with all fields.
+  - **Every reference example (85) and every starter example (15) evaluates without error, the starters play, and every sound they name exists in the sound bank.**
+  - Completion in strings, after a colon, after a dot and elsewhere, in comments, with no match; `wordAt`.
+  - The panel completes a single option at the caret, in code and in a string; hover help shown, hidden and kept in view; the examples button.
+  - One reference example was fixed by these tests: `seed()` takes a number, not a pattern.
+- Owner (the done check): Ctrl+Space in code and in a string, hover over `every`, open a few examples and play them.
+
 ## 2026-11-24 · P5-15 Active highlighting
 - What changed:
   - `codebeat/PreTokenizer` (C++, CODEBEAT_SPEC §8.3): before evaluation, every string literal in argument position (after `(`, `,` or `[`) becomes `__mini("...", <offset>)`. The offset is where its text starts in the buffer, counted in characters as the editor counts them, so UTF-8 is handled.

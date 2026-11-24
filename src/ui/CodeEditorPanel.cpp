@@ -58,10 +58,14 @@ struct CodeEditorPanel::Page
     TabMouse mouse;
     juce::TextButton button; // after `mouse`: destroyed first, while the listener still exists
 
+    juce::MouseListener* hover = nullptr; // the panel, listening for hover help
+
     ~Page()
     {
         document.removeListener(&listener);
         button.removeMouseListener(&mouse);
+        if (editor != nullptr && hover != nullptr)
+            editor->removeMouseListener(hover);
     }
 };
 
@@ -79,6 +83,164 @@ CodeEditorPanel::CodeEditorPanel()
     addChildComponent(marker);
     lights.setInterceptsMouseClicks(false, false);
     addAndMakeVisible(lights);
+    styleTab(examples);
+    examples.setTooltip("Open one of the starter patterns in a new tab");
+    examples.onClick = [this]
+    {
+        juce::PopupMenu m;
+        const auto& all = codeExamples();
+        for (std::size_t i = 0; i < all.size(); ++i)
+            m.addItem(juce::String(static_cast<int>(i) + 1) + ". " + all[i].title, [this, i]
+                      {
+                          if (onExample)
+                              onExample(codeExamples()[i].title, codeExamples()[i].code);
+                      });
+        m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&examples));
+    };
+    addAndMakeVisible(examples);
+    bubble.setInterceptsMouseClicks(false, false);
+    addChildComponent(bubble);
+}
+
+void CodeEditorPanel::Bubble::paint(juce::Graphics& g)
+{
+    const auto r = getLocalBounds().toFloat().reduced(0.5f);
+    g.setColour(juce::Colour(0xf0262630));
+    g.fillRoundedRectangle(r, 5.0f);
+    g.setColour(kCode.withAlpha(0.7f));
+    g.drawRoundedRectangle(r, 5.0f, 1.0f);
+    auto area = getLocalBounds().reduced(8, 6);
+    g.setColour(kCode);
+    g.setFont(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 14.0f, juce::Font::bold));
+    g.drawText(title, area.removeFromTop(18), juce::Justification::centredLeft, true);
+    g.setColour(kText);
+    g.setFont(juce::FontOptions(13.0f));
+    g.drawFittedText(text, area, juce::Justification::topLeft, 8, 1.0f);
+}
+
+void CodeEditorPanel::setSoundNames(std::vector<juce::String> names)
+{
+    soundNames = std::move(names);
+}
+
+bool CodeEditorPanel::completeWith(const juce::String& option)
+{
+    auto* ed = editor(shown);
+    auto* doc = document(shown);
+    if (ed == nullptr || doc == nullptr)
+        return false;
+    const int caret = ed->getCaretPos().getPosition();
+    const auto c = completionsAt(doc->getAllContent(), caret, soundNames);
+    doc->replaceSection(c.start, caret, option);
+    ed->moveCaretTo(juce::CodeDocument::Position(*doc, c.start + option.length()), false);
+    return true;
+}
+
+void CodeEditorPanel::showCompletions()
+{
+    auto* ed = editor(shown);
+    auto* doc = document(shown);
+    if (ed == nullptr || doc == nullptr)
+        return;
+    const auto caretPos = ed->getCaretPos();
+    const auto c = completionsAt(doc->getAllContent(), caretPos.getPosition(), soundNames);
+    if (c.options.empty())
+    {
+        setNote(c.inString ? "no sound starts with \"" + c.prefix + "\"" : "nothing to complete", true);
+        return;
+    }
+    if (c.options.size() == 1)
+    {
+        completeWith(c.options.front());
+        return;
+    }
+    juce::PopupMenu m;
+    const std::size_t shownCount = std::min<std::size_t>(c.options.size(), 40);
+    for (std::size_t i = 0; i < shownCount; ++i)
+    {
+        const auto option = c.options[i];
+        const auto* help = c.inString ? nullptr : findHelp(option);
+        m.addItem(help != nullptr ? option + "    " + help->signature : option, [this, option]
+                  {
+                      completeWith(option);
+                      focusEditor();
+                  });
+    }
+    if (c.options.size() > shownCount)
+        m.addItem("... " + juce::String(static_cast<int>(c.options.size() - shownCount)) + " more: type more letters", false, false, [] {});
+    const auto at = ed->localAreaToGlobal(ed->getCharacterBounds(caretPos));
+    m.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(at).withMaximumNumColumns(1));
+}
+
+void CodeEditorPanel::showHelpFor(const juce::String& name, juce::Point<int> where)
+{
+    const auto* help = findHelp(name);
+    if (help == nullptr)
+    {
+        hideHelp();
+        return;
+    }
+    bubble.title = help->signature;
+    bubble.text = help->help + (help->example.isNotEmpty() ? "\n\ne.g.  " + help->example : juce::String());
+    const int width = std::min(460, std::max(240, getWidth() - 20));
+    juce::AttributedString as;
+    as.append(bubble.text, juce::FontOptions(13.0f));
+    juce::TextLayout layout;
+    layout.createLayout(as, static_cast<float>(width - 16));
+    const int height = static_cast<int>(std::ceil(layout.getHeight())) + 18 + 16;
+    auto box = juce::Rectangle<int>(where.x + 12, where.y + 18, width, height);
+    if (box.getRight() > getWidth())
+        box.setX(std::max(0, getWidth() - width));
+    if (box.getBottom() > getHeight())
+        box.setY(std::max(0, where.y - height - 8));
+    bubble.setBounds(box);
+    bubble.setVisible(true);
+    bubble.toFront(false);
+    bubble.repaint();
+}
+
+void CodeEditorPanel::hideHelp()
+{
+    stopTimer();
+    hoverWord.clear();
+    bubble.setVisible(false);
+}
+
+void CodeEditorPanel::mouseMove(const juce::MouseEvent& e)
+{
+    auto* ed = editor(shown);
+    if (ed == nullptr || !(e.eventComponent == ed || ed->isParentOf(e.eventComponent)))
+        return;
+    const auto local = e.getEventRelativeTo(ed).getPosition();
+    const auto pos = ed->getPositionAt(local.x, local.y);
+    const auto word = wordAt(document(shown)->getAllContent(), pos.getPosition());
+    hoverAt = e.getEventRelativeTo(this).getPosition();
+    if (word == hoverWord)
+        return;
+    hoverWord = word;
+    bubble.setVisible(false);
+    if (findHelp(word) != nullptr)
+        startTimer(450); // a short rest on the word, then its help
+    else
+        stopTimer();
+}
+
+void CodeEditorPanel::mouseExit(const juce::MouseEvent& e)
+{
+    if (auto* ed = editor(shown); ed != nullptr && (e.eventComponent == ed || ed->isParentOf(e.eventComponent)))
+        hideHelp();
+}
+
+void CodeEditorPanel::mouseDown(const juce::MouseEvent&)
+{
+    hideHelp();
+}
+
+void CodeEditorPanel::timerCallback()
+{
+    stopTimer();
+    if (hoverWord.isNotEmpty())
+        showHelpFor(hoverWord, hoverAt);
 }
 
 void CodeEditorPanel::Lights::paint(juce::Graphics& g)
@@ -244,6 +406,8 @@ std::unique_ptr<CodeEditorPanel::Page> CodeEditorPanel::makePage(const Tab& tab)
     ed.setColour(juce::CaretComponent::caretColourId, kCode);
     ed.setScrollbarThickness(10);
     addChildComponent(ed);
+    ed.addMouseListener(this, true); // hover help (P5-16)
+    p->hover = this;
     p->button.setButtonText(tab.name);
     styleTab(p->button);
     p->button.setTooltip("Right-click (or double-click) to rename or close");
@@ -417,6 +581,7 @@ void CodeEditorPanel::resized()
         bar.removeFromLeft(2);
     }
     plus.setBounds(bar.removeFromLeft(28));
+    examples.setBounds(bar.removeFromRight(90));
     area.removeFromBottom(kBarHeight); // the message and the status
     for (auto& p : pages)
         p->editor->setBounds(area);

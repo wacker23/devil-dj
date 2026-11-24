@@ -181,7 +181,9 @@ Mouse: click a lane point and drag it (quarter beats; Alt: free), click elsewher
 | Toggle console panel | Ctrl+` |
 | Next / previous buffer | Ctrl+PageDown / Ctrl+PageUp |
 | Leave the editor (next bottom panel) | Ctrl+Tab |
-| Autocomplete | Ctrl+Space |
+| Autocomplete (names; sounds inside strings) | Ctrl+Space |
+| Help for a name | hover the mouse over it |
+| Starter patterns | the EXAMPLES button (a new tab) |
 
 ## Mouse, trackpad and touch
 

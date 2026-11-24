@@ -132,6 +132,11 @@ bool CodeTokeniser::isApiName(const juce::String& word)
     return kApi.count(word) > 0;
 }
 
+std::vector<juce::String> CodeTokeniser::apiNames()
+{
+    return {kApi.begin(), kApi.end()};
+}
+
 bool CodeTokeniser::isKeyword(const juce::String& word)
 {
     return kKeywords.count(word) > 0;
