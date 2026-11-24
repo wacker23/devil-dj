@@ -52,6 +52,7 @@ Used only to build, format or test; nothing from them ends up in the app or inst
 | Rubber Band | GPL or paid commercial licence; only if Signalsmith quality is not good enough. |
 | Auto-update libraries | Check licence when chosen (Phase 8). |
 | LAION CLAP music checkpoint (Track Matcher embeddings, Phase 7) | Model mirrors list the checkpoints as CC0-1.0; confirm at the original source and note that the training data mix includes third-party datasets. |
+| Spleeter (Deezer) pretrained models (a stem alternative) | Code MIT; the trained weights carry no licence (checked 2026-11-24 at github.com/deezer/spleeter: "trained on a large private dataset"; a commercial "Spleeter Pro" is sold) - **not cleared** for a closed / commercial app without Deezer's permission. |
 | OpenL3 (embedding alternative) | Library is MIT; confirm the licence of the weight files. |
 | Essentia models (Discogs-EffNet, MAEST) | CC BY-NC-SA 4.0 (non-commercial) with a proprietary licence on request — **forbidden** under the closed-capable policy unless we obtain a commercial licence. |
 
