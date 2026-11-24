@@ -379,11 +379,7 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
         [this](const engine::ScheduledEvent& e) { return engine.codeDeckEvents().tryPush(e); });
     codeProducer->setSoundBank(codeSounds);
     addChildComponent(codeStrip);
-    codePanel.setText("Code Beat - the code editor goes here (next in the plan). The CODE channel is at the right.",
-                      juce::dontSendNotification);
-    codePanel.setJustificationType(juce::Justification::centred);
-    codePanel.setColour(juce::Label::textColourId, juce::Colour(0xff8a8a96));
-    addChildComponent(codePanel);
+    setUpCodeEditor();
     beatPanel.onChanged = [this]
     {
         beatSaveTimer->startTimer(1000);
@@ -794,7 +790,13 @@ bool MainComponent::onPhysicalKey(const ui::KeyboardController::KeyEvent& e)
     const bool inBeatMaker = beatPanel.isVisible() && focused != nullptr &&
                              (focused == &beatPanel || beatPanel.isParentOf(focused));
     const bool inMix = mixEditor.isVisible() && focused != nullptr && (focused == &mixEditor || mixEditor.isParentOf(focused));
-    return keyboard.handle(e, inBeatMaker ? ui::KeyContext::BeatMaker : inMix ? ui::KeyContext::Transition : ui::KeyContext::Main,
+    // The code editor (P5-13): typing there, only the code deck's keys are shortcuts.
+    const bool inCode = codeEditor.isVisible() && focused != nullptr && codeEditor.isParentOf(focused);
+    return keyboard.handle(e,
+                           inCode        ? ui::KeyContext::CodeBeat
+                           : inBeatMaker ? ui::KeyContext::BeatMaker
+                           : inMix       ? ui::KeyContext::Transition
+                                         : ui::KeyContext::Main,
                            typing);
 }
 
@@ -822,6 +824,9 @@ void MainComponent::registerActions()
                                        beatPanel.perform(static_cast<GA>(a));
                                });
     onPress(ui::globalCommand(GA::SwitchPanel), [this] { switchBottomPanel(); });
+    // The code editor's tabs (P5-13).
+    onPress(ui::globalCommand(GA::CodeNextBuffer), [this] { codeEditor.nextTab(1); });
+    onPress(ui::globalCommand(GA::CodePreviousBuffer), [this] { codeEditor.nextTab(-1); });
     // The transition editor's keys (P4-17).
     for (int a = static_cast<int>(GA::TransLane1); a <= static_cast<int>(GA::TransLoop); ++a)
         actions.setHandler(ui::globalCommand(static_cast<GA>(a)),
@@ -1249,6 +1254,7 @@ void MainComponent::toggleKeyLock(engine::DeckId deck)
 
 MainComponent::~MainComponent()
 {
+    saveCodeBuffers(); // what was typed in the last second too
     loader.callbacks = {}; // the loader outlives this component; don't let late results call into it
     importJob = nullptr;   // stops a running import (between batches) before the browser goes
     analysisProgress = nullptr;
@@ -2196,6 +2202,60 @@ void MainComponent::updateCodeDeck()
     }
 }
 
+void MainComponent::setUpCodeEditor()
+{
+    codeBuffers.load();
+    std::vector<ui::CodeEditorPanel::Tab> tabs;
+    for (int i = 0; i < codeBuffers.count(); ++i)
+        tabs.push_back({codeBuffers.at(i).name, codeBuffers.at(i).text});
+    codeEditor.setTabs(tabs, codeBuffers.current());
+    saveCodeBuffers(); // the starter buffer, the first time
+    codeSaveTimer = std::make_unique<juce::TimedCallback>(
+        [this]
+        {
+            codeSaveTimer->stopTimer();
+            saveCodeBuffers();
+        });
+    const auto saveSoon = [this] { codeSaveTimer->startTimer(1000); };
+    codeEditor.onTextChanged = [this, saveSoon](int index, const juce::String& text)
+    {
+        codeBuffers.setText(index, text);
+        saveSoon();
+    };
+    codeEditor.onShown = [this, saveSoon](int index)
+    {
+        codeBuffers.setCurrent(index);
+        saveSoon();
+    };
+    codeEditor.onAdd = [this, saveSoon]
+    {
+        const int i = codeBuffers.add();
+        codeEditor.addTab({codeBuffers.at(i).name, codeBuffers.at(i).text});
+        saveSoon();
+    };
+    codeEditor.onRename = [this, saveSoon](int index, const juce::String& name)
+    {
+        if (const auto why = codeBuffers.rename(index, name); why.isNotEmpty())
+            libraryBrowser->setStatus("Can't rename the code buffer: " + why);
+        else
+            codeEditor.renameTab(index, codeBuffers.at(index).name);
+        saveSoon();
+    };
+    codeEditor.onClose = [this, saveSoon](int index)
+    {
+        codeBuffers.remove(index);
+        codeEditor.removeTab(index);
+        saveSoon();
+    };
+    addChildComponent(codeEditor);
+}
+
+void MainComponent::saveCodeBuffers()
+{
+    if (const auto failed = codeBuffers.save(); failed.isNotEmpty())
+        util::logWarning("Code Beat: {}", failed.toStdString());
+}
+
 void MainComponent::switchBottomPanel()
 {
     // Browser -> Beat Maker -> transition editor -> code deck (P5-12) -> browser.
@@ -2208,6 +2268,8 @@ void MainComponent::switchBottomPanel()
         refreshMix(false);
         mixEditor.grabKeyboardFocus();
     }
+    else if (bottomPanel == 3)
+        codeEditor.focusEditor();
     else
         grabKeyboardFocus();
 }
@@ -3604,9 +3666,9 @@ void MainComponent::resized()
         // The code deck: its editor's place and, at its right, its channel strip (P5-12).
         auto code = l.nextTrack.isEmpty() ? l.browser : l.browser.getUnion(l.nextTrack);
         codeStrip.setBounds(code.removeFromRight(std::min(140, code.getWidth() / 6)));
-        codePanel.setBounds(code);
+        codeEditor.setBounds(code);
         codeStrip.setVisible(bottomPanel == 3);
-        codePanel.setVisible(bottomPanel == 3);
+        codeEditor.setVisible(bottomPanel == 3);
     }
     deckA.setBounds(l.deckA);
     deckB.setBounds(l.deckB);

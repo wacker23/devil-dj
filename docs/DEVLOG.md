@@ -11,6 +11,33 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P5-13 Editor component
+- What changed:
+  - `ui/CodeTokeniser` colours the code for `juce::CodeEditorComponent`.
+    - JavaScript: keywords, identifiers, the Code Beat names (functions, controls, methods), numbers, comments, operators, brackets.
+    - Inside string literals (" ' `) it switches to mini-notation: sound / note names, numbers, rests (~ -) and mini operators each in their own colour.
+    - It is stateless: whether a token is in a string is found from its line's start, so lines re-colour independently.
+  - `ui/CodeEditorPanel`: tabs over the editor, each with its own CodeDocument (its own undo).
+    - Line numbers, monospace 15 px, our colours, tab = 2 spaces.
+    - "+" adds a tab. Right-click or double-click a tab to rename or close it.
+    - Typing is reported per tab.
+    - It uses JUCE's `juce_gui_extra` module, part of JUCE (no new dependency).
+  - `app/CodeBuffers`: the buffers in `Documents\Devil-DJ\Code`, one `<name>.js` each, plus `tabs.json` (order and the tab shown).
+    - Files dropped into the folder show up as tabs.
+    - Names are legal, unique and case-insensitive ("Code 2", "bass 2").
+    - Renaming moves the file. Closing moves it, with its latest text, to `Code\Closed`; the last buffer is never closed.
+    - The first start gets a starter pattern (our own).
+  - MainComponent shows the editor in the CODE page (Ctrl+Tab): the editor at the left, the CODE strip at the right.
+    - Buffers are saved a second after typing stops, on a tab switch, and on quit.
+    - Ctrl+PageDown / Ctrl+PageUp switch tabs.
+  - Keys (KeyboardController): typing in the code editor, only the CodeBeat context's keys are shortcuts. Those are Ctrl+Enter, Ctrl+Shift+Enter, Ctrl+., Ctrl+`, Ctrl+PageUp / PageDown, Ctrl+Space, and Ctrl+Tab (new, to leave the editor). No deck key ever fires while typing (Z, Enter ... are text). Other text fields are unchanged: no shortcuts.
+- Tests: 7 new Catch2 cases (Release and Debug).
+  - Buffers: the starter, and a restart keeping text (umlaut and Korean), order, names and the tab shown; legal / unique names, outside files picked up; closing into Closed, the last one kept.
+  - Tokeniser: token sequences for mini strings, a comment, a block comment with a quote in it, a template string, an escaped quote, and lines inside a multi-line program.
+  - Panel: tabs, typing reported for the right tab, per-tab undo, wrap-around switching, add / rename / remove, clicks after a removal.
+  - Keys while typing: the code keys work, deck keys don't, other text fields are unchanged.
+- Evaluating with those keys (and the error marker, status) is P5-14.
+
 ## 2026-11-24 · P5-12 Code deck channel
 - What changed:
   - Engine:

@@ -12,6 +12,10 @@ target_sources(devildj_ui INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/FxPanel.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/FxPanel.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/CodeChannelStrip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/CodeEditorPanel.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/CodeEditorPanel.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/CodeTokeniser.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/CodeTokeniser.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/CodeChannelStrip.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/BeatChannelStrip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/BeatChannelStrip.h"
@@ -65,6 +69,7 @@ target_include_directories(devildj_ui INTERFACE "${PROJECT_SOURCE_DIR}/src")
 
 target_link_libraries(devildj_ui INTERFACE
     juce::juce_gui_basics
+    juce::juce_gui_extra
     devildj::engine
     devildj::beatmaker
     devildj::library)

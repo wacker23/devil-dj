@@ -180,6 +180,7 @@ Mouse: click a lane point and drag it (quarter beats; Alt: free), click elsewher
 | Hush (silence code deck) | Ctrl+. |
 | Toggle console panel | Ctrl+` |
 | Next / previous buffer | Ctrl+PageDown / Ctrl+PageUp |
+| Leave the editor (next bottom panel) | Ctrl+Tab |
 | Autocomplete | Ctrl+Space |
 
 ## Mouse, trackpad and touch

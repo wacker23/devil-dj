@@ -34,6 +34,7 @@ target_sources(DevilDJTests PRIVATE
     app/SpotifyImportTests.cpp
     app/CodeSoundBankTests.cpp
     app/CodeDeckChannelTests.cpp
+    app/CodeBuffersTests.cpp
     app/LayoutTests.cpp
     app/SettingsTests.cpp
     app/SoakTestTests.cpp
@@ -108,6 +109,7 @@ target_sources(DevilDJTests PRIVATE
     ui/PadModeTests.cpp
     ui/FileBrowserTests.cpp
     ui/KeyboardControllerTests.cpp
+    ui/CodeEditorTests.cpp
     ui/KeymapEditorTests.cpp
     ui/NextTrackPanelTests.cpp
     ui/StepGridTests.cpp

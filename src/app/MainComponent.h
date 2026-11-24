@@ -21,9 +21,11 @@
 #include "ui/NextTrackPanel.h"
 #include "ui/BeatChannelStrip.h"
 #include "ui/CodeChannelStrip.h"
+#include "ui/CodeEditorPanel.h"
 #include "ui/TransitionEditor.h"
 #include "ui/BeatMakerPanel.h"
 #include "app/BeatMakerProducer.h"
+#include "app/CodeBuffers.h"
 #include "app/CodeDeckProducer.h"
 #include "app/SampleBank.h"
 #include "app/TransitionStore.h"
@@ -223,7 +225,12 @@ private:
     std::vector<std::pair<std::uint16_t, app::CodeSound>> codeSoundsToSend; // not yet taken by the engine
     bool codeWasPlaying = false;
     ui::CodeChannelStrip codeStrip{engine};
-    juce::Label codePanel; // the code editor's place (P5-13)
+    // The code editor (P5-13): its tabs, kept in Documents\Devil-DJ\Code, saved a second after typing stops.
+    ui::CodeEditorPanel codeEditor;
+    app::CodeBuffers codeBuffers;
+    std::unique_ptr<juce::TimedCallback> codeSaveTimer;
+    void setUpCodeEditor();
+    void saveCodeBuffers();
     void updateCodeDeck(); // the app's timer: clock, DJ hooks, new sounds, hush, the strip
     std::array<std::optional<beatmaker::SoundRef>, 128> sentDrumSounds;
     std::array<std::optional<beatmaker::SynthPreset>, 128> sentSynthSounds;

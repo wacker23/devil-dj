@@ -41,6 +41,8 @@ target_sources(devildj_app_core INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/SampleBank.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/BeatRender.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/BeatRender.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/CodeBuffers.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/CodeBuffers.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/CodeSoundBank.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/CodeSoundBank.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/CodeDeckProducer.cpp"

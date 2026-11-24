@@ -517,6 +517,7 @@ std::vector<KeyBinding> defaultKeymap()
     key(PageDown, mods::Ctrl, GA::CodeNextBuffer, cb);
     key(PageUp, mods::Ctrl, GA::CodePreviousBuffer, cb);
     key(Space, mods::Ctrl, GA::CodeAutocomplete, cb);
+    key(Tab, mods::Ctrl, GA::SwitchPanel, cb); // out of the editor to the next panel (P5-13)
     return map;
 }
 
@@ -579,9 +580,19 @@ bool KeyboardController::handle(const KeyEvent& e, KeyContext focus, bool textIn
         return true; // swallow other repeats: holds must not re-trigger
     }
 
+    // In a text field nothing is a shortcut - except in the code editor (P5-13), where its own keys are (Ctrl+Enter,
+    // Ctrl+., ...), and only those: never a deck's, which would fire on plain typing.
+    std::optional<CommandId> command;
     if (textInputFocused)
-        return false;
-    const auto command = lookup({e.scanCode, e.modifiers}, focus);
+    {
+        if (focus != KeyContext::CodeBeat)
+            return false;
+        for (const auto& b : bindings)
+            if (b.context == KeyContext::CodeBeat && b.chord == KeyChord{e.scanCode, e.modifiers})
+                command = b.command;
+    }
+    else
+        command = lookup({e.scanCode, e.modifiers}, focus);
     if (!command)
         return false;
     if (const auto it = held.find(e.scanCode); it != held.end()) // missed release (focus change): end it first

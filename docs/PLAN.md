@@ -504,7 +504,7 @@ Spec: `docs/CODEBEAT_SPEC.md`. The pattern language is written from scratch in p
 
 ### Editor (C++/JUCE)
 
-- [ ] **P5-13 Editor component** — `juce::CodeEditorComponent` with a custom tokeniser (JS + highlighted mini-notation strings), line numbers, multiple tabs/buffers saved to `Documents\Devil-DJ\Code`. Done when: buffers persist.
+- [x] **P5-13 Editor component** — `juce::CodeEditorComponent` with a custom tokeniser (JS + highlighted mini-notation strings), line numbers, multiple tabs/buffers saved to `Documents\Devil-DJ\Code`. Done when: buffers persist.
 - [ ] **P5-14 Keys + feedback** — Ctrl+Enter evaluate, Ctrl+. hush, Ctrl+Shift+Enter evaluate immediately; inline error marker with message; last good pattern keeps playing; status line (cycle, cps, events/s, late events). Done when: manual test.
 - [ ] **P5-15 Active highlighting** — the code is pre-tokenized to record each string literal's source offset; atoms carry locations; currently sounding atoms are highlighted. Done when: highlight follows a `s("kick snare hat*2")` pattern in time.
 - [ ] **P5-16 Autocomplete + help** — function and sound-name completion, hover help from a JSON docs table, examples browser with 15 starter patterns (our own). Done when: manual test.
