@@ -50,6 +50,8 @@ Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / r
 | Stems: solo drums / bass / other / vocals | Alt+Shift+Q / W / E / R | Alt+Shift+U / I / O / P |
 | Stems: FX send on / off (off: the stem skips the deck's effects) | Alt+A / Alt+S / Alt+D / Alt+F | Alt+J / Alt+K / Alt+L / Alt+; |
 | Stems: all back to normal | Alt+Z | Alt+M |
+| Mix points (P6-08): MIX IN / MIX OUT at the bar nearest the playhead (Automix and Auto use them; also right-click the waveform) | Alt+X / Alt+C | Alt+, / Alt+. |
+| Mix points: clear MIX IN / MIX OUT | Alt+Shift+X / Alt+Shift+C | Alt+Shift+, / Alt+Shift+. |
 
 ## Mixer, FX and global
 
@@ -198,7 +200,7 @@ Mouse: click a lane point and drag it (quarter beats; Alt: free), click elsewher
 | Drag on zoomed waveform | Scratch (playing) or scrub (paused); release resumes |
 | Scroll on zoomed waveform | Fine nudge |
 | Ctrl + scroll on waveform | Zoom |
-| Right-click on zoomed waveform | Phrases (P6-06): a phrase starts at this bar / move the nearest phrase line here / remove it / back to the analysis's phrases |
+| Right-click on zoomed waveform | Phrases (P6-06): a phrase starts at this bar / move the nearest phrase line here / remove it / back to the analysis's phrases; mix points (P6-08): MIX IN / MIX OUT at this bar, clear them |
 | Click on overview waveform | Seek (quantized if quantize is on) |
 | Drag knob / fader vertically | Change value; Alt = fine |
 | Scroll over knob / fader | Change value |

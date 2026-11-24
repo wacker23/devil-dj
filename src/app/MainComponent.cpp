@@ -24,6 +24,7 @@
 #include "library/TrackRepository.h"
 #include "app/PhraseEdit.h"
 #include "library/CueFeedbackRepository.h"
+#include "library/CueRepository.h"
 #include "MainLayout.h"
 #include "RecordingSheets.h"
 #include "util/Log.h"
@@ -479,6 +480,10 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
         transitionLabels.load(*gridReader);
     libraryBrowser->transitionLabel = [this](std::int64_t a, std::int64_t b) { return transitionLabels.get(a, b); };
     // Automix plays the pair's saved transition, else Auto (P4-19).
+    automix.mixPointsOf = [this](engine::DeckId d) // P6-08
+    {
+        return d < 2 ? app::Automix::MixPoints{deckGrids[d].mixIn, deckGrids[d].mixOut} : app::Automix::MixPoints{};
+    };
     automix.transitionFor = [this](engine::DeckId from, engine::DeckId) -> std::optional<app::Automix::PlannedTransition>
     {
         const auto e = transitionFor(from);
@@ -982,6 +987,11 @@ void MainComponent::registerActions()
                     [this, d, toggle] { toggle(engine::StemParam::Fx, engine.readState().decks[d].stemFx); });
         }
         onPress(cmd(DA::StemReset), [this, d] { engine.send(engine::SetStem{d, 0, engine::StemParam::Reset, 0.0f}); });
+        // Mix points (P6-08): at the bar nearest the playhead.
+        onPress(cmd(DA::MixInHere), [this, d] { setMixPoint(d, false, engine.readState().decks[d].positionSamples); });
+        onPress(cmd(DA::MixOutHere), [this, d] { setMixPoint(d, true, engine.readState().decks[d].positionSamples); });
+        onPress(cmd(DA::MixInClear), [this, d] { setMixPoint(d, false, std::nullopt); });
+        onPress(cmd(DA::MixOutClear), [this, d] { setMixPoint(d, true, std::nullopt); });
         onPress(cmd(DA::Slip), [this, d] { engine.send(engine::SetSlip{d, !engine.readState().decks[d].slip}); });
         onPress(cmd(DA::Sync), [this, d] { engine.send(engine::SetSync{d, !engine.readState().decks[d].synced}); });
         // Pads (P3-01, P3-06): pad 1-8 in the deck's pad mode; Shift + pad is the alternate (hot cue: delete).
@@ -2841,6 +2851,10 @@ std::optional<ui::TransitionEditor::Edit> MainComponent::transitionFor(int from,
         return std::nullopt;
     app::AutoInput a{&outTrack->waveform, og.grid, outTrack->numSamples(), og.musicalKey, og.grid.firstBpm()};
     app::AutoInput b{&inTrack->waveform, ig.grid, inTrack->numSamples(), ig.musicalKey, ig.grid.firstBpm()};
+    if (og.mixOut && !og.grid.empty()) // P6-08: the owner's mix points
+        a.mixOutBeat = og.grid.beatAt(*og.mixOut);
+    if (ig.mixIn && !ig.grid.empty())
+        b.mixInBeat = ig.grid.beatAt(*ig.mixIn);
     const auto plan = app::planAutoTransition(a, b);
     if (!plan.ok)
         return std::nullopt;
@@ -4350,6 +4364,7 @@ void MainComponent::loadGridFor(engine::DeckId deck, const juce::File& file, dou
             s->reset();
         }
     showPhrases(deck);                   // none until the library says (P6-06)
+    loadMixPoints(deck);                 // P6-08
     playTracker.loaded(deck, d.trackId); // P2-23: the history counts library tracks
     loadHotCues(deck);                   // P3-01
     loadMemoryCues(deck);                // P3-02
@@ -4490,6 +4505,9 @@ void MainComponent::reloadGrid(engine::DeckId deck)
             d.autoGainAtLoad = false;
         }
     }
+    // Mix points (P6-08) at the file's rate: read again once it's known.
+    if (d.fileRate <= 0.0)
+        loadMixPoints(deck);
     // Phrases (P6-06): analysis results and edits arrive here too.
     if (auto stored = library::PhraseRepository(*gridReader).get(d.trackId);
         stored.phrases != d.phrases.phrases || stored.edited != d.phrases.edited)
@@ -4513,6 +4531,77 @@ void MainComponent::reloadGrid(engine::DeckId deck)
         return;
     d.grid = grid;
     sendGrid(deck);
+}
+
+// ---- mix points (P6-08) ----
+
+void MainComponent::loadMixPoints(engine::DeckId deck)
+{
+    if (deck >= 2)
+        return;
+    auto& d = deckGrids[deck];
+    d.mixIn.reset();
+    d.mixOut.reset();
+    if (gridReader != nullptr && d.trackId != 0 && d.bufferRate > 0.0)
+    {
+        const double fileRate = d.fileRate > 0.0 ? d.fileRate : d.bufferRate;
+        for (const auto& c : library::CueRepository(*gridReader).forTrack(d.trackId))
+        {
+            const double at = static_cast<double>(c.startSample) * d.bufferRate / fileRate;
+            if (c.kind == library::CueKind::MixIn)
+                d.mixIn = at;
+            else if (c.kind == library::CueKind::MixOut)
+                d.mixOut = at;
+        }
+    }
+    showMixPoints(deck);
+}
+
+void MainComponent::showMixPoints(engine::DeckId deck)
+{
+    if (deck < 2)
+        (deck == 0 ? waveA : waveB).setMixPoints(deckGrids[deck].mixIn, deckGrids[deck].mixOut);
+}
+
+void MainComponent::setMixPoint(engine::DeckId deck, bool out, std::optional<double> sample)
+{
+    if (deck >= 2)
+        return;
+    auto& d = deckGrids[deck];
+    if (d.trackId == 0 || d.bufferRate <= 0.0)
+        return;
+    if (sample && !d.grid.empty()) // on the bar nearest (mixing goes by bars)
+        sample = nearestBarSeconds(d.grid, *sample, d.bufferRate) * d.bufferRate;
+    (out ? d.mixOut : d.mixIn) = sample;
+    showMixPoints(deck);
+    libraryBrowser->setStatus(juce::String(out ? "MIX OUT" : "MIX IN") +
+                              (sample ? " at " + juce::String(*sample / d.bufferRate, 1) + " s" : juce::String(" cleared")));
+    if (libraryDb == nullptr)
+        return;
+    const auto id = d.trackId;
+    const double fileRate = d.fileRate > 0.0 ? d.fileRate : d.bufferRate;
+    const auto kind = out ? library::CueKind::MixOut : library::CueKind::MixIn;
+    std::optional<std::int64_t> start;
+    if (sample)
+        start = static_cast<std::int64_t>(std::llround(*sample * fileRate / d.bufferRate));
+    libraryDb->write(
+        [id, kind, start](library::Connection& c)
+        {
+            library::CueRepository cues(c);
+            for (const auto& old : cues.forTrack(id)) // one of each kind per track
+                if (old.kind == kind)
+                    cues.remove(old.id);
+            if (start)
+            {
+                library::Cue cue;
+                cue.trackId = id;
+                cue.kind = kind;
+                cue.startSample = *start;
+                cue.label = kind == library::CueKind::MixOut ? "MIX OUT" : "MIX IN";
+                if (!cues.add(cue))
+                    util::logWarning("Mix point: {}", cues.error());
+            }
+        });
 }
 
 // ---- phrases (P6-06) ----
@@ -4710,6 +4799,13 @@ void MainComponent::showPhraseMenu(engine::DeckId deck, double sample)
               [this, deck, nearest, bar] { savePhrases(deck, movePhrase(deckGrids[deck].phrases.phrases, nearest, bar)); });
     m.addItem("Remove the nearest phrase line", nearest >= 0 && list.size() > 1, false,
               [this, deck, nearest] { savePhrases(deck, removePhrase(deckGrids[deck].phrases.phrases, nearest)); });
+    m.addSeparator();
+    m.addSectionHeader("Mix points");
+    const double barSample = bar * d.bufferRate;
+    m.addItem("MIX IN at this bar", [this, deck, barSample] { setMixPoint(deck, false, barSample); });
+    m.addItem("MIX OUT at this bar", [this, deck, barSample] { setMixPoint(deck, true, barSample); });
+    m.addItem("Clear the MIX IN", d.mixIn.has_value(), false, [this, deck] { setMixPoint(deck, false, std::nullopt); });
+    m.addItem("Clear the MIX OUT", d.mixOut.has_value(), false, [this, deck] { setMixPoint(deck, true, std::nullopt); });
     m.addSeparator();
     m.addItem("Back to the analysis's phrases", d.phrases.edited, false, [this, deck]
               {

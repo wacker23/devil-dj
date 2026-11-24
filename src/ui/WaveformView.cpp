@@ -224,6 +224,27 @@ void WaveformView::paint(juce::Graphics& g)
             }
         }
 
+        // Mix points (P6-08): a line and a flag at the top, IN green, OUT red.
+        if (preview == nullptr)
+        {
+            g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+            for (const auto& [at, isOut] : {std::pair{mixIn, false}, std::pair{mixOut, true}})
+            {
+                if (!at)
+                    continue;
+                const auto x = static_cast<float>((*at - leftSample) / spp);
+                if (x < area.getX() - 34.0f || x > area.getRight() + 34.0f)
+                    continue;
+                const auto colour = isOut ? juce::Colour(0xffe0483c) : juce::Colour(0xff3cc46a);
+                g.setColour(colour);
+                g.fillRect(x - 1.0f, area.getY(), 2.0f, area.getHeight());
+                const juce::Rectangle<float> flag(isOut ? x - 30.0f : x, area.getY() + 12.0f, 30.0f, 13.0f);
+                g.fillRect(flag);
+                g.setColour(juce::Colours::black);
+                g.drawText(isOut ? "OUT" : "IN", flag, juce::Justification::centred);
+            }
+        }
+
         // Smart cue suggestions (P6-07): a dashed line and an outlined flag.
         if (preview == nullptr)
         {

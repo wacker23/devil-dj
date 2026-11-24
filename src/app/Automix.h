@@ -38,6 +38,13 @@ public:
     std::function<void(engine::DeckId deck, int index)> load;
     // The deck's beatgrid, in its buffer's samples (empty if none).
     std::function<util::Beatgrid(engine::DeckId deck)> gridOf;
+    // P6-08: the track's MIX IN / MIX OUT on `deck` (buffer samples; none: not marked). Without a planned transition
+    // Automix starts its own there (and the first track from its MIX IN).
+    struct MixPoints
+    {
+        std::optional<double> in, out;
+    };
+    std::function<MixPoints(engine::DeckId deck)> mixPointsOf;
     // P4-19: the transition to play from the track on `from` into the one on `to` (a saved one, else Auto) - its
     // curves, where it starts on the outgoing track (grid beats; < 0: Automix's own mix-out) and where the incoming
     // track comes in. None: Automix's own style.
@@ -95,6 +102,10 @@ private:
     std::shared_ptr<const engine::TransitionCurves> curvesToSend;
     std::optional<PlannedTransition> plan; // asked once per transition
     bool planAsked = false;
+    // Where this transition starts on the playing track (its grid beats) and how long Automix's own style runs:
+    // decided once, when the plan is asked (re-deciding every tick would drop a planned point as it comes near).
+    double chosenOut = 0.0;
+    float chosenBeats = 16.0f;
 };
 
 // The first downbeat of a grid at or after the track's start (its mix-in): the sample.

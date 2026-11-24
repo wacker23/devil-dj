@@ -217,11 +217,33 @@ AutoPlan planAutoTransition(const AutoInput& out, const AutoInput& in)
         if (keysKnown && keysFit)
             plan.reasons.push_back(std::string("keys fit: ") + util::camelotCode(out.key) + " to " + util::camelotCode(in.key));
     }
-    plan.bars = bars;
-    plan.swapBar = swap;
     plan.outBeat = o.firstDownbeatBeat + 4.0 * start;
     plan.inBeat = i.firstDownbeatBeat; // from its first downbeat
-    plan.reasons.push_back(text("%.0f bars from the old track's bar %.0f, on a phrase line", bars, start + 1));
+    bool marked = false;
+    // P6-08: the owner's mix points win: out from the MIX OUT (as long as fits before the end), in at the MIX IN.
+    if (out.mixOutBeat && *out.mixOutBeat >= o.firstDownbeatBeat)
+    {
+        const int at = static_cast<int>(std::floor((*out.mixOutBeat - o.firstDownbeatBeat) / 4.0 + 1e-9));
+        const int room = std::max(4, (std::max(o.contentEnd, static_cast<int>(outBars.size())) - at) / 4 * 4);
+        bars = std::clamp(bars, 4, std::min(32, room));
+        swap = std::clamp(swap, 1.0f, static_cast<float>(bars - 1));
+        start = at;
+        plan.outBeat = *out.mixOutBeat;
+        marked = true;
+        plan.reasons.push_back(text("your MIX OUT: from the old track's bar %.0f", at + 1));
+    }
+    if (in.mixInBeat && *in.mixInBeat >= 0.0)
+    {
+        plan.inBeat = *in.mixInBeat;
+        plan.reasons.push_back(text("your MIX IN: the new track comes in from its bar %.0f",
+                                    std::floor((*in.mixInBeat - i.firstDownbeatBeat) / 4.0 + 1e-9) + 1));
+    }
+    plan.bars = bars;
+    plan.swapBar = swap;
+    if (!marked)
+        plan.reasons.push_back(text("%.0f bars from the old track's bar %.0f, on a phrase line", bars, start + 1));
+    else
+        plan.reasons.push_back(text("%.0f bars", bars));
 
     // The preset, its bass swap moved onto the swap bar.
     const float beats = 4.0f * static_cast<float>(bars);

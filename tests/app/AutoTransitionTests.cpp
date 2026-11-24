@@ -182,3 +182,29 @@ TEST_CASE("Auto transition: a grid whose first beat isn't a downbeat; missing an
     CHECK_FALSE(missing.ok);
     CHECK_FALSE(missing.reasons.empty());
 }
+
+TEST_CASE("Auto transition: the owner's MIX OUT and MIX IN win (P6-08)", "[app][transition][auto][mixpoints]")
+{
+    const auto out = make(64, 8, 56, 64);
+    const auto in = make(48, 16, 48, 48);
+    auto a = input(out, 21);
+    auto b = input(in, 21);
+    const double first = app::firstDownbeatBeat(out.grid);
+    a.mixOutBeat = first + 4.0 * 48; // bar 49: 16 bars before the end
+    b.mixInBeat = app::firstDownbeatBeat(in.grid) + 4.0 * 8;
+    const auto plan = app::planAutoTransition(a, b);
+    REQUIRE(plan.ok);
+    CHECK(plan.outBeat == first + 4.0 * 48);
+    CHECK(plan.inBeat == app::firstDownbeatBeat(in.grid) + 32.0);
+    CHECK(plan.bars <= 16); // it fits before the end
+    CHECK(plan.bars >= 4);
+    CHECK(plan.swapBar < static_cast<float>(plan.bars));
+    CHECK(std::any_of(plan.reasons.begin(), plan.reasons.end(), [](const auto& r) { return r.find("MIX OUT") != std::string::npos; }));
+    CHECK(std::any_of(plan.reasons.begin(), plan.reasons.end(), [](const auto& r) { return r.find("MIX IN") != std::string::npos; }));
+    // Near the end: as long as fits (4 bars at least).
+    a.mixOutBeat = first + 4.0 * 62;
+    const auto late = app::planAutoTransition(a, b);
+    REQUIRE(late.ok);
+    CHECK(late.outBeat == first + 4.0 * 62);
+    CHECK(late.bars == 4);
+}

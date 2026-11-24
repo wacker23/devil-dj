@@ -363,6 +363,11 @@ std::vector<KeyBinding> defaultKeymap()
         {D, L, mods::Alt, DA::StemFxOther},
         {F, Semicolon, mods::Alt, DA::StemFxVocals},
         {Z, M, mods::Alt, DA::StemReset},
+        // Mix points (P6-08): Alt + X / C (deck A), Alt + , / . (deck B); with Shift: clear.
+        {X, Comma, mods::Alt, DA::MixInHere},
+        {C, Period, mods::Alt, DA::MixOutHere},
+        {X, Comma, mods::Alt | mods::Shift, DA::MixInClear},
+        {C, Period, mods::Alt | mods::Shift, DA::MixOutClear},
     };
     for (const auto& r : rows)
     {

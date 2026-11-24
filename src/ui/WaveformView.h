@@ -12,6 +12,7 @@
 #include <functional>
 #include <vector>
 #include <memory>
+#include <optional>
 
 namespace devildj::ui
 {
@@ -64,6 +65,13 @@ public:
         repaint();
     }
     const std::vector<PhraseMark>& phraseMarks() const noexcept { return phrases; }
+    // Mix points (P6-08): MIX IN / MIX OUT (buffer samples; none: not marked).
+    void setMixPoints(std::optional<double> in, std::optional<double> out)
+    {
+        mixIn = in;
+        mixOut = out;
+        repaint();
+    }
     // Smart cues (P6-07): suggested hot cues as dashed flags (buffer samples, the pad letter + reason).
     void setCueSuggestions(std::vector<std::pair<double, juce::String>> marks)
     {
@@ -123,6 +131,7 @@ private:
     std::vector<std::pair<double, std::uint32_t>> memoryCues;
     std::vector<PhraseMark> phrases;
     std::vector<std::pair<double, juce::String>> suggestions;
+    std::optional<double> mixIn, mixOut;
     bool phrasesEdited = false;
     double drawnLeftSample = 0.0, drawnSpp = 1.0; // the last paint's mapping, for sampleAtX
     LatencySource latency;

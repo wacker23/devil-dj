@@ -11,6 +11,23 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-25 · P6-08 Mix points
+- What changed:
+  - MIX IN / MIX OUT per track, stored as `cues` rows of kind MixIn / MixOut (already in the schema). Set at the bar nearest the playhead: Alt+X / Alt+C on deck A, Alt+, / Alt+. on deck B, and Alt+Shift clears. Also from the waveform's right-click menu at a bar.
+  - They show on the zoomed waveform as a green IN flag and a red OUT flag.
+  - Auto plan: a MIX OUT starts the transition there, as long as fits before the end (4 bars at least). A MIX IN is where the incoming track comes in. The reasons say "your MIX OUT / MIX IN".
+  - Automix:
+    - A saved pair transition still wins; next the Auto plan with the points; then its own style from the MIX OUT.
+    - The first track starts from its MIX IN, and the next one is cued at its MIX IN when there's no plan.
+  - Fixed an Automix bug from P4-19: it re-decided the mix-out every tick and dropped a planned start once it was within 8 beats, so planned (saved or Auto) starts fell back to "32 beats before the end". It now decides once per transition, when it asks for the plan.
+- Tests / measurements:
+  - Done-when check: Automix plays two tracks with A's MIX OUT at beat 48 (its default would be 64) and B's MIX IN at beat 16. A starts from its MIX IN (within 1 sample), the transition starts at A's beat 48, and B comes in from beat 16.
+  - Regression test: a planned transition at beat 40 starts at 40.
+  - The Auto plan takes the MIX OUT and MIX IN, and a late MIX OUT gives a 4-bar transition.
+- Notes / follow-ups:
+  - Auto's own choice without points still uses its 4-bar lines, not the P6-06 phrases.
+  - Not tried in the app by the owner yet.
+
 ## 2026-11-25 · P6-07 Smart cues
 - Owner decisions:
   - Suggestions show on empty pads and as dashed flags on the waveform.

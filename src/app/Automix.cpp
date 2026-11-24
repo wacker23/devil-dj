@@ -115,7 +115,8 @@ std::vector<engine::EngineCommand> Automix::tick(const engine::EngineState& stat
             return out;
         }
         const auto grid = gridOf ? gridOf(playingDeck) : util::Beatgrid();
-        const double in = firstDownbeat(grid);
+        const auto points = mixPointsOf ? mixPointsOf(playingDeck) : MixPoints{};
+        const double in = points.in ? std::max(0.0, *points.in) : firstDownbeat(grid); // P6-08: its MIX IN
         out.push_back(engine::SetCuePoint{playingDeck, in});
         out.push_back(engine::Seek{playingDeck, in});
         out.push_back(engine::Play{playingDeck});
@@ -165,22 +166,40 @@ std::vector<engine::EngineCommand> Automix::tick(const engine::EngineState& stat
         plan = transitionFor ? transitionFor(playingDeck, other) : std::nullopt;
         if (plan && plan->curves == nullptr)
             plan.reset();
+        // The mix-out, decided now: the plan's (still 8 beats ahead, and it fits before the end), else the track's
+        // MIX OUT (P6-08; Automix's own style from there, as long as fits), else 32 beats before the end.
+        chosenOut = std::floor((endBeat - settings.mixOutBeats) / 4.0) * 4.0;
+        chosenBeats = static_cast<float>(settings.transitionBeats);
+        const auto points = mixPointsOf ? mixPointsOf(playingDeck) : MixPoints{};
+        if (plan && plan->outBeat >= 0.0 && plan->outBeat > playing.beat + 8.0 &&
+            plan->outBeat + plan->curves->beats <= endBeat + 1e-6)
+            chosenOut = plan->outBeat;
+        else if (!plan && points.out)
+        {
+            const double at = grid.beatAt(*points.out);
+            if (at > playing.beat + 8.0 && endBeat - at >= 4.0)
+            {
+                chosenOut = at;
+                chosenBeats = std::min(chosenBeats, static_cast<float>(std::floor((endBeat - at) / 4.0) * 4.0));
+            }
+        }
     }
-    double mixOutTrack = std::floor((endBeat - settings.mixOutBeats) / 4.0) * 4.0;
-    if (plan && plan->outBeat >= 0.0 && plan->outBeat > playing.beat + 8.0 &&
-        plan->outBeat + plan->curves->beats <= endBeat + 1e-6)
-        mixOutTrack = plan->outBeat; // where it was planned (still ahead, and it fits before the end)
+    const double mixOutTrack = chosenOut;
+    const float ownBeats = chosenBeats;
     const double toMaster = state.masterBeat - playing.beat; // the master clock = this deck's beats + an offset
     const double startMaster = std::round(mixOutTrack + toMaster);
     if (state.masterBeat < startMaster - 8.0)
         return out; // not yet: plan it 8 beats ahead
     // Cue the next one at its mix-in and hand the transition to the engine.
     const auto nextGrid = gridOf ? gridOf(other) : util::Beatgrid();
-    const double in = plan && !nextGrid.empty() ? std::max(0.0, nextGrid.sampleAt(plan->inBeat)) : firstDownbeat(nextGrid);
+    const auto nextPoints = mixPointsOf ? mixPointsOf(other) : MixPoints{};
+    const double in = plan && !nextGrid.empty() ? std::max(0.0, nextGrid.sampleAt(plan->inBeat))
+                      : nextPoints.in             ? std::max(0.0, *nextPoints.in) // P6-08: its MIX IN
+                                                  : firstDownbeat(nextGrid);
     out.push_back(engine::SetCuePoint{other, in});
     out.push_back(engine::Seek{other, in});
     out.push_back(engine::SetSync{other, true});
-    engine::StartTransition start{playingDeck, other, static_cast<float>(settings.transitionBeats), settings.style,
+    engine::StartTransition start{playingDeck, other, ownBeats, settings.style,
                                   std::max(startMaster, std::ceil(state.masterBeat))};
     if (plan)
     {

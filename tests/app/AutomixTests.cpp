@@ -1,6 +1,7 @@
 // P3-18: Automix. Done when: 10-track automix plays unattended, all transitions on beat.
 
 #include "Automix.h"
+#include "TransitionPresets.h"
 #include "engine/AudioEngine.h"
 #include "engine/TrackBuffer.h"
 #include "util/Beatgrid.h"
@@ -251,4 +252,116 @@ TEST_CASE("Automix: repeat goes round the whole queue again (plain and smart)", 
         if (!smart)
             CHECK(order == std::vector<int>{0, 1, 2, 0, 1, 2, 0});
     }
+}
+
+TEST_CASE("Automix honours the marked mix points (P6-08)", "[app][automix][mixpoints]")
+{
+    // Two tracks at 120 BPM, 96 beats; A's MIX OUT at beat 48 (its default would be 64), B's MIX IN at beat 16.
+    std::vector<Track> tracks;
+    tracks.push_back(makeTrack(120.0, 96, 0.1, 220.0));
+    tracks.push_back(makeTrack(120.0, 96, 0.2, 330.0));
+    const double beat = 60.0 / 120.0 * kRate;
+    const std::array<app::Automix::MixPoints, 2> points{
+        app::Automix::MixPoints{tracks[0].grid.sampleAt(4.0), tracks[0].grid.sampleAt(48.0)},
+        app::Automix::MixPoints{tracks[1].grid.sampleAt(16.0), std::nullopt}};
+
+    engine::AudioEngine e;
+    e.prepare(kRate, kBlock);
+    float l[kBlock], r[kBlock];
+    float* outs[] = {l, r};
+    std::array<int, 2> onDeck{-1, -1};
+    app::Automix automix;
+    automix.load = [&](engine::DeckId deck, int index)
+    {
+        e.send(engine::LoadTrack{deck, tracks[static_cast<std::size_t>(index)].buffer.get(),
+                                 static_cast<engine::BufferId>(index + 1)});
+        e.send(engine::SetBeatgrid{deck, tracks[static_cast<std::size_t>(index)].grid});
+        onDeck[deck] = index;
+        automix.loaded(deck, index);
+    };
+    automix.gridOf = [&](engine::DeckId deck)
+    { return onDeck[deck] >= 0 ? tracks[static_cast<std::size_t>(onDeck[deck])].grid : util::Beatgrid(); };
+    automix.mixPointsOf = [&](engine::DeckId deck)
+    { return onDeck[deck] >= 0 ? points[static_cast<std::size_t>(onDeck[deck])] : app::Automix::MixPoints{}; };
+    automix.setQueue(2);
+    automix.start();
+
+    double firstPosition = -1.0, startDeckBeat = -1.0, incomingAtStart = -1.0;
+    bool wasActive = false;
+    for (int block = 0; block < static_cast<int>(60.0 * kRate / kBlock); ++block)
+    {
+        if (block % 16 == 0)
+            for (const auto& c : automix.tick(e.readState()))
+                e.send(c);
+        e.process(outs, 2, kBlock);
+        const auto& s = e.readState();
+        if (firstPosition < 0.0 && s.decks[0].playing)
+            firstPosition = s.decks[0].positionSamples - kBlock; // where it started
+        if (s.transition.active && !s.transition.waiting && !wasActive)
+        {
+            startDeckBeat = tracks[0].grid.beatAt(s.decks[0].positionSamples);
+            incomingAtStart = s.decks[1].positionSamples;
+        }
+        wasActive = s.transition.active && !s.transition.waiting;
+        if (startDeckBeat >= 0.0)
+            break;
+    }
+    // The first track from its MIX IN (beat 4), the transition from its MIX OUT (beat 48), B from its MIX IN.
+    CHECK(std::abs(firstPosition - tracks[0].grid.sampleAt(4.0)) <= 1.0);
+    INFO("the transition started at A's beat " << startDeckBeat);
+    CHECK(std::abs(startDeckBeat - 48.0) < 0.5);
+    CHECK(std::abs(incomingAtStart - tracks[1].grid.sampleAt(16.0)) < beat * 0.5);
+}
+
+TEST_CASE("Automix: a planned transition starts where it was planned (regression, P6-08)", "[app][automix]")
+{
+    // Before P6-08 the plan's start was dropped once it came within 8 beats, so Automix used its default instead.
+    std::vector<Track> tracks;
+    tracks.push_back(makeTrack(120.0, 96, 0.1, 220.0));
+    tracks.push_back(makeTrack(120.0, 96, 0.2, 330.0));
+    engine::AudioEngine e;
+    e.prepare(kRate, kBlock);
+    float l[kBlock], r[kBlock];
+    float* outs[] = {l, r};
+    std::array<int, 2> onDeck{-1, -1};
+    app::Automix automix;
+    automix.load = [&](engine::DeckId deck, int index)
+    {
+        e.send(engine::LoadTrack{deck, tracks[static_cast<std::size_t>(index)].buffer.get(),
+                                 static_cast<engine::BufferId>(index + 1)});
+        e.send(engine::SetBeatgrid{deck, tracks[static_cast<std::size_t>(index)].grid});
+        onDeck[deck] = index;
+        automix.loaded(deck, index);
+    };
+    automix.gridOf = [&](engine::DeckId deck)
+    { return onDeck[deck] >= 0 ? tracks[static_cast<std::size_t>(onDeck[deck])].grid : util::Beatgrid(); };
+    automix.transitionFor = [](engine::DeckId, engine::DeckId) -> std::optional<app::Automix::PlannedTransition>
+    {
+        auto curves = std::make_shared<engine::TransitionCurves>(app::makePreset(app::TransitionPreset::SmoothBlend, 16.0f));
+        return app::Automix::PlannedTransition{curves, 40.0, 0.0};
+    };
+    automix.setQueue(2);
+    automix.start();
+    double startDeckBeat = -1.0;
+    for (int block = 0; block < static_cast<int>(60.0 * kRate / kBlock) && startDeckBeat < 0.0; ++block)
+    {
+        if (block % 16 == 0)
+            for (const auto& c : automix.tick(e.readState()))
+            {
+                if (std::holds_alternative<engine::StartTransition>(c))
+                {
+                    auto start = std::get<engine::StartTransition>(c);
+                    const auto curves = automix.takeCurves();
+                    e.startTransition(start, curves);
+                    continue;
+                }
+                e.send(c);
+            }
+        e.process(outs, 2, kBlock);
+        const auto& s = e.readState();
+        if (s.transition.active && !s.transition.waiting)
+            startDeckBeat = tracks[0].grid.beatAt(s.decks[0].positionSamples);
+    }
+    INFO("started at A's beat " << startDeckBeat);
+    CHECK(std::abs(startDeckBeat - 40.0) < 0.5);
 }

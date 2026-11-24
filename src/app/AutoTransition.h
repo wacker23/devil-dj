@@ -12,6 +12,8 @@
 //    starts with its bass.
 // 4. Timing: the incoming track's bass entry lands where the outgoing track's bass leaves - the bass swap there,
 //    the transition from (outro - intro) to the outgoing track's end (4 .. 32 bars, on phrase lines).
+// 4b. Mix points (P6-08): a MIX OUT marked on the outgoing track is where the transition starts (as long as fits
+//    before its end, at least 4 bars); a MIX IN on the incoming track is where it comes in from. They win over 4.
 // 5. The preset: keys that clash -> short and filter-led; a big tempo gap or no outro -> echo out; a long intro and
 //    matching keys -> a long blend; more energy coming -> filter rise; else bass swap / smooth blend.
 
@@ -20,6 +22,7 @@
 #include "engine/TransitionCurves.h"
 #include "util/Beatgrid.h"
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -52,6 +55,7 @@ struct AutoInput
     int numSamples = 0;
     int key = -1;      // util::MusicalKey (-1 unknown)
     double bpm = 0.0;  // the track's own tempo
+    std::optional<double> mixInBeat, mixOutBeat; // P6-08: the owner's MIX IN / MIX OUT (grid beats)
 };
 
 struct AutoPlan
