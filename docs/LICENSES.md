@@ -30,7 +30,7 @@ GPL (any version), AGPL, LGPL used via static linking (unless an alternative lic
 | ONNX Runtime (Phase 6) | ML inference, DirectML | MIT | Notices file |
 | DirectML (Microsoft.AI.DirectML, with ONNX Runtime) | GPU inference on DirectX 12 | Microsoft DirectML licence (not open source; redistribution with an app allowed, Windows / Xbox only) | Owner approved 2026-11-24 (P6-01); ship DirectML.dll unmodified with its LICENSE.txt in the notices |
 | Beat This! (CPJKU) code and weights (Phase 6, P6-02) | Beat tracking v2 | MIT (code and published weights) | Verified 2026-11-24 at the source (github.com/CPJKU/beat_this, README "License" section); the authors note some training data is copyrighted or under limited CC licences. Ship the model with its MIT notice |
-| HTDemucs weights (Phase 6) | Stem separation | **Unclear** — sources disagree (MIT vs. non-commercial) | Owner decision before shipping; fall back to another model if not clearly commercial-friendly |
+| HTDemucs weights (Phase 6) | Stem separation | **Not cleared** — checked 2026-11-24: the code is MIT (facebookresearch/demucs, archived 2025-01-01, maintained at github.com/adefossez/demucs), but no source licenses the weights; the author's README says their licence "is not clear" (MUSDB research-only data; the 6-stem model on Meta-internal data, likely CC BY-NC) | Not to be shipped in a closed / commercial app without a licence from the rights holders; owner decision for P6-03 |
 
 ## Development tools (never shipped)
 
