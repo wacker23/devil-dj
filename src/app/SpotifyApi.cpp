@@ -68,6 +68,9 @@ util::Result<juce::var> SpotifyApi::getJson(const juce::String& url)
         juce::var json;
         juce::JSON::parse(r.body, json);
         const auto message = json.getProperty("error", {}).getProperty("message", "").toString();
+        if (r.status == 403)
+            return R::fail("Spotify refused it (403): an app in development mode may only read the tracks of playlists you "
+                           "made or collaborate on - for others, copy the tracks into a playlist of your own in Spotify");
         return R::fail("Spotify: HTTP " + juce::String(r.status).toStdString() +
                        (message.isNotEmpty() ? " (" + message.toStdString() + ")" : std::string()));
     }
@@ -129,7 +132,7 @@ util::Result<std::vector<RemoteTrack>> SpotifyApi::tracks(const std::string& pla
 {
     using R = util::Result<std::vector<RemoteTrack>>;
     std::vector<RemoteTrack> out;
-    juce::String next = base + "/v1/playlists/" + juce::URL::addEscapeChars(juce::String(playlistId), false) + "/tracks?limit=100";
+    juce::String next = base + "/v1/playlists/" + juce::URL::addEscapeChars(juce::String(playlistId), false) + "/items?limit=100"; // "/tracks" before Spotify's 2026 change: refused (403) now
     for (int page = 0; next.isNotEmpty() && page < 200; ++page)
     {
         auto json = getJson(next);

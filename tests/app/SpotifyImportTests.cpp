@@ -159,7 +159,9 @@ TEST_CASE("Spotify API: paging, track shapes, a 429 waited out, a 401 refreshed,
                                           {"id":"p2","name":"Peak","items":{"total":1}}],"next":"http://fake/v1/me/playlists?page=2"})"};
             return {200, R"({"items":[{"id":"p3","name":"After","tracks":{"total":0}}],"next":null})"};
         }
-        if (u.contains("/v1/playlists/p1/tracks"))
+        if (u.contains("/v1/playlists/p8/"))
+            return {403, R"({"error":{"status":403,"message":"Forbidden"}})"};
+        if (u.contains("/v1/playlists/p1/items"))
         {
             if (++trackCalls == 1)
                 return {401, R"({"error":{"status":401,"message":"The access token expired"}})"};
@@ -193,6 +195,9 @@ TEST_CASE("Spotify API: paging, track shapes, a 429 waited out, a 401 refreshed,
     const auto broken = api.tracks("p9");
     CHECK_FALSE(broken);
     CHECK(juce::String(broken.error()).contains("500"));
+    const auto refused = api.tracks("p8"); // someone else's playlist, read by an app in development mode
+    CHECK_FALSE(refused);
+    CHECK(juce::String(refused.error()).contains("playlists you made"));
     // Signed out: a clear error, nothing sent.
     app::SpotifyApi none([](bool, juce::String* e) { *e = "not signed in"; return juce::String(); }, "http://fake");
     int sent = 0;
