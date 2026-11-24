@@ -11,6 +11,26 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P5-08 Evaluation
+- What changed:
+  - `js/codebeat/prelude.js` puts the language on globalThis: constructors, controls, signals, `run`, `euclid`, the note and scale helpers.
+    - Program functions: `play(pattern)` / `play(name, pattern)` (named slots, all stacked), `mute` / `unmute` (kept across runs), `hush()`, `setbpm(20-300)`, `setcpb(1-16)`.
+    - DJ hooks: read-only, frozen views `deckA`..`deckD` `{ bpm, key, keyName, beat, bar, phrase, playing }` and `master { bpm, beat }`.
+    - The session runs `__beginEval` / `__endEval` / `__abortEval`. `__endEval` picks the new pattern (play() slots, else the completion value, a pattern or a mini-notation string). It test-queries cycles 0-2 and only then makes it the playing one, so errors that only show when the pattern runs (a bad control value, a broken function) are caught while the old pattern plays.
+    - Code with no pattern (e.g. only `setbpm(128)`) keeps the last pattern playing and says so.
+    - `Error.stackTraceLimit = 64`, so a mini-notation error still reaches the user's line.
+  - `codebeat::CodeEvaluator` (C++):
+    - It loads the prelude, then evaluates the whole buffer as one block, so `const` can be written again next time.
+    - The completion value is kept through the new `JsRuntime::evalScript(..., keepAs)`.
+    - `EvalResult` holds: ok / error / line / column (first-line columns corrected for the block), timed out / out of memory, changed / playing / slots / muted, bpm / cpb requests, a message, and the print() lines.
+    - `setDj(DjHooks)` passes the DJ hooks in (strings escaped). `show(begin, end)` and `beatsPerCycle()` are for tests and the console.
+  - Tests: the QuickJS ones run on a shared 16 MB-stack helper thread (`tests/codebeat/BigStack.h`).
+- Tests:
+  - 9 node tests (113 in total): the API, completion values, slots / mutes / hush, no-pattern code, errors never replacing the pattern, setbpm / setcpb, the DJ hooks, and user code shadowing API names.
+  - 5 Catch2 cases, all on Release and Debug, cover good code (5 kinds), bad code and first-line columns:
+    - bad code: a syntax error (line 2), a TypeError (line 3), a mini-notation error (line 1), a bad control value caught by the test query, a broken function inside the pattern (line 2), an endless loop, a thrown string. In each case the last good pattern keeps playing.
+  - Also hush / mute / no-pattern code / setbpm / setcpb / an out-of-range bpm, and the DJ hooks with print().
+
 ## 2026-11-24 · P5-07 QuickJS integration
 - What changed:
   - quickjs-ng v0.18.0 (MIT; owner approved the dependency 2026-11-24) comes in through FetchContent.

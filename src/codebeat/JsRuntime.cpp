@@ -230,12 +230,18 @@ JsRuntime::JsRuntime(JsLimits limits)
 
 JsRuntime::~JsRuntime() = default;
 
-JsResult JsRuntime::evalScript(std::string_view code, std::string_view fileName, double budgetMs)
+JsResult JsRuntime::evalScript(std::string_view code, std::string_view fileName, double budgetMs, std::string_view keepAs)
 {
     const double budget = budgetMs > 0.0 ? budgetMs : impl->limits.evalMs;
     const std::string source(code), name(fileName);
     impl->begin(budget);
     JSValue v = JS_Eval(impl->ctx, source.c_str(), source.size(), name.c_str(), JS_EVAL_TYPE_GLOBAL);
+    if (!keepAs.empty() && !JS_IsException(v))
+    {
+        JSValue global = JS_GetGlobalObject(impl->ctx);
+        JS_SetPropertyStr(impl->ctx, global, std::string(keepAs).c_str(), JS_DupValue(impl->ctx, v));
+        JS_FreeValue(impl->ctx, global);
+    }
     return impl->finish(v, fileName, budget);
 }
 

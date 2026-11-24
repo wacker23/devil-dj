@@ -1,9 +1,9 @@
 // P5-07: the quickjs-ng sandbox - limits, no file access, the embedded library.
 
 #include "codebeat/JsRuntime.h"
+#include "codebeat/BigStack.h"
 
 #include <catch2/catch_test_macros.hpp>
-#include <juce_core/juce_core.h>
 
 #include <algorithm>
 #include <chrono>
@@ -15,6 +15,7 @@
 using devildj::codebeat::JsLimits;
 using devildj::codebeat::JsResult;
 using devildj::codebeat::JsRuntime;
+using devildj::testing::onBigStack;
 
 namespace
 {
@@ -29,23 +30,6 @@ JsLimits testLimits()
     JsLimits l;
     l.stackBytes = 512 * 1024; // Debug builds use more C stack per JS call
     return l;
-}
-// Runs `work` on a thread with a 16 MB stack and waits: deep pattern code in Debug builds needs more than the 1 MB
-// of Catch2's main thread. The runtime is made inside `work`, on that thread.
-void onBigStack(std::function<void()> work)
-{
-    struct Worker final : juce::Thread
-    {
-        std::function<void()> fn;
-        explicit Worker(std::function<void()> f)
-            : juce::Thread("js test", 16 * 1024 * 1024)
-            , fn(std::move(f))
-        {
-        }
-        void run() override { fn(); }
-    } worker(std::move(work));
-    worker.startThread();
-    REQUIRE(worker.waitForThreadToExit(60000));
 }
 } // namespace
 

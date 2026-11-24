@@ -9,6 +9,8 @@ juce_add_binary_data(devildj_codebeat_js
     SOURCES ${devildj_codebeat_js_files})
 
 add_library(devildj_codebeat STATIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/CodeEvaluator.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/CodeEvaluator.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/JsRuntime.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/JsRuntime.h")
 add_library(devildj::codebeat ALIAS devildj_codebeat)

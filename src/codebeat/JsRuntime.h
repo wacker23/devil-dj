@@ -53,8 +53,10 @@ public:
     JsRuntime(const JsRuntime&) = delete;
     JsRuntime& operator=(const JsRuntime&) = delete;
 
-    // A script (global code): its completion value. Budget: limits().evalMs unless given.
-    JsResult evalScript(std::string_view code, std::string_view fileName = "<code>", double budgetMs = 0.0);
+    // A script (global code): its completion value. Budget: limits().evalMs unless given. With `keepAs`, the value
+    // itself is also stored as that global (for the next call to use).
+    JsResult evalScript(std::string_view code, std::string_view fileName = "<code>", double budgetMs = 0.0,
+                        std::string_view keepAs = {});
     // A module (may import the library: import { mini } from "mini.js"); its value is "undefined" when it ran.
     JsResult evalModule(std::string_view code, std::string_view fileName = "<module>", double budgetMs = 0.0);
     // Calls a global function with numbers. Budget: limits().queryMs unless given.
