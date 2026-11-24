@@ -32,7 +32,11 @@ struct JsLimits
     std::size_t stackBytes = std::size_t{4} << 20;
 #endif
     double evalMs = 200.0;
+#ifdef NDEBUG
     double queryMs = 5.0;
+#else
+    double queryMs = 50.0; // unoptimised QuickJS is ~10x slower
+#endif
 };
 
 struct JsResult

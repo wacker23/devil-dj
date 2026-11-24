@@ -41,6 +41,8 @@ target_sources(devildj_app_core INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/SampleBank.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/BeatRender.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/BeatRender.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/CodeDeckProducer.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/CodeDeckProducer.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/BeatMakerProducer.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/BeatMakerProducer.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/LoopExport.cpp"
@@ -57,7 +59,8 @@ target_sources(devildj_app_core INTERFACE
 target_include_directories(devildj_app_core INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(devildj_app_core INTERFACE juce::juce_data_structures juce::juce_gui_basics juce::juce_cryptography
                                                 $<$<PLATFORM_ID:Windows>:crypt32> devildj::engine
-                                                devildj::library devildj::matcher)
+                                                devildj::library devildj::matcher
+                                                devildj::codebeat)
 
 juce_add_gui_app(DevilDJ
     PRODUCT_NAME "Devil-DJ"

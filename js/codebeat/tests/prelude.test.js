@@ -136,3 +136,31 @@ test("user code may use the API's names for its own things", () => {
     assert.deepEqual(playingNow(), ["a [0, 1)"]);
     assert.equal(typeof g.s, "function"); // the API is untouched
 });
+
+test("__query: onsets with their exact times, controls and source places", () => {
+    run('s("bd [sd hh:2]").gain(0.5)');
+    const lines = g.__query(0, 1, 1, 1).split("\n");
+    assert.deepEqual(lines, [
+        // Locations are inside the string literal for now (the editor adds the literal's offset: P5-15); a plain
+        // number argument has none.
+        "0/1 1/2|s=bd;gain=0.5|0-2",
+        "1/2 3/4|s=sd;gain=0.5|4-6",
+        "3/4 1/1|s=hh;n=2;gain=0.5|7-9",
+    ]);
+    // Only onsets inside the window; fragments of earlier events are left out.
+    run('s("pad/2")');
+    assert.equal(g.__query(1, 1, 2, 1), "");
+    assert.equal(g.__query(0, 1, 1, 4), "0/1 2/1|s=pad|0-3");
+    // Plain values become controls; strings are made safe for the format.
+    run('mini("kick 3")');
+    assert.deepEqual(g.__query(0, 1, 1, 1).split("\n").map((l) => l.split("|")[1]), ["s=kick", "n=3"]);
+    run('s("a").bank(pure("x;y|z"))');
+    assert.match(g.__query(0, 1, 1, 1), /bank=x_y_z/);
+    // Windows that add up to a cycle give exactly its onsets.
+    run('s("hh*8")');
+    const pieces = [];
+    for (let i = 0; i < 7; ++i)
+        pieces.push(...g.__query(i, 7, i + 1, 7).split("\n").filter(Boolean));
+    assert.equal(pieces.length, 8);
+    run("hush()");
+});

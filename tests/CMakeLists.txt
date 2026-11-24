@@ -42,6 +42,7 @@ target_sources(DevilDJTests PRIVATE
     beatmaker/SwitchTests.cpp
     codebeat/CodeBeatSmokeTests.cpp
     codebeat/CodeEvaluatorTests.cpp
+    codebeat/CodeDeckProducerTests.cpp
     codebeat/JsRuntimeTests.cpp
     dsp/DriftBufferTests.cpp
     dsp/DrumSynthTests.cpp

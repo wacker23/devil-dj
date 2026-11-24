@@ -6,10 +6,10 @@
 // or __abortEval() when the script failed. __endEval works out the new pattern, test-queries it, and only then makes
 // it the playing one: code with an error never replaces what is playing.
 
-import { F } from "./fraction.js";
+import { F, Fraction } from "./fraction.js";
 import { Pattern, pure, silence, stack, seq, fastcat, cat, slowcat, timecat, reify, sortEvents } from "./pattern.js";
 import { mini, MiniError } from "./mini.js";
-import { controls, noteNameToMidi, ControlError } from "./controls.js";
+import { controls, noteNameToMidi, ControlError, asControls } from "./controls.js";
 import { run, euclid } from "./transforms.js";
 import { signal, sine, cosine, saw, isaw, tri, square, rand, irand, perlin } from "./signals.js";
 import { kScales } from "./scales.js";
@@ -176,6 +176,35 @@ globalThis.__setDj = (state) => {
 
 // The playing pattern's events over [begin, end), one per line (tests, the console).
 globalThis.__show = (begin, end) => sortEvents(session.active.queryArc(F(begin), F(end))).map((e) => e.show()).join("\n");
+
+// The onsets in [bn/bd, en/ed) cycles for the scheduler (P5-09), one per line:
+//   "<whole begin n>/<d> <whole end n>/<d>|key=value;key=value|start-end,start-end"
+// (the controls; then the source locations of the atoms, for highlighting). Plain values become controls (a word
+// a sound, a number n); characters that would break the format are replaced in strings.
+globalThis.__query = (bn, bd, en, ed) => {
+    const events = session.active.queryArc(new Fraction(bn, bd), new Fraction(en, ed));
+    const lines = [];
+    for (const e of events) {
+        if (!e.hasOnset())
+            continue;
+        let value;
+        try {
+            value = asControls(e.value);
+        } catch {
+            continue; // a value that can't be played (e.g. a boolean) makes no sound
+        }
+        const fields = [];
+        for (const [k, v] of Object.entries(value)) {
+            if (typeof v === "number" && Number.isFinite(v))
+                fields.push(`${k}=${v}`);
+            else if (typeof v === "string")
+                fields.push(`${k}=${v.replace(/[;|=\n]/g, "_")}`);
+        }
+        const locs = e.context.locations.map((l) => `${l.start}-${l.end}`).join(",");
+        lines.push(`${e.whole.begin.n}/${e.whole.begin.d} ${e.whole.end.n}/${e.whole.end.d}|${fields.join(";")}|${locs}`);
+    }
+    return lines.join("\n");
+};
 
 globalThis.__session = session; // read-only use by the scheduler bridge (P5-09) and tests
 

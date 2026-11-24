@@ -11,6 +11,27 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P5-09 Pattern bridge + scheduler
+- What changed:
+  - `app/CodeDeckProducer` runs on its own thread (a juce::Thread with a 16 MB stack), which owns the CodeEvaluator. Every 25 ms (or at once when code is submitted):
+    - It evaluates submitted code; setbpm() requests reach `onEvaluated`, and setcpb() takes effect.
+    - It takes the next exact window of beats up to 100 ms ahead (the shared ScheduleCursor) and turns it into cycles (beats / cpb, exact).
+    - It queries the pattern's onsets through the new JS `__query`.
+    - Each onset becomes a `ScheduledEvent` (source CodeDeck) at `ClockSnapshot::sampleAt(exact beat)`, carrying gain / pan / speed / filters / ADSR / sends / crush / choke, with the duration from the whole and legato. Then it is pushed.
+  - Sounds are numbered by name in order of first use ("bd", "bd:3", "saw"); `soundName()` maps back, and P5-11 resolves them to voices.
+  - Events already in the past when they are made are dropped and counted (late). A clock jump re-anchors the cursor (counted). A query over its budget leaves that window silent (counted).
+  - Jitter stats: the tick spacing (mean / max) and the lead (how far ahead of now events are made, min / max) in `status()`.
+  - `prelude.js __query(bn, bd, en, ed)`: the onsets in the window, one per line: exact whole begin / end, the controls, the source places. Plain values become controls, and format characters are replaced.
+  - JsLimits: the query budget is 50 ms in Debug builds (5 ms in Release), because unoptimised QuickJS is much slower.
+  - Engine wiring (the code deck's queue, sounds, channel) is P5-11 / P5-12. The producer takes a push function, as the Beat Maker's does.
+- Tests: 5 new Catch2 cases, all on Release and Debug.
+  - **10 minutes at 128 BPM** (44.1 kHz, so a beat is 20671.875 samples), ticked every 25 ms plus 0-8 ms of jitter: 1281 kicks, every beat exactly once, worst error **0 samples**. No late, re-anchored or slow windows; lead 0-100 ms.
+  - A 200 ms stall drops 2 late events. A 1.5 s stall re-anchors once. Nothing is ever pushed for a past moment or twice.
+  - Every control reaches its event field. Sound names. Durations with legato. setcpb(3) gives one kick per beat.
+  - Bad code keeps the last pattern playing, with its error; hush stops; there is nothing before any code.
+  - On its own thread in real time (logged): 1.5 s gives 56-59 ticks (mean 25-27 ms, max 28.6 ms), lead 75-99 ms, 0 late.
+  - One new node test for `__query` (114 in total).
+
 ## 2026-11-24 · P5-08 Evaluation
 - What changed:
   - `js/codebeat/prelude.js` puts the language on globalThis: constructors, controls, signals, `run`, `euclid`, the note and scale helpers.
