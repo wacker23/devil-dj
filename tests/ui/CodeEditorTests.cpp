@@ -191,3 +191,35 @@ TEST_CASE("Code editor panel: an error marked on its line, notes and the status 
     panel.setStatus("cycle 3.5   0.50 cps   8 events/s   0 late");
     CHECK(panel.statusText() == "cycle 3.5   0.50 cps   8 events/s   0 late");
 }
+
+TEST_CASE("Code editor panel: the sounding code is lit where it is (P5-15)", "[ui][codebeat][editor]")
+{
+    CodeEditorPanel panel;
+    panel.setSize(800, 400);
+    panel.setTabs({{"one", "stack(\n  s(\"kick snare hat*2\")\n)"}, {"two", ""}}, 0);
+    // "kick" on line 2: characters 12-16 (line 1 is "stack(" + newline = 7 characters; then 2 spaces, s(").
+    panel.setHighlights(0, {{12, 16}});
+    auto rects = panel.highlightRects();
+    REQUIRE(rects.size() == 1);
+    const auto* ed = panel.editor(0);
+    auto& doc = *panel.document(0);
+    const auto k = panel.getLocalArea(ed, ed->getCharacterBounds(juce::CodeDocument::Position(doc, 1, 5)));
+    const auto lastK = panel.getLocalArea(ed, ed->getCharacterBounds(juce::CodeDocument::Position(doc, 1, 8)));
+    CHECK(rects[0].getX() == k.getX());
+    CHECK(rects[0].getY() == k.getY());
+    CHECK(rects[0].getRight() == lastK.getRight());
+    // Two ranges; the same ranges again change nothing; another tab shows none; none at all clears it.
+    panel.setHighlights(0, {{12, 16}, {23, 26}});
+    CHECK(panel.highlightRects().size() == 2);
+    panel.showTab(1);
+    CHECK(panel.highlightRects().empty());
+    panel.showTab(0);
+    CHECK(panel.highlightRects().size() == 2);
+    panel.setHighlights(0, {});
+    CHECK(panel.highlightRects().empty());
+    // A range over a line break is drawn on each of its lines; one past the text is kept inside it.
+    panel.setHighlights(0, {{4, 10}});
+    CHECK(panel.highlightRects().size() == 2);
+    panel.setHighlights(0, {{30, 999}});
+    CHECK(panel.highlightRects().size() <= 2);
+}

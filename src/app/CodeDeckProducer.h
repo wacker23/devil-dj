@@ -82,6 +82,10 @@ public:
     // Sounds used for the first time since the last call, for the engine to install (index, what it is).
     std::vector<std::pair<std::uint16_t, CodeSound>> takeNewSounds();
 
+    // P5-15: the code ranges (character offsets in the evaluated buffer) of the events sounding at engine sample
+    // `sample` - each from its start to its end (its whole); for the editor to light them.
+    std::vector<std::pair<int, int>> highlightsAt(std::int64_t sample);
+
     Status status();
     std::string soundName(std::uint16_t index);
     void tick(); // one producer step (the thread calls it every 25 ms)
@@ -119,6 +123,12 @@ private:
     std::shared_ptr<CodeSoundBank> bank;
     std::vector<std::pair<std::uint16_t, CodeSound>> newSounds;
     std::unordered_map<std::string, double> unknownUntil; // unknown names: not looked up again before this time
+    struct Lit
+    {
+        std::int64_t from = 0, to = 0;
+        int start = 0, end = 0;
+    };
+    std::vector<Lit> lit; // pushed events' code ranges, the old ones pruned (mutex held)
     std::unique_ptr<Worker> worker;
 };
 

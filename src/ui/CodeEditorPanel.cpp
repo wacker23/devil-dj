@@ -77,6 +77,69 @@ CodeEditorPanel::CodeEditorPanel()
     addAndMakeVisible(plus);
     marker.setInterceptsMouseClicks(false, false);
     addChildComponent(marker);
+    lights.setInterceptsMouseClicks(false, false);
+    addAndMakeVisible(lights);
+}
+
+void CodeEditorPanel::Lights::paint(juce::Graphics& g)
+{
+    for (const auto& r : rects)
+    {
+        g.setColour(kCode.withAlpha(0.28f));
+        g.fillRoundedRectangle(r.toFloat().expanded(1.0f, 0.0f), 3.0f);
+        g.setColour(kCode.withAlpha(0.9f));
+        g.fillRect(r.getX(), r.getBottom() - 2, r.getWidth(), 2);
+    }
+}
+
+void CodeEditorPanel::setHighlights(int tab, std::vector<std::pair<int, int>> ranges)
+{
+    if (tab == litTab && ranges == litRanges)
+        return;
+    litTab = tab;
+    litRanges = std::move(ranges);
+    placeLights();
+}
+
+std::vector<juce::Rectangle<int>> CodeEditorPanel::highlightRects() const
+{
+    std::vector<juce::Rectangle<int>> out;
+    for (const auto& r : lights.rects)
+        out.push_back(r + lights.getPosition());
+    return out;
+}
+
+void CodeEditorPanel::placeLights()
+{
+    lights.rects.clear();
+    auto* ed = editor(litTab);
+    if (litTab == shown && ed != nullptr && ed->isVisible())
+    {
+        lights.setBounds(ed->getBounds().withTrimmedRight(12));
+        auto& doc = *document(litTab);
+        const int length = doc.getNumCharacters();
+        for (const auto& [start, end] : litRanges)
+        {
+            // Line by line: from the range's first character to its last on each line it covers.
+            const juce::CodeDocument::Position a(doc, std::clamp(start, 0, length));
+            const juce::CodeDocument::Position b(doc, std::clamp(end, 0, length));
+            for (int line = a.getLineNumber(); line <= b.getLineNumber(); ++line)
+            {
+                const int from = line == a.getLineNumber() ? a.getIndexInLine() : 0;
+                const int to = line == b.getLineNumber() ? b.getIndexInLine()
+                                                         : doc.getLine(line).trimCharactersAtEnd("\r\n").length();
+                if (to <= from)
+                    continue;
+                const auto first = ed->getCharacterBounds(juce::CodeDocument::Position(doc, line, from));
+                const auto lastChar = ed->getCharacterBounds(juce::CodeDocument::Position(doc, line, to - 1));
+                const auto rect = lights.getLocalArea(ed, first.getUnion(lastChar));
+                if (rect.intersects(lights.getLocalBounds()))
+                    lights.rects.push_back(rect.getIntersection(lights.getLocalBounds()));
+            }
+        }
+    }
+    lights.toFront(false);
+    lights.repaint();
 }
 
 CodeEditorPanel::~CodeEditorPanel() = default;
@@ -280,6 +343,7 @@ void CodeEditorPanel::showTab(int index)
     if (hadFocus)
         focusEditor();
     refreshMarker(); // an error is marked on its own tab only
+    placeLights();
     if (onShown)
         onShown(shown);
 }
@@ -357,6 +421,7 @@ void CodeEditorPanel::resized()
     for (auto& p : pages)
         p->editor->setBounds(area);
     refreshMarker();
+    placeLights();
 }
 
 void CodeEditorPanel::paint(juce::Graphics& g)

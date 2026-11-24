@@ -8,7 +8,7 @@
 
 import { F, Fraction } from "./fraction.js";
 import { Pattern, pure, silence, stack, seq, fastcat, cat, slowcat, timecat, reify, sortEvents } from "./pattern.js";
-import { mini, MiniError } from "./mini.js";
+import { mini, MiniError, MiniString } from "./mini.js";
 import { controls, noteNameToMidi, ControlError, asControls } from "./controls.js";
 import { run, euclid } from "./transforms.js";
 import { signal, sine, cosine, saw, isaw, tri, square, rand, irand, perlin } from "./signals.js";
@@ -49,7 +49,7 @@ function inEval(what) {
 function play(a, b) {
     const p = inEval("play");
     const [name, value] = b === undefined ? [`$${p.unnamed++}`, a] : [String(a), b];
-    if (!(value instanceof Pattern) && typeof value !== "string")
+    if (!(value instanceof Pattern) && typeof value !== "string" && value?.isMiniString !== true)
         throw new TypeError(`play() needs a pattern, got ${value === undefined ? "nothing" : typeof value}`);
     const pat = reify(value);
     (p.slots ??= new Map()).set(name, pat);
@@ -100,6 +100,9 @@ const api = {
 };
 for (const [name, value] of Object.entries(api))
     globalThis[name] = value;
+
+// The pre-tokenizer's string literals (P5-15).
+globalThis.__mini = (text, offset) => new MiniString(text, offset);
 
 // DJ hooks: read-only views of the decks and the master clock (refreshed by the C++ side before every evaluation
 // and query).

@@ -46,6 +46,7 @@ target_sources(DevilDJTests PRIVATE
     codebeat/CodeBeatSmokeTests.cpp
     codebeat/CodeEvaluatorTests.cpp
     codebeat/CodeDeckProducerTests.cpp
+    codebeat/PreTokenizerTests.cpp
     codebeat/JsRuntimeTests.cpp
     dsp/DriftBufferTests.cpp
     dsp/DrumSynthTests.cpp

@@ -1,5 +1,7 @@
 #include "codebeat/CodeEvaluator.h"
 
+#include "codebeat/PreTokenizer.h"
+
 #include <charconv>
 #include <cstdio>
 
@@ -65,17 +67,26 @@ std::string num(double x)
     return buf;
 }
 
-void takeError(const JsResult& r, EvalResult& out, bool inUserCode)
+void takeError(const JsResult& r, EvalResult& out, std::string_view code, const PreTokenized& pre)
 {
     out.ok = false;
     out.error = r.error;
     out.timedOut = r.timedOut;
     out.outOfMemory = r.outOfMemory;
-    if (inUserCode && r.line > 0)
+    if (r.sourceIndex >= 0)
+    {
+        // The error knows its own place (a mini-notation error: its character in the buffer).
+        const auto [line, column] = lineColumnOf(code, r.sourceIndex);
+        out.line = line;
+        out.column = column;
+    }
+    else if (r.line > 0)
     {
         out.line = r.line;
-        // The code runs wrapped as "{" + code + "\n}": the first line is one column further right.
-        out.column = r.line == 1 && r.column > 1 ? r.column - 1 : r.column;
+        // The code runs wrapped as "{" + code + "\n}": the first line is one column further right; and the
+        // pre-tokenizer's insertions are taken back out.
+        const int column = r.line == 1 && r.column > 1 ? r.column - 1 : r.column;
+        out.column = column > 0 ? pre.originalColumn(r.line, column) : 0;
     }
 }
 } // namespace
@@ -98,16 +109,18 @@ EvalResult CodeEvaluator::evaluate(std::string_view code, bool swapNow)
         return out;
     }
     js.callGlobal("__beginEval", {}, js.limits().evalMs);
+    // P5-15: string literals carry their place in the buffer (for the highlighting and exact error places).
+    const auto pre = preTokenize(code);
     // Its own block: const / let can be declared again in the next run; the block's last value is the completion.
     std::string wrapped;
-    wrapped.reserve(code.size() + 4);
+    wrapped.reserve(pre.code.size() + 4);
     wrapped += '{';
-    wrapped += code;
+    wrapped += pre.code;
     wrapped += "\n}";
     const auto ran = js.evalScript(wrapped, kFileName, 0.0, "__completion");
     if (!ran.ok)
     {
-        takeError(ran, out, true);
+        takeError(ran, out, code, pre);
         js.callGlobal("__abortEval", {}, js.limits().evalMs);
         out.printed = js.takePrinted();
         return out;
@@ -119,7 +132,7 @@ EvalResult CodeEvaluator::evaluate(std::string_view code, bool swapNow)
     out.printed = js.takePrinted();
     if (!ended.ok)
     {
-        takeError(ended, out, true);
+        takeError(ended, out, code, pre);
         js.callGlobal("__abortEval", {}, js.limits().evalMs);
         return out;
     }

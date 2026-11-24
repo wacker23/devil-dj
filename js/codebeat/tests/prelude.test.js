@@ -245,3 +245,24 @@ test("hot swap: 'now' (Ctrl+Shift+Enter) and hush() don't wait for the line", ()
     assert.equal(run("const x = 1;", 0).swap, "");
     run("hush()");
 });
+
+test("__mini: editor strings act as strings and give atoms their place in the buffer (P5-15)", () => {
+    // s("kick snare hat*2") as the pre-tokenizer writes it: the text starts at character 3.
+    run('s(__mini("kick snare hat*2", 3))');
+    const places = g.__query(0, 1, 1, 1).split("\n").map((l) => l.split("|")[2]);
+    assert.deepEqual(places, ["3-7", "8-13", "14-17", "14-17"]);
+    // Still a string for everything else.
+    const m = g.__mini("a b", 10);
+    assert.equal(m.split(" ").length, 2);
+    assert.equal(m.toUpperCase(), "A B");
+    assert.equal(`${m}!`, "a b!");
+    assert.equal(m + "c", "a bc");
+    assert.equal(m.length, 3);
+    assert.ok(m.isMiniString);
+    // Names, scales, numbers and control values given as editor strings.
+    assert.equal(run('play(__mini("drums", 6), s(__mini("bd", 17)))').slots, "drums");
+    run('n(__mini("0 2", 2)).scale(__mini("C:minor", 20)).gain(__mini("0.5", 40))');
+    // The degree, the scale name's atom ("C") and the gain value, each with its own place.
+    assert.match(g.__query(0, 1, 1, 1), /note=48;gain=0\.5\|2-3,20-21,40-43/);
+    run("hush()");
+});

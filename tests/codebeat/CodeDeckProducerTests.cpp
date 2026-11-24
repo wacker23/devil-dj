@@ -412,3 +412,35 @@ TEST_CASE("Code deck: each evaluation's result is in the status, errors with the
     CHECK(after[2].last.ok);
     CHECK(after[2].last.waitsForCycle);
 }
+
+TEST_CASE("Code deck: the highlight follows s(\"kick snare hat*2\") in time (P5-15)", "[codebeat][scheduler][highlight]")
+{
+    // The code as typed: the string's text starts at character 3; kick 3-7, snare 8-13, hat 14-17.
+    using Ranges = std::vector<std::pair<int, int>>;
+    std::vector<std::pair<double, Ranges>> seen; // (cycle position, what is lit)
+    onBigStack([&]
+    {
+        Sim sim;
+        sim.start(R"(s("kick snare hat*2"))");
+        sim.tickTo(0.05);
+        const double cycleSeconds = 4.0 * 60.0 / sim.bpm; // 1.875 s
+        // Walk through cycles 1 and 2 in 1/12-cycle steps, ticking the producer along.
+        for (int step = 12; step < 36; ++step)
+        {
+            const double at = (step + 0.5) / 12.0 * cycleSeconds;
+            sim.tickTo(at);
+            seen.emplace_back((step % 12 + 0.5) / 12.0, sim.producer->highlightsAt(static_cast<std::int64_t>(at * sim.sampleRate)));
+        }
+    });
+    REQUIRE(seen.size() == 24);
+    for (const auto& [pos, lit] : seen)
+    {
+        INFO("cycle position " << pos);
+        if (pos < 1.0 / 3.0)
+            CHECK(lit == Ranges{{3, 7}}); // kick
+        else if (pos < 2.0 / 3.0)
+            CHECK(lit == Ranges{{8, 13}}); // snare
+        else
+            CHECK(lit == Ranges{{14, 17}}); // hat (both of them)
+    }
+}

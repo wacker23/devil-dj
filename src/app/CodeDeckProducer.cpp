@@ -117,6 +117,18 @@ std::int64_t CodeDeckProducer::sampleNow(double nowSeconds) const
     return clock->sampleClock + static_cast<std::int64_t>(ahead * clock->sampleRate);
 }
 
+std::vector<std::pair<int, int>> CodeDeckProducer::highlightsAt(std::int64_t sample)
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    std::vector<std::pair<int, int>> out;
+    for (const auto& l : lit)
+        if (l.from <= sample && sample < l.to)
+            out.emplace_back(l.start, l.end);
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+    return out;
+}
+
 CodeDeckProducer::Status CodeDeckProducer::status()
 {
     std::lock_guard<std::mutex> lock(mutex);
@@ -445,10 +457,36 @@ void CodeDeckProducer::emit(const std::string& reply, const engine::ClockSnapsho
             continue; // an unknown sound (warned) or one too many
         const double beats = ((*end - *begin) * cpb).toDouble();
         ev.durationSeconds = static_cast<float>(beats * 60.0 / map.bpm * legato);
+        // Its code ranges, lit from its start to its end (P5-15).
+        std::vector<Lit> ranges;
+        {
+            const auto to = map.sampleAt(*end * cpb);
+            std::string_view locs = line.substr(bar2 + 1);
+            while (!locs.empty())
+            {
+                const auto comma = locs.find(',');
+                const auto one = locs.substr(0, comma);
+                locs = comma == std::string_view::npos ? std::string_view{} : locs.substr(comma + 1);
+                const auto dash = one.find('-');
+                if (dash == std::string_view::npos)
+                    continue;
+                const auto s0 = integer(one.substr(0, dash)), s1 = integer(one.substr(dash + 1));
+                if (s0 && s1 && *s1 > *s0)
+                    ranges.push_back({ev.sampleTime, to, static_cast<int>(*s0), static_cast<int>(*s1)});
+            }
+        }
 
         const double leadMs = static_cast<double>(ev.sampleTime - sNow) * 1000.0 / map.sampleRate;
         const bool ok = push(ev);
         std::lock_guard<std::mutex> lock(mutex);
+        if (ok)
+        {
+            // The old ones go (a second past their end); at most a few thousand are kept.
+            const auto keepFrom = sNow - static_cast<std::int64_t>(map.sampleRate);
+            std::erase_if(lit, [&](const Lit& l) { return l.to < keepFrom; });
+            if (lit.size() < 4096)
+                lit.insert(lit.end(), ranges.begin(), ranges.end());
+        }
         if (!leadSeen)
         {
             counters.minLeadMs = counters.maxLeadMs = leadMs;

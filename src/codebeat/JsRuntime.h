@@ -47,6 +47,7 @@ struct JsResult
     int line = 0, column = 0; // where the error is in the evaluated source, 1-based (0 = unknown)
     bool timedOut = false;    // stopped by the time budget
     bool outOfMemory = false; // stopped by the memory limit
+    int sourceIndex = -1;     // the error's own character offset in the buffer, when it has one (a MiniError)
 };
 
 class JsRuntime

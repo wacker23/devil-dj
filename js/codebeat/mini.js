@@ -343,6 +343,20 @@ function euclidOf(pat, k, n, r) {
     );
 }
 
+// A string literal from the editor (P5-15, CODEBEAT_SPEC §8.3): the pre-tokenizer rewrites "..." in argument
+// position to __mini("...", offset). It is a real String (every string method works) that also knows where its
+// text starts in the buffer, so its atoms' places are the buffer's.
+export class MiniString extends String {
+    constructor(text, offset) {
+        super(text);
+        this.offset = Number(offset) || 0;
+    }
+
+    get isMiniString() {
+        return true;
+    }
+}
+
 // --- entry point ---
 
 // The pattern for a mini-notation string. `offset` is where the string's text starts in the editor buffer (0 when

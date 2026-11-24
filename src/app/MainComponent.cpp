@@ -2235,6 +2235,9 @@ void MainComponent::updateCodeDeck()
                              juce::String(static_cast<juce::int64>(st.late + es.codeLateEvents)) + " late" +
                              (st.slowWindows > 0 ? "   " + juce::String(static_cast<juce::int64>(st.slowWindows)) + " too slow" : juce::String()));
         codeEditor.refreshMarker();
+        // P5-15: what is heard now (the output latency later than the engine's clock) lit in the evaluated tab.
+        const auto heard = es.sampleClock - static_cast<std::int64_t>(outputLatencySeconds() * es.sampleRate);
+        codeEditor.setHighlights(codeEvaluatedTab, codeProducer->highlightsAt(heard));
     }
     if (codeStrip.isVisible())
     {

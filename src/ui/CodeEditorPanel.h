@@ -70,6 +70,10 @@ public:
     juce::Rectangle<int> markerBounds() const;     // where the marker is (empty when not shown)
     const juce::String& statusText() const noexcept { return status; }
 
+    // P5-15: the code sounding now, lit - character ranges [start, end) in `tab` (from the app's timer).
+    void setHighlights(int tab, std::vector<std::pair<int, int>> ranges);
+    std::vector<juce::Rectangle<int>> highlightRects() const; // where they are drawn (for tests)
+
     void resized() override;
     void paint(juce::Graphics& g) override;
 
@@ -96,6 +100,14 @@ private:
     {
         void paint(juce::Graphics& g) override;
     } marker;
+    struct Lights final : juce::Component
+    {
+        std::vector<juce::Rectangle<int>> rects; // in this component
+        void paint(juce::Graphics& g) override;
+    } lights;
+    int litTab = 0;
+    std::vector<std::pair<int, int>> litRanges;
+    void placeLights();
 };
 
 } // namespace devildj::ui

@@ -12,6 +12,8 @@ add_library(devildj_codebeat STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/CodeEvaluator.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/CodeEvaluator.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/JsRuntime.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/PreTokenizer.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/PreTokenizer.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/JsRuntime.h")
 add_library(devildj::codebeat ALIAS devildj_codebeat)
 

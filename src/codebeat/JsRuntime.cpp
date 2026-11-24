@@ -180,6 +180,10 @@ struct JsRuntime::Impl
             if (JS_IsString(stack))
                 findLocation(toString(stack), fileName, r);
             JS_FreeValue(ctx, stack);
+            JSValue index = JS_GetPropertyStr(ctx, exception, "index");
+            if (double x = 0.0; JS_IsNumber(index) && JS_ToFloat64(ctx, &x, index) == 0 && x >= 0.0)
+                r.sourceIndex = static_cast<int>(x);
+            JS_FreeValue(ctx, index);
         }
         if (r.outOfMemory)
             JS_RunGC(rt);

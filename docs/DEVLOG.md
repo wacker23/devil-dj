@@ -11,6 +11,25 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P5-15 Active highlighting
+- What changed:
+  - `codebeat/PreTokenizer` (C++, CODEBEAT_SPEC §8.3): before evaluation, every string literal in argument position (after `(`, `,` or `[`) becomes `__mini("...", <offset>)`. The offset is where its text starts in the buffer, counted in characters as the editor counts them, so UTF-8 is handled.
+    - It covers "...", '...' and backtick literals without `${}`; escapes are kept as written.
+    - Left alone: comments, object keys, assignments / comparisons / case labels, templates with `${}`, unclosed strings.
+    - No line is added. `originalColumn()` takes the inserted characters back out of an error's column.
+  - `mini.js`: `MiniString extends String`, so every string method still works, and it carries its offset. The parser adds it, so atoms carry their places in the buffer. `prelude.js` defines `__mini`, and `play()` accepts editor strings as patterns.
+  - `CodeEvaluator` pre-tokenizes the code. An error with its own place (a MiniError's `index`, now read by JsRuntime as `sourceIndex`) is reported at exactly that line / column. Other errors' columns are mapped back to the code as typed.
+  - `CodeDeckProducer` keeps each pushed event's code ranges with its start and end samples (whole length; pruned a second after they end; at most 4096). `highlightsAt(sample)` returns what sounds then, sorted and unique.
+  - `CodeEditorPanel::setHighlights(tab, ranges)` draws lit ranges in an overlay: a green wash and underline, line by line for a range over a line break, only on its own tab.
+  - MainComponent lights what is heard now: the engine's sample clock less the output latency, in the evaluated tab, from the app's timer.
+- Tests:
+  - 3 pre-tokenizer cases: offsets, what's left alone, character counting, lines, column mapping.
+  - **Done check**: `s("kick snare hat*2")` on the producer at 128 BPM, sampled every 1/12 cycle through two cycles. kick (3-7) is lit in the first third, snare (8-13) in the second, hat (14-17) in the last; nothing else, never two at once.
+  - The editor's lit rectangles: on the right characters, on their own tab only, over a line break, past the end, cleared.
+  - Exact error places after rewritten strings, a mini-notation error at its own character (line 2, column 9), and strings still working as strings.
+  - 1 node test (120 in total): editor strings act as strings, and atoms, scale names and control values carry their places.
+- Owner: watch the highlight follow a pattern in the app (Ctrl+Enter on the starter).
+
 ## 2026-11-24 · P5-14 Keys + feedback
 - What changed:
   - The keys in the code editor:

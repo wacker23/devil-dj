@@ -163,3 +163,25 @@ TEST_CASE("Code evaluation: DJ hooks and print()", "[codebeat][eval]")
     CHECK(steps[0].result.printed == std::vector<std::string>{"126 8A \"minor\" 17 true 0 126"});
     CHECK(steps[0].playing == "s:bd [0, 1/2)\ns:bd [1/2, 1)");
 }
+
+TEST_CASE("Code evaluation: exact places for errors in and after rewritten strings (P5-15)", "[codebeat][eval]")
+{
+    const auto steps = runAll({
+        "s(\"bd\")\n  .nope()",          // a TypeError at line 2: no string there
+        "1;\ns(\"bd\").gain(\"0.5\").nope()", // line 2, after two rewritten strings: column of ".nope" as typed
+        "stack(\n  s(\"bd [sd\")\n)",      // a mini-notation error: its own character -> line 2, column 12
+        "s(\"bd sd\").show",              // fine: a string still works as a string elsewhere
+        "\"bd ~ sd\".split(\" \").length > 0 ? s(\"bd\") : s(\"sd\")",
+    });
+    REQUIRE(steps.size() == 5);
+    CHECK(steps[0].result.line == 2);
+    CHECK(steps[1].result.line == 2);
+    // Line 2 as typed is s("bd").gain("0.5").nope(): ".nope()" is columns 20-26. Without mapping the pre-tokenizer's
+    // insertions back out it would be more than 20 columns further right.
+    CHECK(steps[1].result.column >= 20);
+    CHECK(steps[1].result.column <= 26);
+    CHECK(steps[2].result.error.find("missing \"]\"") != std::string::npos);
+    CHECK(steps[2].result.line == 2);
+    CHECK(steps[2].result.column == 9); // the "[" of `  s("bd [sd")`: its own character, exactly
+    CHECK(steps[4].result.ok);
+}
