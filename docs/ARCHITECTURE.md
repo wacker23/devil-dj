@@ -146,6 +146,8 @@ TrackBuffer ──▶ PlayHead (double pos, rate) ──▶ [key lock?] Stretche
 - Slicer as built (P3-07): the engine keeps each deck's slicer domain (8 / 16 / 32 grid beats from the bar at or before the track's timeline - the slip shadow while slipping) and shifts it on by its length as the timeline passes its end (placed anew after a jump). A held slicer pad is a slip hold that works with slip off (`Deck::beginSlicerHold`); its slice loops from the next slice boundary (a queued jump with the loop, so the roll is in phase with the timeline); the last pad up exits the loop and returns to the shadow.
 - Quantized actions are stored as `PendingAction{targetSample, action}` (fixed array of 16 per deck) and executed when the block reaches the target.
 
+- Stems as built (P6-04): a deck can have its track's `StemBuffer` (drums, bass, other, vocals; 16-bit stereo at the device rate, the track's length, from the stem cache by `engine::loadStems` on a loader thread). The deck mixes them where it reads: every read head (playhead, jump tails, the key-lock feed) reads the four stems through the resampler with a gain each, so they stay in sample-exact step through loops, scratch, slip, reverse and key lock. Each stem has a level, mute, solo (any solo: only soloed stems) and an FX send; gains ramp over 20 ms. While every stem is at its default the deck reads the track itself (bit-exact; the stems add back to it within 16-bit rounding, so switching is seamless). Stems with the FX send off go to a second (dry) output; with key lock a second stretcher, primed with the same history, stretches it. `SetStem{deck, stem, Level | Mute | Solo | Fx | Reset, value}`; a new track resets them. `DeckState` gains stemsLoaded, stemsId, stemLevel[4], stemMute / stemSolo / stemFx (bit = stem), stemsActive (reading the stems), stemsDry.
+
 ### 3.5 Master clock, sync and quantize
 
 - `MasterClock` holds `bpm` and `beat` (double). Source: the master deck (`beat` = that deck's grid beat at its playhead) or internal tempo when nothing is master.
@@ -168,6 +170,7 @@ Output layout `SeparateCueDevice`: the main device gets the master on 1/2; after
 
 - `TrackBuffer` and `SampleBuffer` are created by loader threads and registered in `BufferRegistry` (UI-thread object holding `std::shared_ptr`s).
 - The engine receives raw `const T*` plus a registry id. When the engine stops using a buffer it pushes the id to `GarbageQueue`; the housekeeping timer drops the registry's `shared_ptr`. The audio thread never decrements a reference count.
+- `StemBuffer` (P6-04) is owned the same way (`BufferRegistry::addStems`, same ids, same release path): `LoadStems{deck, track, stems, id}` is taken only while `track` is on the deck (else the id comes straight back); the deck's stems go back with its track when a new one replaces it.
 
 ### 3.7 Scheduler and voices
 
@@ -203,6 +206,8 @@ Cue bus = Σ (pre-fader channels with CUE on) mixed with master (after master ga
 ```
 
 Strip = trim → EQ/Isolator → Color FX (filter etc.) → [FX unit insert if targeted] → fader. FX units targeting "master" process the master bus before the limiter.
+
+Stems past the effects (P6-04): a deck's dry stems (FX send off) get their own `ChannelStrip` with the channel's trim / EQ / filter settings (copied each block while it runs, reset when it starts) and join the channel after its FX units (color FX, pad FX, release FX, the units on the deck), before the meter, cue send and fader.
 
 Color FX as built (P3-10): `dsp::fx::ColorFx` per channel, right after the strip's filter (before the FX units); the engine routes each channel's FILTER parameter to the strip's filter (character Filter) or to its color FX (the strip's filter then goes to its centre over 20 ms); `SetColorFx{type}` chooses for all channels; the state's channel `filter` is the knob either way.
 

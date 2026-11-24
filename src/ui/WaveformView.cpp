@@ -1,5 +1,6 @@
 #include "WaveformView.h"
 
+#include "ui/StemStrip.h"
 #include "ui/WaveformColours.h"
 
 #include <algorithm>
@@ -84,6 +85,11 @@ void WaveformView::paint(juce::Graphics& g)
         shownBuffer = s.bufferId;
         track = s.loaded && lookup ? lookup(shownBuffer) : nullptr;
     }
+    if (s.stemsId != shownStems)
+    {
+        shownStems = s.stemsId;
+        stems = s.stemsLoaded && stemLookup ? stemLookup(shownStems) : nullptr;
+    }
 
     const auto area = getLocalBounds().toFloat();
     g.fillAll(kBackground);
@@ -138,8 +144,47 @@ void WaveformView::paint(juce::Graphics& g)
             }
         }
 
+        // Stems (P6-04): four lanes, each stem's peaks around its own centre line.
+        const bool drawStems = stemView && stems != nullptr && preview == nullptr && !stems->peaks[0].empty();
+        if (drawStems)
+        {
+            constexpr int kLanes = engine::StemBuffer::kStems;
+            const float laneHeight = area.getHeight() / kLanes;
+            const double peaksPerPixel = spp / engine::StemBuffer::kPeakSamples;
+            for (int lane = 0; lane < kLanes; ++lane)
+            {
+                const auto& p = stems->peaks[static_cast<std::size_t>(lane)];
+                const auto bit = static_cast<std::uint8_t>(1u << lane);
+                const bool heard = s.stemSolo != 0 ? (s.stemSolo & bit) != 0 : (s.stemMute & bit) == 0;
+                const float level = heard ? s.stemLevel[static_cast<std::size_t>(lane)] : 0.0f;
+                const auto colour = StemStrip::stemColour(lane);
+                const float laneMid = area.getY() + laneHeight * (static_cast<float>(lane) + 0.5f);
+                const float laneHalf = laneHeight * 0.5f - 1.0f;
+                const auto count = static_cast<int>(p.size());
+                for (int x = 0; x < width; ++x)
+                {
+                    const double from = (leftSample + x * spp) / engine::StemBuffer::kPeakSamples;
+                    const auto first = static_cast<int>(std::floor(from));
+                    const int last = std::max(first, static_cast<int>(std::floor(from + peaksPerPixel)) - 1);
+                    if (last < 0 || first >= count)
+                        continue;
+                    float peak = 0.0f;
+                    for (int k = std::max(0, first); k <= std::min(last, count - 1); ++k)
+                        peak = std::max(peak, p[static_cast<std::size_t>(k)]);
+                    const float h = std::min(1.0f, peak * 1.4f) * laneHalf * (0.35f + 0.65f * level);
+                    const float alpha = (x < centreX ? 0.55f : 0.95f) * (heard ? 1.0f : 0.25f);
+                    g.setColour(colour.withAlpha(alpha));
+                    g.fillRect(static_cast<float>(x), laneMid - h, 1.0f, 2.0f * h);
+                }
+                g.setColour(colour.withAlpha(0.6f));
+                g.setFont(juce::FontOptions(9.0f, juce::Font::bold));
+                g.drawText(StemStrip::stemLabel(lane), juce::Rectangle<float>(4.0f, laneMid - laneHalf, 60.0f, 11.0f),
+                           juce::Justification::centredLeft);
+            }
+        }
+
         // Bars: each pixel column shows the loudest points under it (or, zoomed in, the point it falls in).
-        const int numPoints = w.numPoints();
+        const int numPoints = drawStems ? 0 : w.numPoints();
         for (int x = 0; x < width; ++x)
         {
             const double from = (leftSample + x * spp) / w.samplesPerPoint;

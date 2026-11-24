@@ -27,6 +27,7 @@
 #include "app/BeatMakerProducer.h"
 #include "app/CodeBuffers.h"
 #include "app/CodeDeckProducer.h"
+#include "app/StemDeckLoader.h"
 #include "app/StemService.h"
 #include "app/SampleBank.h"
 #include "app/TransitionStore.h"
@@ -371,6 +372,11 @@ private:
     std::unique_ptr<juce::TimedCallback> analysisProgress;
     // Stems (P6-03): right-click > Separate stems; FLACs in the cache, progress in the browser after analysis.
     std::unique_ptr<StemService> stemService;
+    // Stem playback (P6-04): a deck's stems loaded from the cache when its track has them (or when a separation of
+    // the track on it finishes).
+    std::unique_ptr<StemDeckLoader> stemLoader;
+    void loadStemsFor(engine::DeckId deck, const engine::TrackBuffer& track);
+    void loadMissingStems(); // decks whose track has stems now but none loaded
     int stemsDone = 0, stemsFailed = 0;
     void separateStems(const std::vector<std::int64_t>& trackIds, bool quality);
     juce::String stemActivity();

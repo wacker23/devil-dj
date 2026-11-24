@@ -26,9 +26,10 @@ double besselI0(double x) noexcept
     return sum;
 }
 
-inline float sampleAt(const float* data, int length, std::int64_t i) noexcept
+template <typename T>
+inline float sampleAt(const T* data, int length, std::int64_t i) noexcept
 {
-    return (i >= 0 && i < length) ? data[i] : 0.0f;
+    return (i >= 0 && i < length) ? static_cast<float>(data[i]) : 0.0f;
 }
 } // namespace
 
@@ -65,6 +66,17 @@ void Resampler::prepare()
 
 float Resampler::readHermite(const float* data, int length, double position) noexcept
 {
+    return readHermiteT(data, length, position);
+}
+
+float Resampler::readSinc(const float* data, int length, double position, double rate) const noexcept
+{
+    return readSincT(data, length, position, rate);
+}
+
+template <typename T>
+float Resampler::readHermiteT(const T* data, int length, double position) noexcept
+{
     const auto i = static_cast<std::int64_t>(std::floor(position));
     const auto t = static_cast<float>(position - static_cast<double>(i));
     const float xm1 = sampleAt(data, length, i - 1);
@@ -80,10 +92,11 @@ float Resampler::readHermite(const float* data, int length, double position) noe
     return ((c3 * t + c2) * t + c1) * t + c0;
 }
 
-float Resampler::readSinc(const float* data, int length, double position, double rate) const noexcept
+template <typename T>
+float Resampler::readSincT(const T* data, int length, double position, double rate) const noexcept
 {
     if (sincTables.empty())
-        return readHermite(data, length, position); // not prepared
+        return readHermiteT(data, length, position); // not prepared
 
     std::size_t bucket = kRateBuckets.size() - 1;
     const double absRate = std::abs(rate);
@@ -106,11 +119,11 @@ float Resampler::readSinc(const float* data, int length, double position, double
     float a = 0.0f, b = 0.0f;
     if (first >= 0 && first + kTaps <= length)
     {
-        const float* x = data + first;
+        const T* x = data + first;
         for (int k = 0; k < kTaps; ++k)
         {
-            a += x[k] * rowA[k];
-            b += x[k] * rowB[k];
+            a += static_cast<float>(x[k]) * rowA[k];
+            b += static_cast<float>(x[k]) * rowB[k];
         }
     }
     else
@@ -124,5 +137,8 @@ float Resampler::readSinc(const float* data, int length, double position, double
     }
     return a + blend * (b - a);
 }
+
+template float Resampler::readHermiteT<std::int16_t>(const std::int16_t*, int, double) noexcept;
+template float Resampler::readSincT<std::int16_t>(const std::int16_t*, int, double, double) const noexcept;
 
 } // namespace devildj::dsp

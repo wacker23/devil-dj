@@ -48,6 +48,13 @@ struct DeckState
                                              -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0};
     std::array<double, kHotCues> hotCueLength{};
     int hotCuePreview = -1; // the slot held from pause (playing from it until released)
+    // Stems (P6-04): loaded for this track; each stem's level and mute / solo / fx (bit = stem); whether the deck
+    // reads them now (a stem is off its default) and sends some past the effects.
+    bool stemsLoaded = false;
+    BufferId stemsId = 0;
+    std::array<float, 4> stemLevel{1.0f, 1.0f, 1.0f, 1.0f};
+    std::uint8_t stemMute = 0, stemSolo = 0, stemFx = 0x0f;
+    bool stemsActive = false, stemsDry = false;
 
     // Loop (P3-03), in buffer samples.
     bool loopActive = false;

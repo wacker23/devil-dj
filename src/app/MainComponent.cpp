@@ -22,7 +22,6 @@
 #include "library/MissingFiles.h"
 #include "library/PlaylistFiles.h"
 #include "library/TrackRepository.h"
-#include "app/StemService.h"
 #include "MainLayout.h"
 #include "RecordingSheets.h"
 #include "util/Log.h"
@@ -766,6 +765,7 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     loader.callbacks.onLoaded = [this](engine::DeckId deck, const engine::TrackBuffer& t)
     {
         loadGridFor(deck, t.file, t.sampleRate); // P2-14
+        loadStemsFor(deck, t);                   // P6-04
         juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this)]
                                         { if (safe != nullptr) safe->askMatcher(true); }); // P3-24: at once
         if (deck < 2 && automixLoading[deck] >= 0) // Automix's next track is on the deck (with its grid)
@@ -796,6 +796,27 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
             deckStatus[deck] = "failed: " + file.getFileName() + " - " + error;
     };
     soak.onFinished = [this](const juce::String& report) { soakFinished(report); };
+    // Stem playback (P6-04): the loader hands stems to the engine; the waveforms draw them; WAVE switches the view.
+    stemLoader = std::make_unique<StemDeckLoader>(
+        [this](engine::DeckId deck, std::shared_ptr<const engine::TrackBuffer> track,
+               std::shared_ptr<engine::StemBuffer> stems, double seconds)
+        {
+            const auto* raw = stems.get();
+            const auto mb = static_cast<double>(raw->memoryBytes()) / 1e6;
+            const auto id = registry.addStems(std::move(stems));
+            if (!engine.send(engine::LoadStems{deck, track.get(), raw, id}))
+            {
+                registry.release(id);
+                return;
+            }
+            util::logInfo("Stems: deck {} loaded in {:.1f} s ({:.0f} MB)", engine::deckLetter(deck), seconds, mb);
+        },
+        [](engine::DeckId deck, const juce::String& error)
+        { util::logWarning("Stems: deck {}: {}", engine::deckLetter(deck), error.toStdString()); });
+    for (auto* w : {&waveA, &waveB})
+        w->setStemLookup([this](engine::BufferId id) { return registry.getStems(id); });
+    deckA.stemStrip().onWaveView = [this](bool on) { waveA.setStemView(on); };
+    deckB.stemStrip().onWaveView = [this](bool on) { waveB.setStemView(on); };
     registerActions();
     reloadKeymap();
     keyHook = std::make_unique<ui::PhysicalKeyHook>([this](const ui::KeyboardController::KeyEvent& e)
@@ -936,6 +957,21 @@ void MainComponent::registerActions()
                         engine.send(engine::SetParam{engine::channelParam(d, param), kill ? -1000.0f : 0.0f});
                     });
         onPress(cmd(DA::KeyLock), [this, d] { toggleKeyLock(d); });
+        // Stems (P6-04): toggles from what the engine has.
+        for (int stem = 0; stem < 4; ++stem)
+        {
+            const auto bit = static_cast<std::uint8_t>(1u << stem);
+            const auto st = static_cast<std::uint8_t>(stem);
+            const auto toggle = [this, d, st, bit](engine::StemParam param, std::uint8_t mask)
+            { engine.send(engine::SetStem{d, st, param, (mask & bit) ? 0.0f : 1.0f}); };
+            onPress(cmd(static_cast<DA>(static_cast<int>(DA::StemMuteDrums) + stem)),
+                    [this, d, toggle] { toggle(engine::StemParam::Mute, engine.readState().decks[d].stemMute); });
+            onPress(cmd(static_cast<DA>(static_cast<int>(DA::StemSoloDrums) + stem)),
+                    [this, d, toggle] { toggle(engine::StemParam::Solo, engine.readState().decks[d].stemSolo); });
+            onPress(cmd(static_cast<DA>(static_cast<int>(DA::StemFxDrums) + stem)),
+                    [this, d, toggle] { toggle(engine::StemParam::Fx, engine.readState().decks[d].stemFx); });
+        }
+        onPress(cmd(DA::StemReset), [this, d] { engine.send(engine::SetStem{d, 0, engine::StemParam::Reset, 0.0f}); });
         onPress(cmd(DA::Slip), [this, d] { engine.send(engine::SetSlip{d, !engine.readState().decks[d].slip}); });
         onPress(cmd(DA::Sync), [this, d] { engine.send(engine::SetSync{d, !engine.readState().decks[d].synced}); });
         // Pads (P3-01, P3-06): pad 1-8 in the deck's pad mode; Shift + pad is the alternate (hot cue: delete).
@@ -3504,8 +3540,37 @@ void MainComponent::showStemProgress()
         util::logInfo("Stems: {} done in {:.0f} s", s.lastDone.toStdString(), s.lastSeconds);
     if (s.failed != stemsFailed)
         util::logError("Stems: {}", s.lastError.toStdString());
+    const bool finished = s.done != stemsDone;
     stemsDone = s.done;
     stemsFailed = s.failed;
+    if (finished)
+        loadMissingStems(); // a track on a deck may have just been separated
+}
+
+void MainComponent::loadStemsFor(engine::DeckId deck, const engine::TrackBuffer& track)
+{
+    if (stemLoader == nullptr)
+        return;
+    const auto hash = track.contentHash.toStdString();
+    if (stemService == nullptr || hash.empty() || !stemService->ready(hash))
+    {
+        stemLoader->cancel(deck); // no stems: the buttons stay dimmed
+        return;
+    }
+    stemLoader->request(deck, registry.find(&track), stemService->folderFor(hash));
+}
+
+void MainComponent::loadMissingStems()
+{
+    const auto& s = engine.readState();
+    for (engine::DeckId d = 0; d < 2; ++d)
+    {
+        const auto& ds = s.decks[d];
+        if (!ds.loaded || ds.stemsLoaded || stemLoader->busy(d))
+            continue;
+        if (const auto track = registry.get(ds.bufferId))
+            loadStemsFor(d, *track);
+    }
 }
 
 void MainComponent::setLayout(int waveforms, bool bigBrowser)

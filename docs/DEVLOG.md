@@ -11,6 +11,26 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-25 · P6-04 Stem playback
+- What changed:
+  - `engine::StemBuffer` (4 stems, 16-bit stereo at the device rate) and `engine::loadStems` (the cache's FLACs resampled to the track's rate and length, plus peaks for the view). `BufferRegistry` owns stems like tracks.
+  - `Deck` mixes the stems where it reads: each read head reads the four stems with a gain each, so loops, scratch, slip, reverse and key lock work unchanged and the stems stay in sample-exact step. Level, mute, solo and FX send per stem, ramped over 20 ms. At the defaults the deck reads the track itself (bit-exact).
+  - Stems with the FX send off go to a dry output, through a second stretcher with key lock and their own strip (the channel's trim / EQ / filter). They skip color FX, pad FX, release FX and the FX units.
+  - `dsp::Resampler` reads 16-bit data. New engine commands `LoadStems` and `SetStem`, and stem fields in `DeckState` (ARCHITECTURE §3.2-3.8 updated).
+  - App: `StemDeckLoader` loads a deck's stems in the background when its track has them, or when a separation of it finishes. `ui::StemStrip` adds DRUMS / BASS / OTHER / VOCALS / WAVE on each deck: click mutes, Shift+click solos, drag or wheel sets the level, Ctrl+click is 100 %, right-click toggles the FX send. The buttons are dimmed without stems. WAVE draws four stem lanes in the waveform.
+  - Keys: Alt+Q/W/E/R (A) and Alt+U/I/O/P (B) mute; with Shift, solo. Alt+A/S/D/F and Alt+J/K/L/; toggle the FX send; Alt+Z / Alt+M reset (KEYMAP.md).
+- Tests / measurements:
+  - Defaults are bit-exact to the plain deck. Mute, solo, level, the dry output, loops and the engine's FX routing all match references within 1e-6. Mute ramps without a click.
+  - Key lock: the dry output's envelope follows a key-locked reference, correlation above 0.98 at zero lag.
+  - The engine releases late stems at once and a deck's stems with its track. Also tested: the loader, the deck loader's cancel and supersede, and the stem buttons.
+  - CPU, 2 decks x 4 stems with key lock, one muted stem on A and a dry stem on B, block 256 at 48 kHz, owner's machine: p99 0.55 ms = 10.4 % of the 5.33 ms block (median 0.32 ms). The same decks on their tracks: p99 7.8 %. ARCHITECTURE §11 budget: 60 % for 4 decks with stems on 2.
+  - RAM for a 6-minute track: 138 MB track (float) + 276 MB stems (16-bit) per deck, 829 MB for 2 decks. The 8 GB target has room; the §11 table's 260 MB line is without stems.
+- Notes / follow-ups:
+  - The target-laptop numbers (D4) are still to measure.
+  - Stems are converted to the track buffer's rate on load (sinc), so they always match the track on the deck.
+  - Not checked by ear in the app yet.
+  - Drum Capture and Drum Swap are P6-05.
+
 ## 2026-11-25 · P6-03 Stem separation job: HTDemucs on the CPU, stems as FLAC in the cache
 - What changed:
   - `tools/htdemucs/export_onnx.py` (dev-only PyTorch venv) exports the network core of HTDemucs, without its STFT, to `build/models/htdemucs_core.onnx` (174 MB), with reference input and output. The weights are the owner's own copy: not committed and never shipped (LICENSES: weights not cleared).

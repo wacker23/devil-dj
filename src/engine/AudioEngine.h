@@ -123,6 +123,8 @@ private:
     void apply(const SetOutputLayout& command) noexcept;
     void apply(const LoadTrack& command) noexcept;
     void apply(const UnloadTrack& command) noexcept;
+    void apply(const LoadStems& command) noexcept; // P6-04
+    void apply(const SetStem& command) noexcept;
     void apply(const Play& command) noexcept;
     void apply(const Pause& command) noexcept;
     void apply(const TogglePlay& command) noexcept;
@@ -185,7 +187,9 @@ private:
     void renderSequencerClick(int numSamples) noexcept;
     // One channel from its source's audio in l / r to the master and cue buses (strip, color FX, pad FX, release FX,
     // the FX units on it, meter, cue, fader, crossfader).
-    void mixChannel(int channel, float* l, float* r, int numSamples) noexcept;
+    // dl / dr: a deck's stems past the effects (P6-04), or null.
+    void mixChannel(int channel, float* l, float* r, int numSamples, float* dl = nullptr,
+                    float* dr = nullptr) noexcept;
     void renderSampler(int numSamples) noexcept;
     struct VoiceModule;
     void renderVoices(VoiceModule& module, int channel, int numSamples) noexcept; // the Beat Maker's, the code deck's
@@ -242,6 +246,8 @@ private:
         bool hasPending = false;
         const TrackBuffer* pendingBuffer = nullptr;
         BufferId pendingId = 0;
+        BufferId stemsId = 0;    // P6-04: the stems on the deck (released with its track)
+        bool dryWasActive = false; // the dry strip was running last chunk
         util::Beatgrid grid; // P2-14, in this deck's buffer samples
         bool synced = false;      // P2-19
         bool snapPending = false; // jump into phase once (sync pressed, play started) if far off
@@ -292,6 +298,8 @@ private:
     double brakeSeconds = 1.0, spinBackSeconds = 1.0;
     juce::AudioBuffer<float> deckScratch;            // 2 x capacity, one deck at a time
     std::array<ChannelStrip, kMaxChannels> strips{}; // channel i = deck i
+    // Stems past the effects (P6-04): each deck's dry stems get their own strip with the channel's settings.
+    std::array<ChannelStrip, kMaxDecks> dryStrips{};
     // Color FX (P3-10): one per channel, after the strip's filter; the FILTER knob drives the strip's filter
     // or, with another character chosen, the color FX (the strip's filter then stays at its centre).
     std::array<dsp::fx::ColorFx, kMaxChannels> colorFx;
@@ -398,7 +406,8 @@ private:
     void rollSlice(DeckSlot& slot, int pad) noexcept;    // the slice's loop from its next boundary
     void dropQueuedJumps(DeckSlot& slot) noexcept;
     // Renders one deck, split at the samples where its queued actions fall due.
-    void renderDeckWithActions(DeckSlot& slot, float* l, float* r, int numSamples) noexcept;
+    // Returns whether the deck wrote to dl / dr (stems past the effects, P6-04).
+    bool renderDeckWithActions(DeckSlot& slot, float* l, float* r, float* dl, float* dr, int numSamples) noexcept;
     void updateCueMix() noexcept;
     void mixHeadphones(int numSamples) noexcept;
     void finishBuses(int numSamples) noexcept;

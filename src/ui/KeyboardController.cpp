@@ -349,6 +349,20 @@ std::vector<KeyBinding> defaultKeymap()
         // Stops (P3-05).
         {D, L, mods::Ctrl | mods::Shift, DA::Brake},
         {F, Semicolon, mods::Ctrl | mods::Shift, DA::SpinBack},
+        // Stems (P6-04): Alt + the top letter row mutes, with Shift solos; Alt + the home row is the FX send.
+        {Q, U, mods::Alt, DA::StemMuteDrums},
+        {W, I, mods::Alt, DA::StemMuteBass},
+        {E, O, mods::Alt, DA::StemMuteOther},
+        {R, P, mods::Alt, DA::StemMuteVocals},
+        {Q, U, mods::Alt | mods::Shift, DA::StemSoloDrums},
+        {W, I, mods::Alt | mods::Shift, DA::StemSoloBass},
+        {E, O, mods::Alt | mods::Shift, DA::StemSoloOther},
+        {R, P, mods::Alt | mods::Shift, DA::StemSoloVocals},
+        {A, J, mods::Alt, DA::StemFxDrums},
+        {S, K, mods::Alt, DA::StemFxBass},
+        {D, L, mods::Alt, DA::StemFxOther},
+        {F, Semicolon, mods::Alt, DA::StemFxVocals},
+        {Z, M, mods::Alt, DA::StemReset},
     };
     for (const auto& r : rows)
     {

@@ -233,6 +233,9 @@ DeckView::DeckView(engine::AudioEngine& audioEngine, engine::DeckId deckId, Trac
     tempo.setWantsKeyboardFocus(false);
     addAndMakeVisible(tempo);
     addAndMakeVisible(*overviewView);
+    stems.onStem = [this](int stem, engine::StemParam param, float value) // P6-04
+    { engine.send(engine::SetStem{deck, static_cast<std::uint8_t>(stem), param, value}); };
+    addAndMakeVisible(stems);
     refresh();
 }
 
@@ -273,6 +276,7 @@ void DeckView::refresh()
     grid.setToggleState(state.metronome || state.gridLocked, juce::dontSendNotification);
     sync.setToggleState(state.synced, juce::dontSendNotification);
     refreshPads();
+    stems.setState(state);
     // The loop row: the auto-loop size, on while a loop plays; IN lit while it waits for OUT.
     {
         auto& autoLoop = loopButton(LoopButton::Auto);
@@ -317,6 +321,8 @@ void DeckView::resized()
     }
     area.removeFromTop(4);
     auto buttons = area.removeFromBottom(52);
+    area.removeFromBottom(kMargin);
+    stems.setBounds(area.removeFromBottom(24)); // stems (P6-04)
     area.removeFromBottom(kMargin);
     {
         auto loopRow = area.removeFromBottom(28); // loops (P3-03)

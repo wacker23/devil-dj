@@ -5,6 +5,7 @@
 #include "engine/Sequencer.h"
 #include "engine/MasterClock.h"
 #include "engine/OutputRouter.h"
+#include "engine/StemBuffer.h"
 #include "engine/TransitionCurves.h"
 #include "engine/Voices.h"
 #include "util/Beatgrid.h"
@@ -54,6 +55,34 @@ struct LoadTrack
     DeckId deck = 0;
     const TrackBuffer* buffer = nullptr;
     BufferId bufferId = 0;
+};
+
+// A track's stems (P6-04) for the deck that has `track` on it. Owned by the BufferRegistry like a track: the
+// engine hands `bufferId` back when it no longer uses them (at once if that track isn't on the deck any more).
+struct LoadStems
+{
+    DeckId deck = 0;
+    const TrackBuffer* track = nullptr;
+    const StemBuffer* stems = nullptr;
+    BufferId bufferId = 0;
+};
+
+// One stem of a deck (P6-04): stem 0..3 = drums, bass, other, vocals. Level 0..1; Mute / Solo / Fx: value > 0.5
+// is on (Fx on = through the channel's effects; off = past them). Reset puts every stem of the deck back.
+enum class StemParam : std::uint8_t
+{
+    Level,
+    Mute,
+    Solo,
+    Fx,
+    Reset,
+};
+struct SetStem
+{
+    DeckId deck = 0;
+    std::uint8_t stem = 0;
+    StemParam param = StemParam::Level;
+    float value = 0.0f;
 };
 
 // Empties a deck; its buffer is handed back like a replaced one.
@@ -561,7 +590,7 @@ using EngineCommand =
                  SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle, SetSlicer, SlicerPad, FxSetEffect, FxCommand, SetColorFx, ReleaseFxCommand, PadFxSetEffect, PadFxCommand,
                  SamplerLoad, SamplerPad, SamplerSet, SequencerCommand, SequencerEvents,
                  StartTransition, CancelTransition, SetDrumSound, SetSynthSound, BeatMakerStop, CodeDeckStop, SetSampleSound,
-                 TransitionFxSetEffect>;
+                 TransitionFxSetEffect, LoadStems, SetStem>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

@@ -2,6 +2,7 @@
 
 #include "dsp/Resampler.h"
 #include "dsp/Stretcher.h"
+#include "engine/StemBuffer.h"
 #include "engine/TrackBuffer.h"
 
 #include <array>
@@ -161,7 +162,34 @@ public:
     double rate() const noexcept { return (1.0 + tempo / 100.0) * (1.0 + bend / 100.0) * correction; }
 
     // Writes numSamples into left/right (overwrites).
-    void render(float* left, float* right, int numSamples) noexcept;
+    void render(float* left, float* right, int numSamples) noexcept { render(left, right, nullptr, nullptr, numSamples); }
+    // With stems (P6-04): the stems whose FX send is off go to dryLeft / dryRight (overwritten; null = into
+    // left / right with the rest). dryActive() says whether the last render put anything there.
+    void render(float* left, float* right, float* dryLeft, float* dryRight, int numSamples) noexcept;
+
+    // Stems (P6-04): the track's four stems (StemBuffer), mixed where the deck reads, so every read head (the
+    // playhead, the jump tails, the key lock feed) plays them in sample-exact step and loops, scratch, slip,
+    // reverse and key lock work as with the track. Each stem: a level (0..1), mute, solo (any solo: only the
+    // soloed stems play) and an FX send (off: the stem goes to the dry output, past the channel's effects).
+    // Changes ramp over kStemRampSeconds. With every stem at its default the deck reads the track itself, so
+    // nothing changes until a stem is touched (the stems add back to the track within 16-bit rounding, so
+    // switching between the two is seamless). With key lock and a dry output, a second stretcher runs.
+    static constexpr int kStems = StemBuffer::kStems;
+    static constexpr double kStemRampSeconds = 0.02;
+    // The caller makes sure nothing reads the old stems any more (the audio thread itself, between renders).
+    void setStems(const StemBuffer* stems) noexcept;
+    const StemBuffer* stems() const noexcept { return stemBuffer; }
+    void setStemLevel(int stem, float level) noexcept;
+    void setStemMute(int stem, bool on) noexcept;
+    void setStemSolo(int stem, bool on) noexcept;
+    void setStemFx(int stem, bool on) noexcept;
+    void resetStems() noexcept; // every stem back to its default (a new track does this)
+    float stemLevel(int stem) const noexcept { return stemSettings[static_cast<std::size_t>(stem)].level; }
+    bool stemMuted(int stem) const noexcept { return stemSettings[static_cast<std::size_t>(stem)].mute; }
+    bool stemSoloed(int stem) const noexcept { return stemSettings[static_cast<std::size_t>(stem)].solo; }
+    bool stemFx(int stem) const noexcept { return stemSettings[static_cast<std::size_t>(stem)].fx; }
+    bool readingStems() const noexcept { return lastReadStems; } // the last render read the stems, not the track
+    bool dryActive() const noexcept { return lastDryActive; }
 
     Transport transport() const noexcept { return state; }
     bool isPlaying() const noexcept { return state != Transport::Paused; }
@@ -225,6 +253,30 @@ private:
     void renderStretched(int numSamples, double playheadEnd, double rateEnd) noexcept;
     void readFrames(std::int64_t from, int count, float* left, float* right) const noexcept;
 
+    // Stems (P6-04).
+    struct StemSetting
+    {
+        float level = 1.0f;
+        bool mute = false, solo = false, fx = true;
+    };
+    std::array<StemSetting, kStems> stemSettings{};
+    const StemBuffer* stemBuffer = nullptr;
+    // Gains per stem into the main (FX) output and the dry one: where they are now, where they're going, and
+    // this part's start / end (the ramp along it).
+    std::array<float, kStems> mainGain{1.0f, 1.0f, 1.0f, 1.0f}, dryGain{};
+    std::array<float, kStems> mainTarget{1.0f, 1.0f, 1.0f, 1.0f}, dryTarget{};
+    std::array<float, kStems> mainFrom{}, mainTo{}, dryFrom{}, dryTo{};
+    bool useStems = false, useDry = false; // this part
+    bool lastReadStems = false, lastDryActive = false;
+    void updateStemTargets() noexcept;
+    void beginStemPart(int numSamples) noexcept;
+    float readMix(int channel, double position, double rate, const float* from, const float* to, float t) const noexcept;
+    void readFramesMix(std::int64_t from, int count, float* left, float* right, const float* gFrom,
+                       const float* gTo) const noexcept;
+    std::unique_ptr<dsp::Stretcher> dryStretcher; // key lock for the dry output
+    bool dryPrimed = false;
+    std::vector<float> dryInL, dryInR, dryOutL, dryOutR;
+
     const TrackBuffer* buffer = nullptr;
     double sampleRate = 48000.0;
     int fadeSamples = 96;
@@ -257,7 +309,7 @@ private:
     bool stretchedNow() const noexcept; // the main head plays through the stretcher (key lock, moving normally)
     void switchSource(bool wasStretched) noexcept; // crossfade when that changed
     void wrapLoopBack() noexcept;
-    void renderPart(float* left, float* right, int numSamples) noexcept;
+    void renderPart(float* left, float* right, float* dryLeft, float* dryRight, int numSamples) noexcept;
 
     int mainFadeRemaining = 0; // > 0 while the main head fades in
 

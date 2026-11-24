@@ -39,6 +39,17 @@ public:
     // Memory cues (P3-02): positions in buffer samples and colours (0 = white).
     void setMemoryCues(std::vector<std::pair<double, std::uint32_t>> cues) { memoryCues = std::move(cues); }
 
+    // Stems (P6-04): with the stem view on and stems on the deck, four lanes (drums, bass, other, vocals) in
+    // their colours instead of the 3-band waveform; a stem that isn't heard (muted, or another soloed) is dim.
+    using StemLookup = std::function<std::shared_ptr<const engine::StemBuffer>(engine::BufferId)>;
+    void setStemLookup(StemLookup l) { stemLookup = std::move(l); }
+    void setStemView(bool on)
+    {
+        stemView = on;
+        repaint();
+    }
+    bool stemViewOn() const noexcept { return stemView; }
+
     // A track being loaded (P2-17): its cached waveform, drawn from its start until the deck has the new buffer.
     void showPreview(std::shared_ptr<const analysis::Waveform> waveform);
     void clearPreview() { preview.reset(); }
@@ -89,6 +100,10 @@ private:
     LatencySource latency;
     engine::BufferId shownBuffer = 0;
     std::shared_ptr<const engine::TrackBuffer> track;
+    StemLookup stemLookup;
+    bool stemView = false;
+    engine::BufferId shownStems = 0;
+    std::shared_ptr<const engine::StemBuffer> stems;
     std::shared_ptr<const analysis::Waveform> preview;
     engine::BufferId previewOver = 0; // the buffer on the deck when the preview came; a new one ends it
     int zoom = kDefaultZoom;

@@ -34,6 +34,14 @@ public:
                                           : readHermite(data, length, position);
     }
 
+    // 16-bit data (P6-04: stems), read as samples / 32768.
+    float read(const std::int16_t* data, int length, double position, double rate) const noexcept
+    {
+        constexpr float kScale = 1.0f / 32768.0f;
+        return kScale * (quality == Quality::Sinc16 ? readSincT(data, length, position, rate)
+                                                    : readHermiteT(data, length, position));
+    }
+
     void setQuality(Quality q) noexcept { quality = q; }
     Quality getQuality() const noexcept { return quality; }
 
@@ -46,6 +54,10 @@ private:
     static constexpr std::array<double, 7> kRateBuckets{1.0, 1.06, 1.1, 1.16, 1.25, 1.5, 2.0};
 
     float readSinc(const float* data, int length, double position, double rate) const noexcept;
+    template <typename T>
+    static float readHermiteT(const T* data, int length, double position) noexcept;
+    template <typename T>
+    float readSincT(const T* data, int length, double position, double rate) const noexcept;
 
     Quality quality = Quality::Hermite;
     // [bucket][phase 0..kPhases][tap], kTaps per row.

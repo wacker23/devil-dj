@@ -39,6 +39,7 @@ target_sources(DevilDJTests PRIVATE
     app/CodeDeckChannelTests.cpp
     app/CodeBuffersTests.cpp
     app/StemServiceTests.cpp
+    app/StemDeckLoaderTests.cpp
     app/CodeRenderTests.cpp
     app/LayoutTests.cpp
     app/SettingsTests.cpp
@@ -80,6 +81,7 @@ target_sources(DevilDJTests PRIVATE
     engine/HeadphoneCueTests.cpp
     engine/HotCueTests.cpp
     engine/LoopTests.cpp
+    engine/StemPlaybackTests.cpp
     engine/SlipTests.cpp
     engine/ReverseTests.cpp
     engine/SlicerTests.cpp
@@ -132,6 +134,7 @@ target_sources(DevilDJTests PRIVATE
     ui/TagsRatingsTests.cpp
     ui/TouchTests.cpp
     ui/WaveformViewTests.cpp
+    ui/StemStripTests.cpp
     util/BeatgridTests.cpp
     util/CrashHandlerTests.cpp
     util/FractionTests.cpp

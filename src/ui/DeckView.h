@@ -3,6 +3,7 @@
 #include "engine/AudioEngine.h"
 #include "engine/TrackBuffer.h"
 #include "ui/PadModes.h"
+#include "ui/StemStrip.h"
 #include "ui/TrackDropTarget.h"
 #include "util/MusicalKey.h"
 
@@ -83,6 +84,7 @@ public:
     void setBeatPatternLooks(int playing, int queued); // P4-09: the Beat Maker's patterns on the pads
     void setBeatPadNames(const std::array<juce::String, 8>& names, bool recording); // P4-11
     juce::TextButton& padModeButton() noexcept { return modeButton; }
+    StemStrip& stemStrip() noexcept { return stems; } // P6-04: the stem buttons (and the WAVE toggle)
     // Memory cues (P3-02): MEM opens the list; their positions (buffer samples) and colours for the overview.
     std::function<void()> onMemoryPanel;
     // Loops (P3-03): the loop row's buttons; the app sends the engine commands (auto loop size, export, ...).
@@ -158,6 +160,7 @@ private:
     std::array<juce::String, 16> hotCueLabels;
     std::vector<std::pair<double, std::uint32_t>> memoryCues;
     std::array<juce::TextButton, 7> loopButtons;
+    StemStrip stems;
     static juce::String beatsText(double beats); // "1/4", "4", "32" 
     void refreshPads();
     void dropHoverChanged() override { repaint(); }

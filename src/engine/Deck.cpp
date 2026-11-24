@@ -24,10 +24,15 @@ void Deck::prepare(double newSampleRate, int maxBlockSize)
         stretcher = dsp::makeSignalsmithStretcher();
     stretcher->prepare(2, sampleRate);
     stretcher->setTransposeSemitones(keyShiftSemitones);
+    if (dryStretcher == nullptr)
+        dryStretcher = dsp::makeSignalsmithStretcher();
+    dryStretcher->prepare(2, sampleRate);
+    dryStretcher->setTransposeSemitones(keyShiftSemitones);
+    dryPrimed = false;
     const auto seekLength = static_cast<std::size_t>(stretcher->seekLength());
-    for (auto* v : {&stretchInL, &stretchInR})
+    for (auto* v : {&stretchInL, &stretchInR, &dryInL, &dryInR})
         v->assign(static_cast<std::size_t>(maxInput), 0.0f);
-    for (auto* v : {&stretchOutL, &stretchOutR})
+    for (auto* v : {&stretchOutL, &stretchOutR, &dryOutL, &dryOutR})
         v->assign(static_cast<std::size_t>(maxBlock), 0.0f);
     for (auto* v : {&seekL, &seekR})
         v->assign(seekLength, 0.0f);
@@ -187,6 +192,8 @@ void Deck::setKeyShift(int semitones) noexcept
     keyShiftSemitones = std::clamp(semitones, -12, 12);
     if (stretcher != nullptr)
         stretcher->setTransposeSemitones(keyShiftSemitones);
+    if (dryStretcher != nullptr)
+        dryStretcher->setTransposeSemitones(keyShiftSemitones);
 }
 
 // ---- tempo ----
@@ -237,6 +244,8 @@ void Deck::setPitchBend(double percent) noexcept
 void Deck::setTrack(const TrackBuffer* track) noexcept
 {
     buffer = track;
+    stemBuffer = nullptr; // the old track's (the engine hands them back)
+    resetStems();
     state = Transport::Paused;
     playhead = 0.0;
     cue = 0.0;
@@ -622,18 +631,151 @@ void Deck::readFrames(std::int64_t from, int count, float* left, float* right) c
     }
 }
 
+// ---- stems (P6-04) ----
+
+void Deck::setStems(const StemBuffer* stems) noexcept
+{
+    if (stemBuffer == nullptr) // from the track to its stems: start where the track is (every stem at 1)
+    {
+        mainGain.fill(1.0f);
+        dryGain.fill(0.0f);
+    }
+    stemBuffer = stems;
+    updateStemTargets();
+}
+
+void Deck::setStemLevel(int stem, float level) noexcept
+{
+    if (stem < 0 || stem >= kStems)
+        return;
+    stemSettings[static_cast<std::size_t>(stem)].level = std::clamp(level, 0.0f, 1.0f);
+    updateStemTargets();
+}
+
+void Deck::setStemMute(int stem, bool on) noexcept
+{
+    if (stem < 0 || stem >= kStems)
+        return;
+    stemSettings[static_cast<std::size_t>(stem)].mute = on;
+    updateStemTargets();
+}
+
+void Deck::setStemSolo(int stem, bool on) noexcept
+{
+    if (stem < 0 || stem >= kStems)
+        return;
+    stemSettings[static_cast<std::size_t>(stem)].solo = on;
+    updateStemTargets();
+}
+
+void Deck::setStemFx(int stem, bool on) noexcept
+{
+    if (stem < 0 || stem >= kStems)
+        return;
+    stemSettings[static_cast<std::size_t>(stem)].fx = on;
+    updateStemTargets();
+}
+
+void Deck::resetStems() noexcept
+{
+    stemSettings.fill(StemSetting{});
+    mainGain.fill(1.0f);
+    dryGain.fill(0.0f);
+    updateStemTargets();
+}
+
+void Deck::updateStemTargets() noexcept
+{
+    bool anySolo = false;
+    for (const auto& s : stemSettings)
+        anySolo = anySolo || s.solo;
+    for (std::size_t i = 0; i < static_cast<std::size_t>(kStems); ++i)
+    {
+        const auto& s = stemSettings[i];
+        const bool on = anySolo ? s.solo : !s.mute;
+        const float g = on ? s.level : 0.0f;
+        mainTarget[i] = s.fx ? g : 0.0f;
+        dryTarget[i] = s.fx ? 0.0f : g;
+    }
+}
+
+// This part's gain ramps (at most a full swing per kStemRampSeconds), and whether it reads the stems at all.
+void Deck::beginStemPart(int numSamples) noexcept
+{
+    const auto step = static_cast<float>(numSamples / std::max(1.0, kStemRampSeconds * sampleRate));
+    const auto toward = [step](float from, float target)
+    { return from < target ? std::min(target, from + step) : std::max(target, from - step); };
+    bool defaults = true;
+    bool dry = false;
+    for (std::size_t i = 0; i < static_cast<std::size_t>(kStems); ++i)
+    {
+        mainFrom[i] = mainGain[i];
+        dryFrom[i] = dryGain[i];
+        mainGain[i] = mainTo[i] = toward(mainGain[i], mainTarget[i]);
+        dryGain[i] = dryTo[i] = toward(dryGain[i], dryTarget[i]);
+        defaults = defaults && mainFrom[i] == 1.0f && mainTo[i] == 1.0f && dryFrom[i] == 0.0f && dryTo[i] == 0.0f;
+        dry = dry || dryFrom[i] > 0.0f || dryTo[i] > 0.0f;
+    }
+    useStems = stemBuffer != nullptr && !defaults;
+    useDry = useStems && dry;
+    if (!useDry)
+        dryPrimed = false;
+}
+
+// The stems at one position, each through the resampler with its gain (ramped: t = 0 .. 1 along the part).
+float Deck::readMix(int channel, double position, double rate, const float* from, const float* to, float t) const noexcept
+{
+    float v = 0.0f;
+    const int len = stemBuffer->length;
+    for (int s = 0; s < kStems; ++s)
+    {
+        const float g = from[s] + (to[s] - from[s]) * t;
+        if (g != 0.0f)
+            v += g * resampler.read(stemBuffer->channel(s, channel), len, position, rate);
+    }
+    return v;
+}
+
+void Deck::readFramesMix(std::int64_t from, int count, float* left, float* right, const float* gFrom,
+                         const float* gTo) const noexcept
+{
+    const auto len = static_cast<std::int64_t>(stemBuffer->length);
+    constexpr float kScale = 1.0f / 32768.0f;
+    for (int i = 0; i < count; ++i)
+    {
+        const auto p = from + i;
+        const float t = count > 1 ? static_cast<float>(i) / static_cast<float>(count - 1) : 1.0f;
+        float l = 0.0f, r = 0.0f;
+        if (p >= 0 && p < len)
+            for (int s = 0; s < kStems; ++s)
+            {
+                const float g = (gFrom[s] + (gTo[s] - gFrom[s]) * t) * kScale;
+                if (g == 0.0f)
+                    continue;
+                l += g * static_cast<float>(stemBuffer->channel(s, 0)[p]);
+                r += g * static_cast<float>(stemBuffer->channel(s, 1)[p]);
+            }
+        left[i] = l;
+        right[i] = r;
+    }
+}
+
 // Heard position = input fed - inputLatency - outputLatency x rate. Prime so the next output is the playhead.
 void Deck::primeStretcher(double rate) noexcept
 {
     const auto lead = static_cast<double>(stretcher->inputLatency()) + stretcher->outputLatency() * rate;
     const auto end = static_cast<std::int64_t>(std::llround(playhead + lead));
     const int n = stretcher->seekLength();
-    readFrames(end - n, n, seekL.data(), seekR.data());
+    if (useStems)
+        readFramesMix(end - n, n, seekL.data(), seekR.data(), mainFrom.data(), mainFrom.data());
+    else
+        readFrames(end - n, n, seekL.data(), seekR.data());
     const float* in[] = {seekL.data(), seekR.data()};
     stretcher->reset();
     stretcher->seek(in, n, rate);
     feedPosition = end;
     stretcherPrimed = true;
+    dryPrimed = false; // the dry stretcher primes at the same point when it's needed
 }
 
 void Deck::renderStretched(int numSamples, double playheadEnd, double rateEnd) noexcept
@@ -641,7 +783,26 @@ void Deck::renderStretched(int numSamples, double playheadEnd, double rateEnd) n
     const auto lead = static_cast<double>(stretcher->inputLatency()) + stretcher->outputLatency() * rateEnd;
     const auto target = static_cast<std::int64_t>(std::llround(playheadEnd + lead));
     const int count = static_cast<int>(std::clamp<std::int64_t>(target - feedPosition, 0, maxInput));
-    readFrames(feedPosition, count, stretchInL.data(), stretchInR.data());
+    if (useDry && !dryPrimed) // the dry output's stretcher, primed with the same history as the main one
+    {
+        const int n = dryStretcher->seekLength();
+        readFramesMix(feedPosition - n, n, seekL.data(), seekR.data(), dryFrom.data(), dryFrom.data());
+        const float* in[] = {seekL.data(), seekR.data()};
+        dryStretcher->reset();
+        dryStretcher->seek(in, n, blockRates[0]);
+        dryPrimed = true;
+    }
+    if (useStems)
+        readFramesMix(feedPosition, count, stretchInL.data(), stretchInR.data(), mainFrom.data(), mainTo.data());
+    else
+        readFrames(feedPosition, count, stretchInL.data(), stretchInR.data());
+    if (useDry)
+    {
+        readFramesMix(feedPosition, count, dryInL.data(), dryInR.data(), dryFrom.data(), dryTo.data());
+        const float* in[] = {dryInL.data(), dryInR.data()};
+        float* out[] = {dryOutL.data(), dryOutR.data()};
+        dryStretcher->process(in, count, out, numSamples);
+    }
     feedPosition += count;
 
     const float* in[] = {stretchInL.data(), stretchInR.data()};
@@ -649,19 +810,35 @@ void Deck::renderStretched(int numSamples, double playheadEnd, double rateEnd) n
     stretcher->process(in, count, out, numSamples);
 }
 
-void Deck::render(float* left, float* right, int numSamples) noexcept
+void Deck::render(float* left, float* right, float* dryLeft, float* dryRight, int numSamples) noexcept
 {
     std::fill(left, left + numSamples, 0.0f);
     std::fill(right, right + numSamples, 0.0f);
+    if (dryLeft != nullptr)
+    {
+        std::fill(dryLeft, dryLeft + numSamples, 0.0f);
+        std::fill(dryRight, dryRight + numSamples, 0.0f);
+    }
+    lastReadStems = lastDryActive = false;
     if (buffer == nullptr)
         return;
 
     if (numSamples > maxBlock) // larger than prepared: split (keeps the scratch buffers big enough)
     {
+        bool stems = false, dry = false;
         for (int done = 0; done < numSamples; done += maxBlock)
-            render(left + done, right + done, std::min(maxBlock, numSamples - done));
+        {
+            const int n = std::min(maxBlock, numSamples - done);
+            render(left + done, right + done, dryLeft != nullptr ? dryLeft + done : nullptr,
+                   dryRight != nullptr ? dryRight + done : nullptr, n);
+            stems = stems || lastReadStems;
+            dry = dry || lastDryActive;
+        }
+        lastReadStems = stems;
+        lastDryActive = dry;
         return;
     }
+    const auto at = [](float* p, int offset) { return p != nullptr ? p + offset : nullptr; };
 
     // A loop (P3-03): split the block at the sample the playhead reaches its end, wrap, go on.
     int done = 0;
@@ -687,7 +864,7 @@ void Deck::render(float* left, float* right, int numSamples) noexcept
         if (steps >= static_cast<double>(numSamples - done))
             break;
         const int n = std::max(1, static_cast<int>(steps));
-        renderPart(left + done, right + done, n);
+        renderPart(left + done, right + done, at(dryLeft, done), at(dryRight, done), n);
         done += n;
         if (!reverseOn && playhead >= loopOut)
             wrapLoop();
@@ -695,7 +872,7 @@ void Deck::render(float* left, float* right, int numSamples) noexcept
             wrapLoopBack();
     }
     if (done < numSamples)
-        renderPart(left + done, right + done, numSamples - done);
+        renderPart(left + done, right + done, at(dryLeft, done), at(dryRight, done), numSamples - done);
     // A brake / spin-back in a loop keeps it (to the block; the rate is changing anyway).
     if (loopOn && stopKind != StopKind::None && state != Transport::Paused)
     {
@@ -706,9 +883,13 @@ void Deck::render(float* left, float* right, int numSamples) noexcept
     }
 }
 
-void Deck::renderPart(float* left, float* right, int numSamples) noexcept
+void Deck::renderPart(float* left, float* right, float* dryLeft, float* dryRight, int numSamples) noexcept
 {
     const double len = length();
+    beginStemPart(numSamples);
+    lastReadStems = lastReadStems || useStems;
+    lastDryActive = lastDryActive || (useDry && dryLeft != nullptr);
+    const float invN = 1.0f / static_cast<float>(numSamples);
     const double bendStep = kPitchBendSlewPercentPerSecond / sampleRate;
 
     // Rates for this block (bend slews, scratch follows the hand, nudges add an offset), so key lock knows
@@ -762,8 +943,9 @@ void Deck::renderPart(float* left, float* right, int numSamples) noexcept
 
     for (int i = 0; i < numSamples; ++i)
     {
-        float l = 0.0f, r = 0.0f;
+        float l = 0.0f, r = 0.0f, dl = 0.0f, dr = 0.0f;
         const double rate = blockRates[static_cast<std::size_t>(i)];
+        const float t = static_cast<float>(i + 1) * invN; // along the stem gain ramps
 
         if (sounding)
         {
@@ -772,6 +954,21 @@ void Deck::renderPart(float* left, float* right, int numSamples) noexcept
             {
                 l += stretchOutL[static_cast<std::size_t>(i)] * g;
                 r += stretchOutR[static_cast<std::size_t>(i)] * g;
+                if (useDry)
+                {
+                    dl += dryOutL[static_cast<std::size_t>(i)] * g;
+                    dr += dryOutR[static_cast<std::size_t>(i)] * g;
+                }
+            }
+            else if (useStems)
+            {
+                l += readMix(0, playhead, rate, mainFrom.data(), mainTo.data(), t) * g;
+                r += readMix(1, playhead, rate, mainFrom.data(), mainTo.data(), t) * g;
+                if (useDry)
+                {
+                    dl += readMix(0, playhead, rate, dryFrom.data(), dryTo.data(), t) * g;
+                    dr += readMix(1, playhead, rate, dryFrom.data(), dryTo.data(), t) * g;
+                }
             }
             else
             {
@@ -801,19 +998,42 @@ void Deck::renderPart(float* left, float* right, int numSamples) noexcept
             }
         }
 
-        for (auto& t : tails)
+        for (auto& tail : tails)
         {
-            if (!t.active)
+            if (!tail.active)
                 continue;
-            const float progress = 1.0f - static_cast<float>(t.remaining) / static_cast<float>(fadeSamples);
-            const float g = t.startGain * std::cos(kHalfPi * progress);
-            l += readSample(0, t.position, rate) * g;
-            r += readSample(1, t.position, rate) * g;
-            t.position += rate;
-            if (--t.remaining <= 0)
-                t.active = false;
+            const float progress = 1.0f - static_cast<float>(tail.remaining) / static_cast<float>(fadeSamples);
+            const float g = tail.startGain * std::cos(kHalfPi * progress);
+            if (useStems)
+            {
+                l += readMix(0, tail.position, rate, mainFrom.data(), mainTo.data(), t) * g;
+                r += readMix(1, tail.position, rate, mainFrom.data(), mainTo.data(), t) * g;
+                if (useDry)
+                {
+                    dl += readMix(0, tail.position, rate, dryFrom.data(), dryTo.data(), t) * g;
+                    dr += readMix(1, tail.position, rate, dryFrom.data(), dryTo.data(), t) * g;
+                }
+            }
+            else
+            {
+                l += readSample(0, tail.position, rate) * g;
+                r += readSample(1, tail.position, rate) * g;
+            }
+            tail.position += rate;
+            if (--tail.remaining <= 0)
+                tail.active = false;
         }
 
+        if (dryLeft != nullptr)
+        {
+            dryLeft[i] = dl;
+            dryRight[i] = dr;
+        }
+        else
+        {
+            l += dl;
+            r += dr;
+        }
         left[i] = l;
         right[i] = r;
     }

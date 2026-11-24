@@ -37,7 +37,7 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
         effect->prepare(sampleRate, capacity);
     masterBus.setSize(2, capacity, false, true, false);
     cueBus.setSize(2, capacity, false, true, false);
-    deckScratch.setSize(2, capacity, false, true, false);
+    deckScratch.setSize(4, capacity, false, true, false); // 2, 3: a deck's stems past the effects (P6-04)
     for (auto& slot : decks)
         slot.deck.prepare(sampleRate, capacity);
     clock.prepare(sampleRate);
@@ -50,6 +50,8 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
         for (auto& slot : channel)
             slot.prepare(sampleRate, capacity);
     for (auto& strip : strips)
+        strip.prepare(sampleRate, capacity);
+    for (auto& strip : dryStrips) // P6-04
         strip.prepare(sampleRate, capacity);
     sampler.prepare(sampleRate, capacity); // P3-13
     // The Beat Maker (P4-10): its voices and its send effects (a 3/4-beat echo and the reverb, fully wet).
@@ -400,6 +402,53 @@ void AudioEngine::apply(const LoadTrack& command) noexcept
     requestTrack(command.deck, command.buffer, command.bufferId);
 }
 
+void AudioEngine::apply(const LoadStems& command) noexcept
+{
+    if (command.deck >= kMaxDecks)
+    {
+        releaseBuffer(command.bufferId);
+        return;
+    }
+    auto& slot = decks[command.deck];
+    if (slot.hasPending || slot.deck.track() == nullptr || slot.deck.track() != command.track ||
+        command.stems == nullptr || command.stems->track != command.track)
+    {
+        releaseBuffer(command.bufferId); // late: that track isn't (or won't stay) on the deck
+        return;
+    }
+    slot.deck.setStems(command.stems);
+    if (slot.stemsId != 0 && slot.stemsId != command.bufferId)
+        releaseBuffer(slot.stemsId); // replaced: the deck reads the new ones from the next render
+    slot.stemsId = command.bufferId;
+}
+
+void AudioEngine::apply(const SetStem& command) noexcept
+{
+    if (command.deck >= kMaxDecks)
+        return;
+    auto& deck = decks[command.deck].deck;
+    const int stem = command.stem;
+    const bool on = command.value > 0.5f;
+    switch (command.param)
+    {
+        case StemParam::Level:
+            deck.setStemLevel(stem, command.value);
+            break;
+        case StemParam::Mute:
+            deck.setStemMute(stem, on);
+            break;
+        case StemParam::Solo:
+            deck.setStemSolo(stem, on);
+            break;
+        case StemParam::Fx:
+            deck.setStemFx(stem, on);
+            break;
+        case StemParam::Reset:
+            deck.resetStems();
+            break;
+    }
+}
+
 void AudioEngine::apply(const UnloadTrack& command) noexcept
 {
     if (command.deck < kMaxDecks)
@@ -493,6 +542,9 @@ void AudioEngine::swapPendingTracks() noexcept
             continue;
         if (slot.id != 0 && slot.id != slot.pendingId)
             releaseBuffer(slot.id); // nothing reads it any more
+        if (slot.stemsId != 0)
+            releaseBuffer(slot.stemsId); // its stems too (P6-04)
+        slot.stemsId = 0;
         slot.deck.setTrack(slot.pendingBuffer);
         slot.id = slot.pendingId;
         slot.hasPending = false;
@@ -1613,9 +1665,11 @@ void AudioEngine::apply(const JumpBy& command) noexcept
         deck.seek(deck.position() + command.seconds * sampleRate);
 }
 
-void AudioEngine::renderDeckWithActions(DeckSlot& slot, float* l, float* r, int numSamples) noexcept
+bool AudioEngine::renderDeckWithActions(DeckSlot& slot, float* l, float* r, float* dl, float* dr,
+                                        int numSamples) noexcept
 {
     int done = 0;
+    bool dry = false;
     while (slot.queuedCount > 0)
     {
         auto& a = slot.queued[0];
@@ -1646,7 +1700,8 @@ void AudioEngine::renderDeckWithActions(DeckSlot& slot, float* l, float* r, int 
             break;
         if (due > done)
         {
-            slot.deck.render(l + done, r + done, due - done);
+            slot.deck.render(l + done, r + done, dl + done, dr + done, due - done);
+            dry = dry || slot.deck.dryActive();
             done = due;
         }
         const auto action = a;
@@ -1665,7 +1720,11 @@ void AudioEngine::renderDeckWithActions(DeckSlot& slot, float* l, float* r, int 
         }
     }
     if (done < numSamples)
-        slot.deck.render(l + done, r + done, numSamples - done);
+    {
+        slot.deck.render(l + done, r + done, dl + done, dr + done, numSamples - done);
+        dry = dry || slot.deck.dryActive();
+    }
+    return dry;
 }
 
 void AudioEngine::apply(const Pause& command) noexcept
@@ -1987,10 +2046,26 @@ void AudioEngine::renderDecks(int numSamples) noexcept
             continue;
         }
         const double before = slot.deck.position();
-        renderDeckWithActions(slot, l, r, numSamples);
+        float* dl = deckScratch.getWritePointer(2);
+        float* dr = deckScratch.getWritePointer(3);
+        const bool dry = renderDeckWithActions(slot, l, r, dl, dr, numSamples);
         updateSlicer(slot);
         renderMetronome(i, before, slot.deck.position(), numSamples);
-        mixChannel(static_cast<int>(i), l, r, numSamples);
+        if (dry) // stems past the effects (P6-04): their own strip, with the channel's settings
+        {
+            auto& ds = dryStrips[i];
+            const auto& src = strips[i];
+            ds.setTrimDb(src.trimDb());
+            ds.setEqMode(src.eqMode());
+            for (int b = 0; b < ChannelStrip::kBands; ++b)
+                ds.setBandDb(b, src.bandDb(b));
+            ds.setFilter(src.filter());
+            ds.setFilterResonance(src.filterResonance());
+            if (!slot.dryWasActive)
+                ds.reset(); // fresh state at the settings (the stems ramp in from silence)
+        }
+        slot.dryWasActive = dry;
+        mixChannel(static_cast<int>(i), l, r, numSamples, dry ? dl : nullptr, dry ? dr : nullptr);
         if (releaseFx[i].finished()) // ended on the effect: the deck pauses; back to normal once it is silent
         {
             if (slot.deck.isPlaying())
@@ -2135,7 +2210,7 @@ void AudioEngine::renderSampler(int numSamples) noexcept
     }
 }
 
-void AudioEngine::mixChannel(int channel, float* l, float* r, int numSamples) noexcept
+void AudioEngine::mixChannel(int channel, float* l, float* r, int numSamples, float* dl, float* dr) noexcept
 {
     const auto i = static_cast<std::size_t>(channel);
     auto& m = mixer[i];
@@ -2150,6 +2225,15 @@ void AudioEngine::mixChannel(int channel, float* l, float* r, int numSamples) no
                   : channel == kCodeDeckChannel  ? FxTarget::CodeDeck
                                                  : FxTarget::Sampler,
                   l, r, numSamples); // FX units on this channel (P3-08)
+        if (dl != nullptr && channel < kMaxDecks) // a deck's stems past the effects (P6-04), joining here
+        {
+            dryStrips[i].processPreFader(dl, dr, numSamples);
+            for (int s = 0; s < numSamples; ++s)
+            {
+                l[s] += dl[s];
+                r[s] += dr[s];
+            }
+        }
         m.meter.process(l, r, numSamples);
         if (m.cueSend.isRamping() || m.cueSend.value() > 0.0)
         {
@@ -2328,6 +2412,22 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
             s.hotCueLength[c] = slot.hotCues[c].set ? slot.hotCues[c].length : 0.0;
         }
         s.hotCuePreview = slot.hotCuePreview;
+        s.stemsLoaded = d.stems() != nullptr; // P6-04
+        s.stemsId = slot.stemsId;
+        s.stemMute = s.stemSolo = s.stemFx = 0;
+        for (int st = 0; st < Deck::kStems; ++st)
+        {
+            s.stemLevel[static_cast<std::size_t>(st)] = d.stemLevel(st);
+            const auto bit = static_cast<std::uint8_t>(1u << st);
+            if (d.stemMuted(st))
+                s.stemMute |= bit;
+            if (d.stemSoloed(st))
+                s.stemSolo |= bit;
+            if (d.stemFx(st))
+                s.stemFx |= bit;
+        }
+        s.stemsActive = d.readingStems();
+        s.stemsDry = d.dryActive();
         s.loopActive = d.loopActive();
         s.loopStart = d.loopStart();
         s.loopEnd = d.loopEnd();

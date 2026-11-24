@@ -45,6 +45,10 @@ Implemented so far (P1-16): cue, play, pitch bend, tempo steps, filter sweep / r
 | Key lock | Ctrl+W | Ctrl+I |
 | Headphone cue (CUE button) | Ctrl+E | Ctrl+O |
 | Make master deck | Ctrl+R | Ctrl+P |
+| Stems (P6-04): mute drums / bass / other / vocals | Alt+Q / Alt+W / Alt+E / Alt+R | Alt+U / Alt+I / Alt+O / Alt+P |
+| Stems: solo drums / bass / other / vocals | Alt+Shift+Q / W / E / R | Alt+Shift+U / I / O / P |
+| Stems: FX send on / off (off: the stem skips the deck's effects) | Alt+A / Alt+S / Alt+D / Alt+F | Alt+J / Alt+K / Alt+L / Alt+; |
+| Stems: all back to normal | Alt+Z | Alt+M |
 
 ## Mixer, FX and global
 
