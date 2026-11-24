@@ -57,6 +57,19 @@ public:
     void showTabMenu(int index);
     void askRename(int index);
 
+    // P5-14 feedback. An error: its tab and place (line / column from 1; 0 = unknown) marked on the line, the
+    // message in the bar under the editor (it stays until the next good evaluation). A note: the last result or
+    // a warning (amber). The status: cycle, cps, events / s, late (right of the bar).
+    void setError(int tab, int line, int column, const juce::String& message);
+    void clearError();
+    void setNote(const juce::String& text, bool warning);
+    void setStatus(const juce::String& text);
+    void refreshMarker(); // follows scrolling (the app's timer)
+    bool hasError() const noexcept { return error.active; }
+    juce::String barText() const;                  // what the bar's left side says
+    juce::Rectangle<int> markerBounds() const;     // where the marker is (empty when not shown)
+    const juce::String& statusText() const noexcept { return status; }
+
     void resized() override;
     void paint(juce::Graphics& g) override;
 
@@ -70,6 +83,19 @@ private:
     std::vector<std::unique_ptr<Page>> pages;
     int shown = 0;
     juce::TextButton plus{"+"};
+
+    struct Error
+    {
+        bool active = false;
+        int tab = 0, line = 0, column = 0;
+        juce::String message;
+    } error;
+    juce::String note, status;
+    bool noteIsWarning = false;
+    struct Marker final : juce::Component
+    {
+        void paint(juce::Graphics& g) override;
+    } marker;
 };
 
 } // namespace devildj::ui

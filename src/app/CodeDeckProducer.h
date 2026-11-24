@@ -58,6 +58,8 @@ public:
         double meanTickMs = 0.0, maxTickMs = 0.0;   // the spacing of the ticks
         double minLeadMs = 0.0, maxLeadMs = 0.0;    // how far ahead of now events were made
         std::string lastError;
+        std::uint64_t evaluations = 0; // P5-14: how many have finished (a new one: `last` is its result)
+        codebeat::EvalResult last;
     };
 
     using Push = std::function<bool(const engine::ScheduledEvent&)>;

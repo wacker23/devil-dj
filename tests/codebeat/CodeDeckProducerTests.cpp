@@ -382,3 +382,33 @@ TEST_CASE("Code deck: sounds through the sound bank - kinds, synth notes, warnin
     CHECK(st.unknownSounds >= 8);
     CHECK(std::none_of(names.begin(), names.end(), [](const std::string& n) { return n.find("bdd") != std::string::npos; }));
 }
+
+TEST_CASE("Code deck: each evaluation's result is in the status, errors with their place (P5-14)", "[codebeat][scheduler]")
+{
+    std::vector<CodeDeckProducer::Status> after;
+    onBigStack([&]
+    {
+        Sim sim;
+        sim.start(R"(s("bd*4"))");
+        sim.tickTo(0.1);
+        after.push_back(sim.producer->status());
+        sim.producer->submit("const a = 1;\nlet b = ;");
+        sim.tickTo(0.2);
+        after.push_back(sim.producer->status());
+        sim.producer->submit(R"(s("hh*8"))"); // waits for the cycle line
+        sim.tickTo(0.3);
+        after.push_back(sim.producer->status());
+    });
+    REQUIRE(after.size() == 3);
+    CHECK(after[0].evaluations == 1);
+    CHECK(after[0].last.ok);
+    CHECK_FALSE(after[0].last.waitsForCycle); // the first pattern plays at once
+    CHECK(after[1].evaluations == 2);
+    CHECK_FALSE(after[1].last.ok);
+    CHECK(after[1].last.line == 2);
+    CHECK(after[1].last.column > 0);
+    CHECK(after[1].playing); // the last good pattern keeps playing
+    CHECK(after[2].evaluations == 3);
+    CHECK(after[2].last.ok);
+    CHECK(after[2].last.waitsForCycle);
+}

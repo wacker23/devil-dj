@@ -297,6 +297,8 @@ void CodeDeckProducer::tick()
                 counters.playing = r.playing;
             counters.lastError = r.ok ? std::string() : r.error;
             counters.beatsPerCycle = beatsPerCycle;
+            ++counters.evaluations;
+            counters.last = r;
         }
         if (onEvaluated)
             onEvaluated(r);

@@ -149,3 +149,45 @@ TEST_CASE("Keys while typing in the code editor: only the code deck's, never the
     press(scan::Z, mods::None, KeyContext::Main, false);
     CHECK(performed == std::vector<CommandId>{deckCommand(0, DeckAction::Cue)});
 }
+
+TEST_CASE("Code editor panel: an error marked on its line, notes and the status line (P5-14)", "[ui][codebeat][editor]")
+{
+    CodeEditorPanel panel;
+    panel.setSize(800, 400);
+    panel.setTabs({{"one", "const a = 1;\nlet b = ;\ns(\"bd\")\n"}, {"two", "s(\"hh\")"}}, 0);
+    CHECK_FALSE(panel.hasError());
+    CHECK(panel.markerBounds().isEmpty());
+
+    panel.setError(0, 2, 9, "SyntaxError: unexpected token");
+    CHECK(panel.hasError());
+    CHECK(panel.barText() == "line 2:9  SyntaxError: unexpected token");
+    // The marker sits on line 2 of the editor (below line 1, inside the editor's area).
+    const auto m = panel.markerBounds();
+    REQUIRE_FALSE(m.isEmpty());
+    const auto* ed = panel.editor(0);
+    const auto line1 = panel.getLocalArea(ed, ed->getCharacterBounds(juce::CodeDocument::Position(*panel.document(0), 0, 0)));
+    const auto line2 = panel.getLocalArea(ed, ed->getCharacterBounds(juce::CodeDocument::Position(*panel.document(0), 1, 0)));
+    CHECK(m.getY() == line2.getY());
+    CHECK(m.getY() > line1.getY());
+    CHECK(ed->getBounds().contains(m));
+    // Only on its own tab.
+    panel.showTab(1);
+    CHECK(panel.markerBounds().isEmpty());
+    panel.showTab(0);
+    CHECK_FALSE(panel.markerBounds().isEmpty());
+    // A place outside the text is kept inside it; no place at all is just the message.
+    panel.setError(0, 99, 0, "too far");
+    CHECK_FALSE(panel.markerBounds().isEmpty());
+    panel.setError(0, 0, 0, "Error: no place");
+    CHECK(panel.barText() == "Error: no place");
+    CHECK(panel.markerBounds().isEmpty());
+
+    // A good evaluation clears it; notes and the status line.
+    panel.clearError();
+    CHECK_FALSE(panel.hasError());
+    CHECK(panel.markerBounds().isEmpty());
+    panel.setNote("plays from the next cycle", false);
+    CHECK(panel.barText() == "plays from the next cycle");
+    panel.setStatus("cycle 3.5   0.50 cps   8 events/s   0 late");
+    CHECK(panel.statusText() == "cycle 3.5   0.50 cps   8 events/s   0 late");
+}

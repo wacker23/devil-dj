@@ -824,7 +824,10 @@ void MainComponent::registerActions()
                                        beatPanel.perform(static_cast<GA>(a));
                                });
     onPress(ui::globalCommand(GA::SwitchPanel), [this] { switchBottomPanel(); });
-    // The code editor's tabs (P5-13).
+    // The code editor's tabs (P5-13) and evaluation (P5-14).
+    onPress(ui::globalCommand(GA::CodeEvaluate), [this] { evaluateCode(false); });
+    onPress(ui::globalCommand(GA::CodeEvaluateNow), [this] { evaluateCode(true); });
+    onPress(ui::globalCommand(GA::CodeHush), [this] { hushCode(); });
     onPress(ui::globalCommand(GA::CodeNextBuffer), [this] { codeEditor.nextTab(1); });
     onPress(ui::globalCommand(GA::CodePreviousBuffer), [this] { codeEditor.nextTab(-1); });
     // The transition editor's keys (P4-17).
@@ -2188,6 +2191,51 @@ void MainComponent::updateCodeDeck()
     if (codeWasPlaying && !st.playing)
         engine.send(engine::CodeDeckStop{});
     codeWasPlaying = st.playing;
+    // P5-14: an evaluation finished - its error (marked on its line, the last good pattern keeps playing) or its note.
+    if (st.evaluations != codeEvaluationsSeen)
+    {
+        codeEvaluationsSeen = st.evaluations;
+        const auto& r = st.last;
+        if (!r.ok)
+            codeEditor.setError(codeEvaluatedTab, r.line, r.column,
+                                juce::String::fromUTF8(r.error.c_str()) + "  - the last good pattern keeps playing");
+        else
+        {
+            codeEditor.clearError();
+            juce::String note = !r.message.empty() ? juce::String::fromUTF8(r.message.c_str())
+                                : !r.playing       ? juce::String("silent")
+                                : r.waitsForCycle  ? juce::String("plays from the next cycle")
+                                                   : juce::String("playing");
+            if (r.bpm)
+                note << "  (setbpm(" << *r.bpm << ") needs the code deck to lead the clock: not applied)";
+            if (!r.printed.empty())
+                note << "  print: " << juce::String::fromUTF8(r.printed.back().c_str());
+            codeEditor.setNote(note, false);
+        }
+    }
+    if (st.warnings.size() != codeWarningsSeen)
+    {
+        codeWarningsSeen = st.warnings.size();
+        if (!st.warnings.empty())
+            codeEditor.setNote(juce::String::fromUTF8(st.warnings.back().c_str()), true);
+    }
+    // The status line: cycle, cycles per second, events per second, late events.
+    const double t = juce::Time::getMillisecondCounterHiRes() * 0.001;
+    if (t - codeRateTime >= 1.0)
+    {
+        codeEventsPerSecond = codeRateTime > 0.0 ? static_cast<double>(st.pushed - codePushedBefore) / (t - codeRateTime) : 0.0;
+        codePushedBefore = st.pushed;
+        codeRateTime = t;
+    }
+    if (codeEditor.isVisible())
+    {
+        const double cps = es.masterBpm / 60.0 / std::max(1.0, st.beatsPerCycle);
+        codeEditor.setStatus(juce::String("cycle ") + juce::String(std::max(0.0, st.cycle), 1) + "   " + juce::String(cps, 2) +
+                             " cps   " + juce::String(juce::roundToInt(codeEventsPerSecond)) + " events/s   " +
+                             juce::String(static_cast<juce::int64>(st.late + es.codeLateEvents)) + " late" +
+                             (st.slowWindows > 0 ? "   " + juce::String(static_cast<juce::int64>(st.slowWindows)) + " too slow" : juce::String()));
+        codeEditor.refreshMarker();
+    }
     if (codeStrip.isVisible())
     {
         codeStrip.refresh();
@@ -2248,6 +2296,21 @@ void MainComponent::setUpCodeEditor()
         saveSoon();
     };
     addChildComponent(codeEditor);
+}
+
+void MainComponent::evaluateCode(bool now)
+{
+    codeEvaluatedTab = codeEditor.current();
+    codeProducer->submit(codeEditor.text(codeEvaluatedTab).toStdString(), now);
+    codeEditor.setNote(now ? "evaluating (now)..." : "evaluating...", false);
+    saveCodeBuffers(); // what is played is what is on disk
+}
+
+void MainComponent::hushCode()
+{
+    codeProducer->submit("hush()", true);
+    engine.send(engine::CodeDeckStop{}); // what is queued goes now, what sounds fades out
+    codeEditor.setNote("hushed - Ctrl+Enter plays the code again", false);
 }
 
 void MainComponent::saveCodeBuffers()

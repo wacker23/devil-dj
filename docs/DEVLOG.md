@@ -11,6 +11,25 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P5-14 Keys + feedback
+- What changed:
+  - The keys in the code editor:
+    - Ctrl+Enter evaluates the shown tab; the pattern takes over at the next cycle line.
+    - Ctrl+Shift+Enter evaluates it at once.
+    - Ctrl+. hushes: `hush()` at once, and the code deck's queue emptied and its voices released.
+    - The evaluated text is saved first, so what plays is what is on disk.
+  - Feedback under the editor, in a bar:
+    - An error is marked on its line (a red band from the first character, following scrolling, on its own tab only).
+    - The message shows with its place: `line 2:9  SyntaxError: ... - the last good pattern keeps playing`. The last good pattern does keep playing (P5-08).
+    - Otherwise the bar shows the last result ("plays from the next cycle", "playing", "silent", the evaluator's message, the last print line) or the newest warning in amber (`unknown sound "bdd" - did you mean "bd"?`).
+    - At the right of the bar is the status line: cycle, cycles per second (master BPM / 60 / beats per cycle), events per second, late events (producer + engine), and "too slow" windows when there are any.
+  - `CodeDeckProducer::Status` carries `evaluations` and the `last` EvalResult, so the message thread sees each result once.
+  - setbpm() is reported as not applied (the code deck doesn't lead the clock yet).
+- Tests: 2 new Catch2 cases (Release and Debug).
+  - The panel: the marker on line 2 and only on its tab, a place past the text kept inside it, no place means no marker, notes and the status line.
+  - The producer status: each evaluation counted, a syntax error with line 2 while the old pattern plays, then a pattern waiting for the cycle line.
+- Owner (the done check): type a pattern, Ctrl+Enter, change it, Ctrl+Enter (the swap at the next bar), make a typo (the red line and the message while the music goes on), Ctrl+. (silence), and watch the status line.
+
 ## 2026-11-24 · P5-13 Editor component
 - What changed:
   - `ui/CodeTokeniser` colours the code for `juce::CodeEditorComponent`.

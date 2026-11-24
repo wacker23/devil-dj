@@ -13,6 +13,9 @@ const juce::Colour kText(0xffe8e8ee);
 const juce::Colour kDim(0xff8a8a96);
 const juce::Colour kCode(0xff5fd38a);
 constexpr int kTabHeight = 26;
+constexpr int kBarHeight = 22;
+const juce::Colour kError(0xffe05050);
+const juce::Colour kWarning(0xffe0a030);
 
 void styleTab(juce::TextButton& b)
 {
@@ -72,9 +75,86 @@ CodeEditorPanel::CodeEditorPanel()
             onAdd();
     };
     addAndMakeVisible(plus);
+    marker.setInterceptsMouseClicks(false, false);
+    addChildComponent(marker);
 }
 
 CodeEditorPanel::~CodeEditorPanel() = default;
+
+void CodeEditorPanel::Marker::paint(juce::Graphics& g)
+{
+    g.setColour(kError.withAlpha(0.18f));
+    g.fillRect(getLocalBounds());
+    g.setColour(kError);
+    g.fillRect(getLocalBounds().removeFromLeft(3));
+    g.drawLine(0.0f, static_cast<float>(getHeight()) - 1.0f, static_cast<float>(getWidth()), static_cast<float>(getHeight()) - 1.0f, 1.0f);
+}
+
+void CodeEditorPanel::setError(int tab, int line, int column, const juce::String& message)
+{
+    error = {true, tab, line, column, message};
+    refreshMarker();
+    repaint();
+}
+
+void CodeEditorPanel::clearError()
+{
+    error = {};
+    marker.setVisible(false);
+    repaint();
+}
+
+void CodeEditorPanel::setNote(const juce::String& text, bool warning)
+{
+    note = text;
+    noteIsWarning = warning;
+    repaint();
+}
+
+void CodeEditorPanel::setStatus(const juce::String& text)
+{
+    if (text == status)
+        return;
+    status = text;
+    repaint(getLocalBounds().removeFromBottom(kBarHeight));
+}
+
+juce::String CodeEditorPanel::barText() const
+{
+    if (error.active)
+        return (error.line > 0 ? "line " + juce::String(error.line) + (error.column > 0 ? ":" + juce::String(error.column) : juce::String()) + "  "
+                               : juce::String()) + error.message;
+    return note;
+}
+
+juce::Rectangle<int> CodeEditorPanel::markerBounds() const
+{
+    return marker.isVisible() ? marker.getBounds() : juce::Rectangle<int>();
+}
+
+void CodeEditorPanel::refreshMarker()
+{
+    auto* ed = editor(error.tab);
+    if (!error.active || error.line <= 0 || error.tab != shown || ed == nullptr || !ed->isVisible())
+    {
+        marker.setVisible(false);
+        return;
+    }
+    auto& doc = *document(error.tab);
+    const int line = std::min(error.line, std::max(1, doc.getNumLines())) - 1;
+    const auto start = ed->getCharacterBounds(juce::CodeDocument::Position(doc, line, 0));
+    const auto area = ed->getBounds();
+    // From the line's first character (after the line numbers) to the editor's right edge (less the scrollbar).
+    auto row = getLocalArea(ed, start).withRight(area.getRight() - 12);
+    if (row.getBottom() <= area.getY() || row.getY() >= area.getBottom())
+    {
+        marker.setVisible(false); // scrolled out of view
+        return;
+    }
+    marker.setBounds(row.getIntersection(area));
+    marker.setVisible(true);
+    marker.toFront(false);
+}
 
 std::unique_ptr<CodeEditorPanel::Page> CodeEditorPanel::makePage(const Tab& tab)
 {
@@ -199,6 +279,7 @@ void CodeEditorPanel::showTab(int index)
     }
     if (hadFocus)
         focusEditor();
+    refreshMarker(); // an error is marked on its own tab only
     if (onShown)
         onShown(shown);
 }
@@ -272,8 +353,10 @@ void CodeEditorPanel::resized()
         bar.removeFromLeft(2);
     }
     plus.setBounds(bar.removeFromLeft(28));
+    area.removeFromBottom(kBarHeight); // the message and the status
     for (auto& p : pages)
         p->editor->setBounds(area);
+    refreshMarker();
 }
 
 void CodeEditorPanel::paint(juce::Graphics& g)
@@ -281,6 +364,16 @@ void CodeEditorPanel::paint(juce::Graphics& g)
     g.fillAll(kBackground);
     g.setColour(kPanel);
     g.fillRect(getLocalBounds().removeFromTop(kTabHeight));
+    // The bar under the editor: the error / note at the left, the status at the right.
+    auto bar = getLocalBounds().removeFromBottom(kBarHeight);
+    g.fillRect(bar);
+    bar.reduce(8, 0);
+    g.setFont(juce::FontOptions(13.0f));
+    g.setColour(kDim);
+    const int statusWidth = std::min(bar.getWidth() / 2, juce::roundToInt(juce::GlyphArrangement::getStringWidth(g.getCurrentFont(), status)) + 8);
+    g.drawText(status, bar.removeFromRight(statusWidth), juce::Justification::centredRight, true);
+    g.setColour(error.active ? kError : noteIsWarning ? kWarning : kText);
+    g.drawText(barText(), bar, juce::Justification::centredLeft, true);
 }
 
 } // namespace devildj::ui

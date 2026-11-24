@@ -231,6 +231,14 @@ private:
     std::unique_ptr<juce::TimedCallback> codeSaveTimer;
     void setUpCodeEditor();
     void saveCodeBuffers();
+    // P5-14: Ctrl+Enter (at the next cycle line) / Ctrl+Shift+Enter (now) / Ctrl+. (hush).
+    void evaluateCode(bool now);
+    void hushCode();
+    int codeEvaluatedTab = 0;               // the tab the running evaluation came from
+    std::uint64_t codeEvaluationsSeen = 0;  // the producer's evaluations already shown
+    std::size_t codeWarningsSeen = 0;
+    std::uint64_t codePushedBefore = 0;     // events / s: the count and the time a second ago
+    double codeRateTime = 0.0, codeEventsPerSecond = 0.0;
     void updateCodeDeck(); // the app's timer: clock, DJ hooks, new sounds, hush, the strip
     std::array<std::optional<beatmaker::SoundRef>, 128> sentDrumSounds;
     std::array<std::optional<beatmaker::SynthPreset>, 128> sentSynthSounds;
