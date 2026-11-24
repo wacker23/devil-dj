@@ -28,6 +28,7 @@
 #include "app/CodeBuffers.h"
 #include "app/CodeDeckProducer.h"
 #include "app/BeatRender.h"
+#include "library/PhraseRepository.h"
 #include "app/DrumSwapBank.h"
 #include "app/StemDeckLoader.h"
 #include "app/StemService.h"
@@ -363,7 +364,12 @@ private:
         bool autoGainPending = false; // loaded before its loudness was known: set the trim when it is
         bool autoGainAtLoad = false;  // the first time, right after the load
         float autoGainTrim = 0.0f;    // the trim Auto Gain set (a later analysis result only replaces that)
+        library::StoredPhrases phrases; // P6-06 (seconds)
     };
+    // Phrases (P6-06): shown on the deck's waveform; right-click there to edit (saved as the owner's).
+    void showPhrases(engine::DeckId deck);
+    void showPhraseMenu(engine::DeckId deck, double sample);
+    void savePhrases(engine::DeckId deck, std::vector<library::StoredPhrase> phrases);
     bool autoGain = true;
     double autoGainTarget = -10.0;
     bool quantize = false;

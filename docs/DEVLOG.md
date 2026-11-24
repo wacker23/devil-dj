@@ -11,6 +11,25 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-25 · P6-06 Phrase detection
+- Owner decisions:
+  - Evaluate on a generated set now, plus the owner's tracks once their markers are corrected in the app.
+  - Phrases get their own library table (schema v4).
+- What changed:
+  - `analysis::detectPhrases`: per-bar chroma, band levels and onset density; a bar self-similarity matrix and Foote novelty (8-bar checkerboard); a DP for phrases of 8/16/24/32 bars (4 at a cost); energy 0..1 per phrase. Starts are stored in seconds. Analysis version 7 (every track is analyzed again once).
+  - Library: schema v4 `phrases` and `library::PhraseRepository`. Analysis writes a track's phrases only when the owner hasn't edited them.
+  - App: phrase lines with their bar count, and an energy strip, on the zoomed waveform. Right-click to start a phrase at the nearest bar, move the nearest line here, remove it, or go back to the analysis (which re-analyzes the track). Edits are saved as the owner's (`app/PhraseEdit`).
+- Tests / measurements:
+  - Evaluation set: 40 generated tracks with known sections, 331 boundaries. Hard cases on purpose: hat patterns changing every 4 bars, snare fills, 4-bar extensions, chord-only changes.
+  - Result on the bar: F 0.82 (P 0.77, R 0.88; 292 hits, 380 found). Every hit is on the exact bar, so within a bar gives the same F. Recall after a 20-bar section is weakest at 9/16; after 36 bars it's 7/7.
+  - Parameters were tuned on 30 other seeds (best F 0.82 there), not on the evaluation set. Speed: about 1000x real time.
+  - Also tested: the writer keeps edited phrases, the analyzer runs on the beat analyzer's grid, and the edit functions (add, move, remove, bars from the grid).
+  - The owner's edited tracks: hidden test `[.phraseeval]` (reads the library, changes nothing). It reports nothing yet because no track has been edited.
+- Notes / follow-ups:
+  - Phrases use the grid the analysis finds. A track whose grid the owner locked or moved may need its phrases corrected by hand.
+  - Auto transition (P4-16) still uses its own 4-bar lines. Using phrases there is P6-08 (mix points).
+  - Not checked on the owner's tracks yet.
+
 ## 2026-11-25 · P6-05 Drum Capture + Drum Swap
 - Owner decisions:
   - Single mode plays one slot at a time, and the slot playing again brings the drums back; multi layers the loops.

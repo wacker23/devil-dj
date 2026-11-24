@@ -22,6 +22,7 @@
 #include "library/MissingFiles.h"
 #include "library/PlaylistFiles.h"
 #include "library/TrackRepository.h"
+#include "app/PhraseEdit.h"
 #include "MainLayout.h"
 #include "RecordingSheets.h"
 #include "util/Log.h"
@@ -816,6 +817,8 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
         { util::logWarning("Stems: deck {}: {}", engine::deckLetter(deck), error.toStdString()); });
     for (auto* w : {&waveA, &waveB})
         w->setStemLookup([this](engine::BufferId id) { return registry.getStems(id); });
+    waveA.onContextMenu = [this](double sample) { showPhraseMenu(0, sample); }; // P6-06
+    waveB.onContextMenu = [this](double sample) { showPhraseMenu(1, sample); };
     deckA.stemStrip().onWaveView = [this](bool on) { waveA.setStemView(on); };
     deckB.stemStrip().onWaveView = [this](bool on) { waveB.setStemView(on); };
     // Drum Swap (P6-05): the banks need the device rate; loaded as soon as the engine has one.
@@ -4307,6 +4310,7 @@ void MainComponent::loadGridFor(engine::DeckId deck, const juce::File& file, dou
             }
             s->reset();
         }
+    showPhrases(deck);                   // none until the library says (P6-06)
     playTracker.loaded(deck, d.trackId); // P2-23: the history counts library tracks
     loadHotCues(deck);                   // P3-01
     loadMemoryCues(deck);                // P3-02
@@ -4447,6 +4451,13 @@ void MainComponent::reloadGrid(engine::DeckId deck)
             d.autoGainAtLoad = false;
         }
     }
+    // Phrases (P6-06): analysis results and edits arrive here too.
+    if (auto stored = library::PhraseRepository(*gridReader).get(d.trackId);
+        stored.phrases != d.phrases.phrases || stored.edited != d.phrases.edited)
+    {
+        d.phrases = std::move(stored);
+        showPhrases(deck);
+    }
     util::Beatgrid grid;
     if (const auto stored = library::BeatgridRepository(*gridReader).get(d.trackId))
     {
@@ -4463,6 +4474,79 @@ void MainComponent::reloadGrid(engine::DeckId deck)
         return;
     d.grid = grid;
     sendGrid(deck);
+}
+
+// ---- phrases (P6-06) ----
+
+void MainComponent::showPhrases(engine::DeckId deck)
+{
+    if (deck >= 2)
+        return;
+    const auto& d = deckGrids[deck];
+    std::vector<ui::WaveformView::PhraseMark> marks;
+    if (d.trackId != 0 && d.bufferRate > 0.0)
+        for (const auto& p : d.phrases.phrases)
+            marks.push_back({p.startSeconds * d.bufferRate, p.bars, static_cast<float>(p.energy)});
+    (deck == 0 ? waveA : waveB).setPhrases(std::move(marks), d.phrases.edited);
+}
+
+void MainComponent::savePhrases(engine::DeckId deck, std::vector<library::StoredPhrase> phrases)
+{
+    auto& d = deckGrids[deck];
+    if (libraryDb == nullptr || d.trackId == 0)
+        return;
+    phrases = withBars(std::move(phrases), d.grid, d.bufferRate,
+                       static_cast<double>(engine.readState().decks[deck].lengthSamples));
+    d.phrases = {phrases, true};
+    showPhrases(deck);
+    const auto id = d.trackId;
+    libraryDb->write([id, phrases](library::Connection& c) { library::PhraseRepository(c).set(id, phrases, true); });
+}
+
+void MainComponent::showPhraseMenu(engine::DeckId deck, double sample)
+{
+    if (deck >= 2)
+        return;
+    const auto& d = deckGrids[deck];
+    if (d.trackId == 0 || d.bufferRate <= 0.0)
+        return;
+    const auto& g = d.grid;
+    juce::PopupMenu m;
+    m.addSectionHeader("Phrases");
+    if (g.empty())
+    {
+        m.addItem("Phrases need a beatgrid", false, false, [] {});
+        m.showMenuAsync(juce::PopupMenu::Options().withMousePosition());
+        return;
+    }
+    // The bar nearest the click, and the phrase line nearest it (within 2 bars).
+    const double bar = nearestBarSeconds(g, sample, d.bufferRate);
+    const double twoBars = 2.0 * util::Beatgrid::kBeatsPerBar * 60.0 / std::max(1.0, g.bpmAt(sample));
+    const auto& list = d.phrases.phrases;
+    const int nearest = nearestPhrase(list, sample / d.bufferRate, twoBars);
+    const bool taken = nearestPhrase(list, bar, 1e-3) >= 0;
+    m.addItem("A phrase starts at this bar", !taken, false,
+              [this, deck, bar] { savePhrases(deck, addPhrase(deckGrids[deck].phrases.phrases, bar)); });
+    m.addItem("Move the nearest phrase line here", nearest >= 0 && !taken, false,
+              [this, deck, nearest, bar] { savePhrases(deck, movePhrase(deckGrids[deck].phrases.phrases, nearest, bar)); });
+    m.addItem("Remove the nearest phrase line", nearest >= 0 && list.size() > 1, false,
+              [this, deck, nearest] { savePhrases(deck, removePhrase(deckGrids[deck].phrases.phrases, nearest)); });
+    m.addSeparator();
+    m.addItem("Back to the analysis's phrases", d.phrases.edited, false, [this, deck]
+              {
+                  const auto id = deckGrids[deck].trackId;
+                  if (libraryDb == nullptr || id == 0)
+                      return;
+                  libraryDb->write(
+                      [id](library::Connection& c)
+                      {
+                          library::PhraseRepository(c).set(id, {}, false);
+                          c.exec("UPDATE tracks SET analysis_version = 0 WHERE id = " + std::to_string(id));
+                      });
+                  if (analysisService != nullptr)
+                      analysisService->prioritize(id); // analyzed again (BPM and grid stay if locked)
+              });
+    m.showMenuAsync(juce::PopupMenu::Options().withMousePosition());
 }
 
 void MainComponent::saveGrid(engine::DeckId deck)

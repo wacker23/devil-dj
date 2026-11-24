@@ -4,6 +4,7 @@
 #include "analysis/KeyDetector.h"
 #include "analysis/FeatureNormalizer.h"
 #include "analysis/Loudness.h"
+#include "analysis/PhraseDetector.h"
 #include "analysis/TrackFeatures.h"
 #include "analysis/WaveformCache.h"
 #include "dsp/SincResampler.h"
@@ -110,6 +111,24 @@ void AnalysisService::featureAnalyzer(const AnalysisInput& input, AnalysisResult
         result.groove = packFloats(*f.groove);
 }
 
+void AnalysisService::phraseAnalyzer(const AnalysisInput& input, AnalysisResult& result)
+{
+    // On the grid the beat analyzer found (in the file's samples), at the mono signal's rate.
+    if (!result.beatgridJson || input.full.sampleRate <= 0.0)
+        return;
+    const auto g = util::Beatgrid::fromJson(*result.beatgridJson, input.full.sampleRate);
+    if (!g)
+        return;
+    const auto a = detectPhrases(input.mono.data(), static_cast<int>(input.mono.size()), AnalysisInput::kMonoRate,
+                                 g->rescaled(AnalysisInput::kMonoRate));
+    if (a.phrases.empty())
+        return;
+    std::vector<library::StoredPhrase> out;
+    for (const auto& p : a.phrases)
+        out.push_back({p.startSeconds, p.bars, p.energy});
+    result.phrases = std::move(out);
+}
+
 void AnalysisService::basicsAnalyzer(const AnalysisInput& input, AnalysisResult& result)
 {
     // The exact length and rate from the decoded audio (tags and file headers can be off, VBR MP3s especially).
@@ -137,6 +156,7 @@ AnalysisService::AnalysisService(library::Database& database, Decoder decoder, O
         options.analyzers.push_back(&AnalysisService::keyAnalyzer);
         options.analyzers.push_back(&AnalysisService::loudnessAnalyzer);
         options.analyzers.push_back(&AnalysisService::featureAnalyzer);
+        options.analyzers.push_back(&AnalysisService::phraseAnalyzer);
     }
     int n = options.workers;
     if (n <= 0)
@@ -419,6 +439,29 @@ void AnalysisService::flushResults(bool force)
                             if (!f->run())
                                 return false;
                             featuresDirty = true;
+                        }
+                        if (r.phrases) // P6-06: unless the owner edited them
+                        {
+                            library::PhraseRepository phrases(c);
+                            if (!phrases.edited(id))
+                            {
+                                auto* d = c.prepare("DELETE FROM phrases WHERE track_id = ?");
+                                if (d == nullptr || !d->bind(1, id).run())
+                                    return false;
+                                for (std::size_t k = 0; k < r.phrases->size(); ++k)
+                                {
+                                    const auto& p = (*r.phrases)[k];
+                                    auto* s2 = c.prepare("INSERT INTO phrases (track_id, idx, start_seconds, bars, energy) "
+                                                         "VALUES (?, ?, ?, ?, ?)");
+                                    if (s2 == nullptr || !s2->bind(1, id)
+                                                              .bind(2, static_cast<std::int64_t>(k))
+                                                              .bind(3, p.startSeconds)
+                                                              .bind(4, p.bars)
+                                                              .bind(5, p.energy)
+                                                              .run())
+                                        return false;
+                                }
+                            }
                         }
                         if (r.beatgridJson)
                         {

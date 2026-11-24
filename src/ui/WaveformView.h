@@ -50,6 +50,24 @@ public:
     }
     bool stemViewOn() const noexcept { return stemView; }
 
+    // Phrases (P6-06): a line at each start with its length in bars, and its energy as a strip along the bottom.
+    struct PhraseMark
+    {
+        double sample = 0.0; // buffer samples
+        int bars = 0;
+        float energy = 0.0f; // 0..1
+    };
+    void setPhrases(std::vector<PhraseMark> marks, bool edited)
+    {
+        phrases = std::move(marks);
+        phrasesEdited = edited;
+        repaint();
+    }
+    const std::vector<PhraseMark>& phraseMarks() const noexcept { return phrases; }
+    // Right-click: the app's menu for that position (buffer samples) - phrase editing.
+    std::function<void(double sample)> onContextMenu;
+    double sampleAtX(float x) const; // the deck's position under x (as last drawn)
+
     // A track being loaded (P2-17): its cached waveform, drawn from its start until the deck has the new buffer.
     void showPreview(std::shared_ptr<const analysis::Waveform> waveform);
     void clearPreview() { preview.reset(); }
@@ -97,6 +115,9 @@ private:
     GridSource gridSource;
     std::array<std::uint32_t, 16> hotCueColours{};
     std::vector<std::pair<double, std::uint32_t>> memoryCues;
+    std::vector<PhraseMark> phrases;
+    bool phrasesEdited = false;
+    double drawnLeftSample = 0.0, drawnSpp = 1.0; // the last paint's mapping, for sampleAtX
     LatencySource latency;
     engine::BufferId shownBuffer = 0;
     std::shared_ptr<const engine::TrackBuffer> track;

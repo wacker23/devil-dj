@@ -197,6 +197,7 @@ Mouse: click a lane point and drag it (quarter beats; Alt: free), click elsewher
 | Drag on zoomed waveform | Scratch (playing) or scrub (paused); release resumes |
 | Scroll on zoomed waveform | Fine nudge |
 | Ctrl + scroll on waveform | Zoom |
+| Right-click on zoomed waveform | Phrases (P6-06): a phrase starts at this bar / move the nearest phrase line here / remove it / back to the analysis's phrases |
 | Click on overview waveform | Seek (quantized if quantize is on) |
 | Drag knob / fader vertically | Change value; Alt = fine |
 | Scroll over knob / fader | Change value |

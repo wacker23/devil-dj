@@ -11,6 +11,7 @@ target_sources(DevilDJTests PRIVATE
     analysis/InferenceSessionTests.cpp
     analysis/BeatThisTests.cpp
     analysis/StemSeparatorTests.cpp
+    analysis/PhraseDetectorTests.cpp
     analysis/AnalysisSmokeTests.cpp
     analysis/BeatTrackerTests.cpp
     analysis/KeyDetectorTests.cpp
@@ -41,6 +42,7 @@ target_sources(DevilDJTests PRIVATE
     app/StemServiceTests.cpp
     app/StemDeckLoaderTests.cpp
     app/DrumSwapBankTests.cpp
+    app/PhraseEditTests.cpp
     app/CodeRenderTests.cpp
     app/LayoutTests.cpp
     app/SettingsTests.cpp

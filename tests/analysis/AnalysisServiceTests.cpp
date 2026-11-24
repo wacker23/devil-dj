@@ -1,5 +1,6 @@
 // P2-12: analysis service. Done when: 500 tracks analyze in the background while two decks play with no xruns.
 
+#include "PhraseEval.h"
 #include "TestData.h"
 #include "analysis/AnalysisService.h"
 #include "analysis/WaveformCache.h"
@@ -11,6 +12,7 @@
 #include "library/Connection.h"
 #include "library/Database.h"
 #include "library/Importer.h"
+#include "library/PhraseRepository.h"
 #include "library/TrackRepository.h"
 #include "util/RealtimeGuard.h"
 #include "util/ThreadPriority.h"
@@ -402,4 +404,55 @@ TEST_CASE("Analysis service: 10-minute tracks while two decks play", "[analysis]
     if (!mp3.existsAsFile() || !test::mediaFoundationAvailable())
         SKIP("Needs the 10-minute MP3 and Media Foundation");
     analyzeWhileDecksPlay(mp3, 20, true);
+}
+
+TEST_CASE("Analysis service: phrases are written, an owner's edited phrases stay (P6-06)", "[analysis][service][phrases]")
+{
+    Lib lib;
+    const auto ids = lib.addFake(2, 3.0);
+    const std::vector<library::StoredPhrase> found{{0.5, 8, 0.4}, {16.5, 16, 0.9}};
+    FakeDecoder decoder;
+    AnalysisService::Options options;
+    options.workers = 1;
+    options.analyzers = {&AnalysisService::basicsAnalyzer,
+                         [&](const analysis::AnalysisInput&, analysis::AnalysisResult& r) { r.phrases = found; }};
+    // The second track's phrases were edited by the owner before.
+    const std::vector<library::StoredPhrase> mine{{1.0, 32, 0.5}};
+    lib.db->writeAndWait([&](library::Connection& c) { CHECK(library::PhraseRepository(c).set(ids[1], mine, true)); });
+    {
+        AnalysisService service(*lib.db, decoder.make(), options);
+        service.queueOutdated();
+        REQUIRE(service.waitUntilIdle(60.0));
+    }
+    library::PhraseRepository repo(*lib.reader);
+    const auto a = repo.get(ids[0]);
+    CHECK(a.phrases == found);
+    CHECK_FALSE(a.edited);
+    const auto b = repo.get(ids[1]);
+    CHECK(b.phrases == mine);
+    CHECK(b.edited);
+    CHECK(repo.editedTracks() == std::vector<std::int64_t>{ids[1]});
+}
+
+TEST_CASE("Analysis service: the phrase analyzer works on the beat analyzer's grid", "[analysis][service][phrases]")
+{
+    const auto t = test::makePhraseTrack(11);
+    // The "file" at 44.1 kHz: the generated 22.05 kHz track doubled (only its grid and length matter here).
+    auto full = std::make_shared<std::vector<float>>(t.mono.size() * 2);
+    for (std::size_t i = 0; i < full->size(); ++i)
+        (*full)[i] = t.mono[i / 2];
+    analysis::DecodedAudio audio;
+    audio.left = audio.right = full->data();
+    audio.numSamples = static_cast<int>(full->size());
+    audio.sampleRate = 44100.0;
+    audio.owner = full;
+    analysis::AnalysisInput in{audio, t.mono};
+    analysis::AnalysisResult r;
+    AnalysisService::phraseAnalyzer(in, r);
+    CHECK_FALSE(r.phrases); // no grid yet: nothing
+    r.beatgridJson = t.grid.rescaled(44100.0).toJson();
+    AnalysisService::phraseAnalyzer(in, r);
+    REQUIRE(r.phrases);
+    REQUIRE(r.phrases->size() >= 4);
+    CHECK(std::abs(r.phrases->front().startSeconds - t.grid.sampleAt(0.0) / t.rate) < 1e-3);
 }

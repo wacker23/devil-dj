@@ -199,6 +199,31 @@ void WaveformView::paint(juce::Graphics& g)
             drawBandColumn(g, static_cast<float>(x), 1.0f, mid, half, peaks, x < centreX ? 0.55f : 0.95f);
         }
 
+        drawnLeftSample = leftSample;
+        drawnSpp = spp;
+        // Phrases (P6-06): a line at each start (its bars on top), the energy as a strip along the bottom.
+        if (preview == nullptr && !phrases.empty())
+        {
+            const juce::Colour phraseColour(0xff8fd0ff);
+            g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+            for (std::size_t i = 0; i < phrases.size(); ++i)
+            {
+                const auto& p = phrases[i];
+                const double end = i + 1 < phrases.size() ? phrases[i + 1].sample : leftSample + width * spp + 1.0;
+                const auto x0 = static_cast<float>((p.sample - leftSample) / spp);
+                const auto x1 = static_cast<float>((end - leftSample) / spp);
+                if (x1 < area.getX() || x0 > area.getRight())
+                    continue;
+                const float h = 3.0f + 9.0f * std::clamp(p.energy, 0.0f, 1.0f);
+                g.setColour(phraseColour.withAlpha(0.15f + 0.45f * p.energy));
+                g.fillRect(juce::Rectangle<float>(x0, area.getBottom() - h, x1 - x0, h).getIntersection(area));
+                g.setColour(phraseColour.withAlpha(phrasesEdited ? 0.95f : 0.75f));
+                g.fillRect(x0 - 1.0f, area.getY() + 12.0f, 2.0f, area.getHeight() - 12.0f);
+                g.drawText(juce::String(p.bars), juce::Rectangle<float>(x0 + 3.0f, area.getY() + 12.0f, 30.0f, 12.0f),
+                           juce::Justification::centredLeft);
+            }
+        }
+
         // The loop (P3-03): its span shaded green, its ends as lines.
         if (preview == nullptr && s.loopActive && s.loopEnd > s.loopStart)
         {
@@ -379,16 +404,31 @@ void WaveformView::nudgeNotches(double notches)
 
 void WaveformView::mouseDown(const juce::MouseEvent& e)
 {
+    if (e.mods.isPopupMenu()) // P6-06: the app's menu (phrases) - no scratch
+    {
+        if (onContextMenu)
+            onContextMenu(sampleAtX(e.position.x));
+        return;
+    }
     beginDrag(e.position.x);
+}
+
+double WaveformView::sampleAtX(float x) const
+{
+    return drawnLeftSample + static_cast<double>(x) * drawnSpp;
 }
 
 void WaveformView::mouseDrag(const juce::MouseEvent& e)
 {
+    if (e.mods.isPopupMenu())
+        return;
     dragTo(e.position.x);
 }
 
-void WaveformView::mouseUp(const juce::MouseEvent&)
+void WaveformView::mouseUp(const juce::MouseEvent& e)
 {
+    if (e.mods.isPopupMenu())
+        return;
     endDrag();
 }
 

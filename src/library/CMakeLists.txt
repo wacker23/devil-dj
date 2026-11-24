@@ -1,6 +1,7 @@
 # library: SQLite database + migrations, tags, track import, repositories. No JUCE.
 add_library(devildj_library STATIC
     BeatgridRepository.cpp
+    PhraseRepository.cpp
     Connection.cpp
     ContentHash.cpp
     Database.cpp
@@ -24,6 +25,7 @@ target_sources(devildj_library PUBLIC
     BASE_DIRS "${PROJECT_SOURCE_DIR}/src"
     FILES
         BeatgridRepository.h
+        PhraseRepository.h
         Connection.h
         ContentHash.h
         Database.h

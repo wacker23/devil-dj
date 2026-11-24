@@ -158,7 +158,21 @@ CREATE TABLE transitions (
 );
 )sql";
 
-constexpr std::array<std::string_view, 3> kMigrations{kSchemaV1, kSchemaV2, kSchemaV3};
+// Schema v4 (P6-06): phrases - start (seconds), bars, energy; `edited` when the owner changed them (analysis then
+// leaves the track's phrases alone).
+constexpr std::string_view kSchemaV4 = R"sql(
+CREATE TABLE phrases (
+  track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+  idx INTEGER NOT NULL,
+  start_seconds REAL NOT NULL,
+  bars INTEGER NOT NULL,
+  energy REAL NOT NULL,
+  edited INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (track_id, idx)
+);
+)sql";
+
+constexpr std::array<std::string_view, 4> kMigrations{kSchemaV1, kSchemaV2, kSchemaV3, kSchemaV4};
 } // namespace
 
 std::span<const std::string_view> migrations() noexcept
