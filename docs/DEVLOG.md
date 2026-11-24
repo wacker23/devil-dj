@@ -11,6 +11,25 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P5-17 Render
+- What changed:
+  - `app/CodeRender::renderCode(code, options)` renders N cycles offline.
+    - It uses a private AudioEngine at the tempo (internal clock) and a private CodeDeckProducer on a simulated clock. That producer is ticked every ~25 ms of audio (5 blocks of 256 at 48 kHz), exactly as playback does, and its new sounds are installed the same way.
+    - It renders from the first cycle line after the code is loaded (where a pattern evaluated "now" first sounds whole).
+    - Events at or after the last cycle's end are dropped, so the tail has only decays and sends.
+    - Sample folders' files are decoded for the render itself, because the app's sample bank may only be used from the message thread.
+    - The result carries the code's error (nothing rendered), its warnings, beats per cycle (setcpb) and the loop length.
+    - Call it on a thread with a big stack.
+  - The CODE page has a RENDER button for the shown tab at the master tempo:
+    - 4 or 8 cycles to a WAV file (24-bit, with a 2 s tail, in the Beat Maker's renders folder by default);
+    - 1 or 4 cycles to the sampler as a seamless loop (no tail; the shown bank's first empty slot; named "Code <tab> <bpm>").
+    - It runs on its own 16 MB-stack thread, one at a time; the result is reported under the editor.
+- Tests: 3 new Catch2 cases (Release and Debug).
+  - **Render vs real-time playback** of a deterministic three-part pattern (drums, a filtered saw with reverb, a sub bass with echo): 384,000 samples (4 cycles at 120 BPM) are compared with playback driven the app's way. **0 samples differ.**
+  - Lengths from cycles, tempo and setcpb(3); no tail for a loop; nothing played after the end.
+  - A user sample folder is decoded and heard; a code error renders nothing and says why; an unknown sound is a warning.
+- Phase 5 is done except its Beta gate (owner, with outside testers).
+
 ## 2026-11-24 · P5-16 Autocomplete + help
 - What changed:
   - `src/codebeat/help/reference.json` is a reference table of 85 names, written for Devil-DJ. Each has a kind (control, function, method, signal, program, hook), a signature, a line of help and a working example.

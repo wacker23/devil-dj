@@ -98,6 +98,14 @@ CodeEditorPanel::CodeEditorPanel()
         m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&examples));
     };
     addAndMakeVisible(examples);
+    styleTab(render);
+    render.setTooltip("Render the shown tab's code offline: to a WAV file, or a loop in the sampler");
+    render.onClick = [this]
+    {
+        if (onRender)
+            onRender();
+    };
+    addAndMakeVisible(render);
     bubble.setInterceptsMouseClicks(false, false);
     addChildComponent(bubble);
 }
@@ -582,6 +590,8 @@ void CodeEditorPanel::resized()
     }
     plus.setBounds(bar.removeFromLeft(28));
     examples.setBounds(bar.removeFromRight(90));
+    bar.removeFromRight(2);
+    render.setBounds(bar.removeFromRight(80));
     area.removeFromBottom(kBarHeight); // the message and the status
     for (auto& p : pages)
         p->editor->setBounds(area);

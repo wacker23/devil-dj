@@ -184,6 +184,7 @@ Mouse: click a lane point and drag it (quarter beats; Alt: free), click elsewher
 | Autocomplete (names; sounds inside strings) | Ctrl+Space |
 | Help for a name | hover the mouse over it |
 | Starter patterns | the EXAMPLES button (a new tab) |
+| Render to a WAV file / a sampler loop | the RENDER button |
 
 ## Mouse, trackpad and touch
 

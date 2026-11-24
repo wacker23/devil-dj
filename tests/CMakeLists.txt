@@ -35,6 +35,7 @@ target_sources(DevilDJTests PRIVATE
     app/CodeSoundBankTests.cpp
     app/CodeDeckChannelTests.cpp
     app/CodeBuffersTests.cpp
+    app/CodeRenderTests.cpp
     app/LayoutTests.cpp
     app/SettingsTests.cpp
     app/SoakTestTests.cpp

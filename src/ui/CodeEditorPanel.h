@@ -85,6 +85,9 @@ public:
     juce::String helpText() const { return bubble.text; }
     juce::TextButton& examplesButton() { return examples; }
     std::function<void(const juce::String& title, const juce::String& code)> onExample;
+    // P5-17: the RENDER button (the app shows its menu: cycles to a WAV file or the sampler).
+    juce::TextButton& renderButton() { return render; }
+    std::function<void()> onRender;
     std::vector<juce::Rectangle<int>> highlightRects() const; // where they are drawn (for tests)
 
     void resized() override;
@@ -122,7 +125,7 @@ private:
     std::vector<std::pair<int, int>> litRanges;
     void placeLights();
 
-    juce::TextButton examples{"EXAMPLES"};
+    juce::TextButton examples{"EXAMPLES"}, render{"RENDER"};
     std::vector<juce::String> soundNames;
     struct Bubble final : juce::Component
     {

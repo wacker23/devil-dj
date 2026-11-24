@@ -234,6 +234,11 @@ private:
     // P5-14: Ctrl+Enter (at the next cycle line) / Ctrl+Shift+Enter (now) / Ctrl+. (hush).
     void evaluateCode(bool now);
     std::vector<juce::String> soundNamesForCompletion(); // P5-16: built-in names and sample folders
+    // P5-17: the shown tab rendered offline (on a thread with a big stack for the JavaScript).
+    void showCodeRenderMenu();
+    void renderCode(int cycles, bool toSampler);
+    std::unique_ptr<juce::Thread> codeRenderJob;
+    std::unique_ptr<juce::FileChooser> codeRenderChooser;
     void hushCode();
     int codeEvaluatedTab = 0;               // the tab the running evaluation came from
     std::uint64_t codeEvaluationsSeen = 0;  // the producer's evaluations already shown

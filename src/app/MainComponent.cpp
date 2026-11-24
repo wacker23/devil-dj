@@ -1,5 +1,7 @@
 #include "MainComponent.h"
 
+#include "app/CodeRender.h"
+
 #include "analysis/Loudness.h"
 #include "matcher/CandidateQuery.h"
 #include "beatmaker/DrumKits.h"
@@ -1262,6 +1264,8 @@ void MainComponent::toggleKeyLock(engine::DeckId deck)
 
 MainComponent::~MainComponent()
 {
+    if (codeRenderJob != nullptr)
+        codeRenderJob->stopThread(30000); // a render finishes on its own (it can't be stopped half-way)
     saveCodeBuffers(); // what was typed in the last second too
     loader.callbacks = {}; // the loader outlives this component; don't let late results call into it
     importJob = nullptr;   // stops a running import (between batches) before the browser goes
@@ -2303,6 +2307,7 @@ void MainComponent::setUpCodeEditor()
         codeEditor.addTab({codeBuffers.at(i).name, codeBuffers.at(i).text});
         saveSoon();
     };
+    codeEditor.onRender = [this] { showCodeRenderMenu(); };
     codeEditor.onClose = [this, saveSoon](int index)
     {
         codeBuffers.remove(index);
@@ -2325,6 +2330,123 @@ void MainComponent::hushCode()
     codeProducer->submit("hush()", true);
     engine.send(engine::CodeDeckStop{}); // what is queued goes now, what sounds fades out
     codeEditor.setNote("hushed - Ctrl+Enter plays the code again", false);
+}
+
+void MainComponent::showCodeRenderMenu()
+{
+    juce::PopupMenu m;
+    m.addSectionHeader("Render \"" + codeEditor.name(codeEditor.current()) + "\" at " +
+                       juce::String(engine.readState().masterBpm, 1) + " BPM");
+    m.addItem("4 cycles to a WAV file...", [this] { renderCode(4, false); });
+    m.addItem("8 cycles to a WAV file...", [this] { renderCode(8, false); });
+    m.addSeparator();
+    m.addItem("1 cycle to the sampler (a loop)", [this] { renderCode(1, true); });
+    m.addItem("4 cycles to the sampler (a loop)", [this] { renderCode(4, true); });
+    m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&codeEditor.renderButton()));
+}
+
+namespace
+{
+// A one-off job on a thread with a big stack (QuickJS needs it); `done` comes back on the message thread.
+struct CodeRenderThread final : juce::Thread
+{
+    std::function<void()> work;
+    explicit CodeRenderThread(std::function<void()> w)
+        : juce::Thread("Code render", 16 * 1024 * 1024)
+        , work(std::move(w))
+    {
+    }
+    void run() override { work(); }
+};
+} // namespace
+
+void MainComponent::renderCode(int cycles, bool toSampler)
+{
+    if (codeRenderJob != nullptr && codeRenderJob->isThreadRunning())
+    {
+        codeEditor.setNote("a render is running - one at a time", true);
+        return;
+    }
+    const auto& es = engine.readState();
+    app::CodeRenderOptions o;
+    o.cycles = cycles;
+    o.bpm = es.masterBpm;
+    o.sampleRate = es.sampleRate > 0.0 ? es.sampleRate : 48000.0;
+    o.blockSize = es.blockSize > 0 ? es.blockSize : 256;
+    o.tailSeconds = toSampler ? 0.0 : 2.0; // a sampler loop: exactly the cycles
+    o.samplesFolder = samplesFolder();
+    const auto code = codeEditor.text(codeEditor.current()).toStdString();
+    const auto name = codeEditor.name(codeEditor.current());
+    const auto safe = juce::Component::SafePointer<MainComponent>(this);
+    const auto start = [this, safe, code, o](std::function<void(std::shared_ptr<app::CodeRenderResult>)> done)
+    {
+        if (codeRenderJob != nullptr)
+            codeRenderJob->stopThread(1000); // the last one is finished; let it go
+        codeRenderJob = std::make_unique<CodeRenderThread>(
+            [code, o, done]
+            {
+                auto r = std::make_shared<app::CodeRenderResult>(app::renderCode(code, o));
+                juce::MessageManager::callAsync([done, r] { done(r); });
+            });
+        codeRenderJob->startThread();
+        codeEditor.setNote("rendering " + juce::String(o.cycles) + (o.cycles == 1 ? " cycle..." : " cycles..."), false);
+    };
+    const auto failed = [safe](const app::CodeRenderResult& r)
+    {
+        if (safe != nullptr && r.audio == nullptr)
+            safe->codeEditor.setNote("render: " + juce::String::fromUTF8(r.error.c_str()), true);
+        return r.audio == nullptr;
+    };
+    if (!toSampler)
+    {
+        beatRendersFolder().createDirectory();
+        const auto file = beatRendersFolder().getChildFile(
+            juce::File::createLegalFileName("Code " + name + " " + juce::String(cycles) + " cycles.wav"));
+        codeRenderChooser = std::make_unique<juce::FileChooser>("Render the code to a WAV file", file, "*.wav");
+        codeRenderChooser->launchAsync(
+            juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
+            [start, safe, failed](const juce::FileChooser& fc)
+            {
+                auto target = fc.getResult();
+                if (target == juce::File() || safe == nullptr)
+                    return;
+                if (!target.hasFileExtension("wav"))
+                    target = target.withFileExtension("wav");
+                start([safe, failed, target](std::shared_ptr<app::CodeRenderResult> r)
+                      {
+                          if (safe == nullptr || failed(*r))
+                              return;
+                          const auto error = app::writeLoopWav(*r->audio, 0, r->audio->numSamples(), target, 24);
+                          safe->codeEditor.setNote(error.isEmpty() ? "saved " + target.getFullPathName() : error, error.isNotEmpty());
+                      });
+            });
+        return;
+    }
+    start([safe, failed, name](std::shared_ptr<app::CodeRenderResult> r)
+          {
+              if (safe == nullptr || failed(*r))
+                  return;
+              auto& self = *safe;
+              // The shown bank's first empty slot, else any empty one, else the bank's first (as the Beat Maker's).
+              const auto& st = self.engine.readState();
+              const int bank = self.samplerPanel.bank() * engine::Sampler::kSlotsPerBank;
+              int slot = -1;
+              for (int i = 0; i < engine::Sampler::kSlots && slot < 0; ++i)
+                  if (const int c = (bank + i) % engine::Sampler::kSlots; !st.sampler[static_cast<std::size_t>(c)].loaded)
+                      slot = c;
+              if (slot < 0)
+                  slot = bank;
+              std::shared_ptr<const engine::TrackBuffer> loop(r->audio.release());
+              const auto* raw = loop.get();
+              const auto id = self.registry.add(loop);
+              if (!self.engine.send(engine::SamplerLoad{static_cast<std::uint8_t>(slot), raw, id, static_cast<float>(r->bpm)}))
+              {
+                  self.registry.release(id);
+                  return;
+              }
+              self.samplerPanel.setSlotName(slot, "Code " + name + " " + juce::String(r->bpm, 1));
+              self.codeEditor.setNote("\"" + name + "\" is in sampler slot " + juce::String(slot + 1), false);
+          });
 }
 
 std::vector<juce::String> MainComponent::soundNamesForCompletion()
