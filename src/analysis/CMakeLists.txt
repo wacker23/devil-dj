@@ -2,6 +2,7 @@
 # loudness to come. No JUCE (the app hands it a decoder).
 add_library(devildj_analysis STATIC
     AnalysisService.cpp
+    BeatThis.cpp
     BeatTracker.cpp
     FeatureNormalizer.cpp
     InferenceSession.cpp
@@ -17,6 +18,7 @@ target_sources(devildj_analysis PUBLIC
     BASE_DIRS "${PROJECT_SOURCE_DIR}/src"
     FILES
         AnalysisService.h
+        BeatThis.h
         BeatTracker.h
         FeatureNormalizer.h
         Fft.h

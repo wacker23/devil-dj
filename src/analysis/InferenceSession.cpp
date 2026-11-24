@@ -13,7 +13,8 @@ namespace
 // One ONNX Runtime environment for the process (made on first use; it is thread-safe).
 Ort::Env& environment()
 {
-    static Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "devil-dj");
+    // Errors only: its warnings (e.g. "shape ops run on the CPU" under DirectML) are expected and not ours to fix.
+    static Ort::Env env(ORT_LOGGING_LEVEL_ERROR, "devil-dj");
     return env;
 }
 

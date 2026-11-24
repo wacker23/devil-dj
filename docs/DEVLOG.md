@@ -11,6 +11,34 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P6-02 Beat tracker v2 (part 1: the port; the evaluation is the owner's)
+- Owner decision (2026-11-24): do P6-02, PyTorch installed (dev-only) to export the model.
+- Licence verified at the source: Beat This! code and published weights are MIT (github.com/CPJKU/beat_this, README "License"). The authors note that some training data is copyrighted or under limited CC licences. Recorded in LICENSES.md.
+- What changed:
+  - `tools/beatthis/export_onnx.py` (dev-only, in `build/venv-beatthis` with PyTorch 2.15 CPU, torchaudio, beat-this, onnx, onnxruntime):
+    - exports `final0` to `build/models/beat_this_final0.onnx` (83 MB, dynamic length; ONNX matches PyTorch to 3e-5). The model is not in git.
+    - writes the reference data to `tests/data/beatthis`: our own 8 s synthetic clip at 22.05 kHz; torchaudio's mel filterbank; the original front-end's spectrogram; the original chunked inference's logits for the clip and for 77 s of its first 16 beats; the original post-processing's beats.
+  - `analysis/BeatThis` is our own C++ port, written from the original's description and checked against that reference:
+    - the front-end (STFT 1024 / hop 441, centred, reflect-padded, periodic Hann, divided by sqrt(n_fft) as torchaudio's "frame_length" normalisation does; 128 Slaney mels from 30 Hz to 11 kHz; log1p(1000 x));
+    - chunked inference (1500 frames, 6-frame borders, earlier chunks kept);
+    - the minimal post-processing (+-3 frame peaks with logits above 0, neighbours merged, downbeats on their nearest beat);
+    - a constant beatgrid from the beats, numbered gap by gap so the 20 ms frame grid doesn't drift over long tracks;
+    - `chooseGrid(v1, v2)` per track, by which grid fits more of its own beats within 25 ms (v1 on a tie, and for live bands unless v2 is clearly better).
+  - `AnalysisService::Options::beatModel`: when set and loadable, the beat analyzer runs both trackers and keeps the better grid. **The app doesn't set it yet**: making v2 the default bumps the analysis version, which re-analyses the library, and waits for the evaluation.
+  - The owner's evaluation (`[.eval]`) reports v1, v2 and the per-track choice side by side when the model is in build/models.
+- Tests: 8 new Catch2 cases (Release and Debug).
+  - Filterbank within 1.2e-5 of torchaudio's. Spectrogram within 1.1e-4. Logits within 3e-5. 77 s of chunked logits within 8e-5. Beats equal.
+  - The grid: 126 BPM with jitter, missing and stray beats, the bar from downbeats.
+  - The choice rules.
+  - 77 s through the chunks gives 124 BPM with 100 % of beats on the grid.
+  - The service's analyzer with and without v2 on 120 BPM clicks.
+  - ONNX Runtime now logs errors only.
+- First run on the owner's folder (Music\DJ_collection, 100 MP3s, none with a BPM tag, so no accuracy yet):
+  - The evaluation now also runs both trackers on untagged tracks and lists where they disagree.
+  - v1 and v2 agree within 0.5 BPM on 89 of 100, with none an octave apart.
+  - On the other 11, v1 mostly says a whole BPM (128.00, 130.00, 145.00) and v2 is 0.5-3.5 BPM off it (129.47, 130.54, 143.54). For produced music that points to v1.
+- Still to do (the done check): run `[.eval]` on the owner's evaluation folder with known BPMs. Then keep v2 (enable it in the app, bump the analysis version, ship the model) if it beats v1, else drop it.
+
 ## 2026-11-24 · P6-01 ONNX Runtime integration
 - Owner decision (2026-11-24): ONNX Runtime with DirectML.
   - ONNX Runtime 1.24.4 is MIT, already on the approved list.

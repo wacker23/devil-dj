@@ -57,6 +57,24 @@ void AnalysisService::beatAnalyzer(const AnalysisInput& input, AnalysisResult& r
     result.beatgridJson = beatgridJson(grid, input.full.sampleRate);
 }
 
+Analyzer AnalysisService::beatAnalyzerWith(std::shared_ptr<BeatThisTracker> v2)
+{
+    if (v2 == nullptr)
+        return &AnalysisService::beatAnalyzer;
+    return [v2](const AnalysisInput& input, AnalysisResult& result)
+    {
+        const auto v1 = trackBeats(input.mono.data(), static_cast<int>(input.mono.size()), AnalysisInput::kMonoRate);
+        BeatGrid second;
+        if (auto out = v2->track(input.mono.data(), static_cast<int>(input.mono.size())))
+            second = std::move(out.value().grid);
+        const auto& grid = chooseGrid(v1, second);
+        if (!grid.valid)
+            return;
+        result.bpm = grid.bpm;
+        result.beatgridJson = beatgridJson(grid, input.full.sampleRate);
+    };
+}
+
 void AnalysisService::keyAnalyzer(const AnalysisInput& input, AnalysisResult& result)
 {
     const auto key = detectKey(input.mono.data(), static_cast<int>(input.mono.size()), AnalysisInput::kMonoRate);
@@ -112,7 +130,10 @@ AnalysisService::AnalysisService(library::Database& database, Decoder decoder, O
     if (options.analyzers.empty())
     {
         options.analyzers.push_back(&AnalysisService::basicsAnalyzer);
-        options.analyzers.push_back(&AnalysisService::beatAnalyzer);
+        if (!options.beatModel.empty())
+            if (auto t = BeatThisTracker::open(options.beatModel))
+                beatThis = std::move(t.value());
+        options.analyzers.push_back(beatAnalyzerWith(beatThis));
         options.analyzers.push_back(&AnalysisService::keyAnalyzer);
         options.analyzers.push_back(&AnalysisService::loudnessAnalyzer);
         options.analyzers.push_back(&AnalysisService::featureAnalyzer);

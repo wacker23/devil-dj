@@ -1,5 +1,7 @@
 #pragma once
 
+#include "analysis/BeatThis.h"
+
 #include "util/Result.h"
 
 #include <atomic>
@@ -91,6 +93,9 @@ public:
         std::vector<Analyzer> analyzers; // empty = the built-in ones (basicsAnalyzer)
         // P2-17: a folder for <content hash>.wfm waveforms, written for each track analyzed (if not there yet).
         std::filesystem::path waveformCache;
+        // P6-02: the Beat This! model (.onnx). Set and loadable: the built-in beat analyzer runs both trackers and
+        // keeps, per track, the grid that fits its beats better (chooseGrid); else v1 alone.
+        std::filesystem::path beatModel;
     };
 
     struct Status
@@ -119,6 +124,8 @@ public:
     // The built-in analyzers of this version.
     static void basicsAnalyzer(const AnalysisInput& input, AnalysisResult& result);
     static void beatAnalyzer(const AnalysisInput& input, AnalysisResult& result); // P2-13
+    // P6-02: v1 and v2 (Beat This!) side by side, the better grid kept per track.
+    static Analyzer beatAnalyzerWith(std::shared_ptr<BeatThisTracker> v2);
     static void keyAnalyzer(const AnalysisInput& input, AnalysisResult& result);  // P2-15
     // P2-16: integrated loudness of the full-rate stereo. Only tracks.loudness_lufs; the app turns it into a trim
     // for the user's target when a deck loads (Auto Gain), so changing the target needs no new analysis.
@@ -138,6 +145,7 @@ private:
     library::Database& db;
     Decoder decode;
     Options options;
+    std::shared_ptr<BeatThisTracker> beatThis; // P6-02, when options.beatModel loads
     std::atomic<bool> stopping{false};
 
     mutable std::mutex mutex;

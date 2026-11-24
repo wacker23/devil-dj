@@ -29,7 +29,7 @@ GPL (any version), AGPL, LGPL used via static linking (unless an alternative lic
 | libFLAC, libogg, libvorbis (bundled inside JUCE's juce_audio_formats) | FLAC and Ogg Vorbis decoding | BSD-3-Clause | Comes with JUCE; list in notices file |
 | ONNX Runtime (Phase 6) | ML inference, DirectML | MIT | Notices file |
 | DirectML (Microsoft.AI.DirectML, with ONNX Runtime) | GPU inference on DirectX 12 | Microsoft DirectML licence (not open source; redistribution with an app allowed, Windows / Xbox only) | Owner approved 2026-11-24 (P6-01); ship DirectML.dll unmodified with its LICENSE.txt in the notices |
-| Beat This! weights (Phase 6, optional) | Beat tracking | MIT (code and published weights, per model cards) | Re-verify at integration time |
+| Beat This! (CPJKU) code and weights (Phase 6, P6-02) | Beat tracking v2 | MIT (code and published weights) | Verified 2026-11-24 at the source (github.com/CPJKU/beat_this, README "License" section); the authors note some training data is copyrighted or under limited CC licences. Ship the model with its MIT notice |
 | HTDemucs weights (Phase 6) | Stem separation | **Unclear** — sources disagree (MIT vs. non-commercial) | Owner decision before shipping; fall back to another model if not clearly commercial-friendly |
 
 ## Development tools (never shipped)
@@ -41,6 +41,7 @@ Used only to build, format or test; nothing from them ends up in the app or inst
 | numpy | `tools/gen_test_signals.py` | BSD-3-Clause |
 | soundfile (bundles libsndfile, LAME, mpg123, libvorbis, libFLAC) | `tools/gen_test_signals.py` writes the WAV/AIFF/FLAC/Ogg/MP3 test files | BSD-3-Clause (libsndfile, LAME, mpg123: LGPL-2.1, used as separate dev-time libraries) |
 | clang-format | Code formatting | Apache-2.0 with LLVM exception |
+| PyTorch, torchaudio, beat-this, onnx, onnxruntime (Python, in build/venv-beatthis) | `tools/beatthis/export_onnx.py`: Beat This! to ONNX and its reference data (P6-02) | BSD-3-Clause (PyTorch), BSD-2-Clause (torchaudio), MIT (beat-this, onnxruntime), Apache-2.0 (onnx) |
 
 ## Needs a decision before use
 

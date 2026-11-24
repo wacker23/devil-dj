@@ -3,6 +3,7 @@
 
 #include "TestData.h"
 #include "analysis/AnalysisService.h"
+#include "analysis/BeatThis.h"
 #include "analysis/BeatTracker.h"
 #include "engine/TrackDecoder.h"
 #include "library/TagReader.h"
@@ -325,6 +326,18 @@ TEST_CASE("Beat tracker: the owner's evaluation set", "[analysis][beats][.eval]"
     juce::String report = "Devil-DJ beat tracker v1 evaluation (" + juce::Time::getCurrentTime().toString(true, true) +
                           ")\nfile, known BPM, found BPM, error, within 0.5, first beat s, variable, tempogram BPM, beats used, drift %, constant fraction, constant grid hits %, following grid hits %, steady share, anchors\n";
     int total = 0, within = 0, octave = 0, untagged = 0, undecodable = 0;
+    // P6-02: v2 (Beat This!) and the per-track choice, when the exported model is there.
+    std::unique_ptr<analysis::BeatThisTracker> v2;
+    if (const auto model = std::filesystem::path(DEVILDJ_SOURCE_DIR) / "build" / "models" / "beat_this_final0.onnx";
+        std::filesystem::exists(model))
+        if (auto t = analysis::BeatThisTracker::open(model))
+            v2 = std::move(t.value());
+    int within2 = 0, octave2 = 0, withinChosen = 0, chose2 = 0;
+    // Tracks with no known BPM: both trackers run anyway, and where they disagree is listed - the tracks worth
+    // checking by ear (and tagging) first.
+    int compared = 0, agree = 0, octaveApart = 0;
+    juce::String disagreements = "\nno known BPM - where v1 and v2 disagree (check these by ear): file, v1 BPM, v2 BPM\n";
+    juce::String report2 = "\nfile, known BPM, v1 BPM, v2 BPM, chosen, v2 on grid %\n";
     for (const auto& file : folder.findChildFiles(juce::File::findFiles, true))
     {
         if (!engine::isSupportedTrackFile(file))
@@ -335,6 +348,28 @@ TEST_CASE("Beat tracker: the owner's evaluation set", "[analysis][beats][.eval]"
         if (truth <= 0.0)
         {
             ++untagged;
+            if (v2 == nullptr)
+                continue;
+            auto untaggedAudio = engine::decodeTrack(file);
+            if (!untaggedAudio)
+                continue;
+            const auto& b = untaggedAudio.value()->audio;
+            analysis::DecodedAudio u{b.getReadPointer(0), b.getReadPointer(b.getNumChannels() > 1 ? 1 : 0), b.getNumSamples(),
+                                     untaggedAudio.value()->sampleRate, {}};
+            const auto mono = analysis::AnalysisService::monoSignal(u);
+            const auto g1 = track(mono);
+            analysis::BeatGrid g2;
+            if (auto out = v2->track(mono.data(), static_cast<int>(mono.size())))
+                g2 = out.value().grid;
+            ++compared;
+            const bool same = g1.valid && g2.valid && std::abs(g1.bpm - g2.bpm) <= 0.5;
+            const bool octaveOff = g1.valid && g2.valid && !same &&
+                                   (std::abs(g1.bpm * 2.0 - g2.bpm) <= 1.0 || std::abs(g1.bpm - g2.bpm * 2.0) <= 1.0);
+            agree += same ? 1 : 0;
+            octaveApart += octaveOff ? 1 : 0;
+            if (!same)
+                disagreements << file.getFileName() << ", " << juce::String(g1.bpm, 2) << ", " << juce::String(g2.bpm, 2)
+                              << (octaveOff ? "  (one is double the other)" : "") << "\n";
             continue;
         }
         auto decoded = engine::decodeTrack(file); // the app's decoder (MP3 / AAC through Media Foundation)
@@ -359,10 +394,35 @@ TEST_CASE("Beat tracker: the owner's evaluation set", "[analysis][beats][.eval]"
                << ", " << (grid.variableTempo ? "variable" : "") << ", " << juce::String(grid.tempogramBpm, 2) << ", "
                << grid.beatsUsed << ", " << juce::String(grid.maxDriftPercent, 1) << ", " << juce::String(grid.constantFraction, 2) << ", " << juce::String(100.0 * grid.constantHitRate, 0) << ", " << juce::String(100.0 * grid.followHitRate, 0)
                << ", " << juce::String(grid.steadyShare, 2) << ", " << static_cast<int>(grid.anchors.size()) << "\n";
+        if (v2 != nullptr)
+        {
+            const auto mono = analysis::AnalysisService::monoSignal(a);
+            analysis::BeatGrid g2;
+            if (auto out = v2->track(mono.data(), static_cast<int>(mono.size())))
+                g2 = out.value().grid;
+            const auto& chosen = analysis::chooseGrid(grid, g2);
+            const bool ok2 = g2.valid && std::abs(g2.bpm - truth) <= 0.5;
+            within2 += ok2 ? 1 : 0;
+            octave2 += g2.valid && !ok2 && (std::abs(g2.bpm * 2.0 - truth) <= 1.0 || std::abs(g2.bpm / 2.0 - truth) <= 0.5) ? 1 : 0;
+            withinChosen += chosen.valid && std::abs(chosen.bpm - truth) <= 0.5 ? 1 : 0;
+            chose2 += &chosen == &g2 ? 1 : 0;
+            report2 << file.getFileName() << ", " << truth << ", " << juce::String(grid.bpm, 2) << ", " << juce::String(g2.bpm, 2)
+                    << ", " << (&chosen == &g2 ? "v2" : "v1") << ", " << juce::String(100.0 * g2.constantHitRate, 0) << "\n";
+        }
     }
     report << "\n" << within << " of " << total << " within +-0.5 BPM ("
            << juce::String(total > 0 ? 100.0 * within / total : 0.0, 1) << " %), " << octave << " octave errors; skipped: " << untagged << " without a BPM, " << undecodable
            << " not decodable\n";
+    if (v2 != nullptr)
+    {
+        const auto pct = [total](int n) { return juce::String(total > 0 ? 100.0 * n / total : 0.0, 1) + " %"; };
+        report << report2 << "\nv1: " << within << " of " << total << " (" << pct(within) << "), v2: " << within2 << " ("
+               << pct(within2) << ", " << octave2 << " octave errors), chosen per track: " << withinChosen << " ("
+               << pct(withinChosen) << "; v2 chosen for " << chose2 << ")\n";
+    }
+    if (compared > 0)
+        report << disagreements << "\nno known BPM: v1 and v2 agree within 0.5 BPM on " << agree << " of " << compared
+               << ", one double the other on " << octaveApart << ", otherwise apart on " << (compared - agree - octaveApart) << "\n";
     folder.getChildFile("eval-bpm-report.txt").replaceWithText(report);
     WARN(report);
     CHECK(total >= 50);
