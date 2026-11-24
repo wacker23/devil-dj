@@ -11,6 +11,15 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P6-02 Beat tracker v2: dropped
+- Owner decision (2026-11-24): drop v2 and keep v1. The evaluation was on the owner's 100 tracks, none BPM-tagged: the two agree on 89, and on 10 of the other 11 v1 gives a whole BPM where v2 is 0.5-3.5 BPM off. So v2 doesn't show itself better.
+- Done by the task's own rule ("or v2 is dropped"). The analysis service and the app stay on v1; nothing is re-analysed.
+- The port stays, off, so it can come back if a later model or a tagged evaluation set says otherwise:
+  - `analysis/BeatThis`, with its reference tests;
+  - `Options::beatModel`;
+  - `tools/beatthis/export_onnx.py`.
+  - The model file isn't shipped.
+
 ## 2026-11-24 · P6-02 Beat tracker v2 (part 1: the port; the evaluation is the owner's)
 - Owner decision (2026-11-24): do P6-02, PyTorch installed (dev-only) to export the model.
 - Licence verified at the source: Beat This! code and published weights are MIT (github.com/CPJKU/beat_this, README "License"). The authors note that some training data is copyrighted or under limited CC licences. Recorded in LICENSES.md.
