@@ -11,6 +11,22 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P5-06 Signals
+- What changed:
+  - `js/codebeat/signals.js`: continuous patterns, all in [0, 1] over one cycle.
+    - `sine`, `cosine`, `saw`, `isaw`, `tri`, `square`.
+    - `rand` (seeded white noise), `irand(n)` (patterned n), `perlin` (seeded random values at each whole cycle, smoothstep between).
+    - A `signal(f)` constructor.
+    - A signal answers a query with one event (no whole, the part is the query) valued at the query's begin. Used as a control, each event takes the value at its own start.
+  - Methods `range(lo, hi)` (patterned bounds) and `segment(n)` (n discrete samples per cycle, with wholes).
+  - Randomness uses the pattern's seed (`.seed(n)`), so the same seed gives the same values.
+- Tests: 10 new (104 in total).
+  - Each shape at quarter points and periodic over positive and negative cycles; every signal stays in [0, 1].
+  - range and segment.
+  - The spec's `s("hat*8").gain(sine.range(0.4, 1))` example checked value by value.
+  - rand: seed determinism, and a mean of 0.5 +- 0.03 over 4000 samples. irand: every value is reached. perlin: smooth (steps of 1/100 cycle move it less than 0.03, continuous across the cycle line).
+  - Signals with fast / slow / early / add.
+
 ## 2026-11-24 · P5-05 Transformations tier 1
 - What changed:
   - `js/codebeat/transforms.js` adds these as Pattern methods; numeric arguments may be patterned:

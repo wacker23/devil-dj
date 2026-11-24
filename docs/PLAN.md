@@ -491,7 +491,7 @@ Spec: `docs/CODEBEAT_SPEC.md`. The pattern language is written from scratch in p
 - [x] **P5-03 Mini-notation parser** — hand-written recursive-descent parser for the grammar in CODEBEAT_SPEC §4 (sequence, `~`, `[ ]`, `< >`, `,`, `*`, `/`, `!`, `@`, `?`, `(k,n,r)`, `:n`), producing patterns with source locations per atom. Done when: grammar test table passes; clear error messages with column numbers.
 - [x] **P5-04 Controls** — `s/sound`, `n`, `note` (names and MIDI numbers), `gain`, `pan`, `speed`, `lpf`, `hpf`, `resonance`, `room`, `delay`, `crush`, `attack/decay/sustain/release`, `cut` (choke), `bank`. Done when: tests.
 - [x] **P5-05 Transformations tier 1** — `every`, `sometimes/sometimesBy/often/rarely`, `degradeBy`, `off`, `superimpose`, `iter`, `ply`, `palindrome`, `add/sub/mul`, `scale`, `struct`, `mask`, `euclid`. Done when: tests.
-- [ ] **P5-06 Signals** — `sine`, `cosine`, `saw`, `square`, `tri`, `rand`, `irand`, `perlin` with `.range`, `.segment`. Seeded randomness (same seed → same pattern). Done when: tests.
+- [x] **P5-06 Signals** — `sine`, `cosine`, `saw`, `square`, `tri`, `rand`, `irand`, `perlin` with `.range`, `.segment`. Seeded randomness (same seed → same pattern). Done when: tests.
 
 ### Runtime (C++)
 
