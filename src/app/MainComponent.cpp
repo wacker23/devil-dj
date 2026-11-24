@@ -2324,7 +2324,7 @@ void MainComponent::showSpotifyImport()
 {
     if (spotify == nullptr || !spotify->signedIn() || libraryDb == nullptr)
     {
-        libraryBrowser->setStatus("Sign in to Spotify first (Decks > Spotify > Sign in).");
+        libraryBrowser->setStatus("Sign in to Spotify first (Options > Spotify > Sign in).");
         return;
     }
     if (spotifyImportWindow != nullptr)

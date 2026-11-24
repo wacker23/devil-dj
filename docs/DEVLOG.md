@@ -21,7 +21,7 @@ Template:
     - A word index with per-entry word lists, candidates scored best-overlap first with an exact early stop: 500 tracks against 20,000 in about 1.5 s (Release).
     - The plan's "ISRC tag" step is not used: the library stores no ISRC yet, so the ISRC is only kept for the report.
   - `app/SpotifyImport`: library tracks from the database (the file name for untagged ones), an import plan per playlist, a library playlist "<name> (Spotify)" (numbered if taken) from the matches, and the missing list as "Artist - Title (Album) [ISRC]".
-  - `app/SpotifyImportWindow` (Decks > Spotify > Import playlists...):
+  - `app/SpotifyImportWindow` (Options > Spotify > Import playlists...):
     - Tick the playlists (click or Space), then IMPORT, which works on a worker thread.
     - A review shows the counts, a choice box per ambiguous track (or leave it out), and the missing tracks with COPY MISSING / SAVE MISSING....
     - Then CREATE PLAYLISTS.
@@ -41,7 +41,7 @@ Template:
     - A listener on `127.0.0.1:<port>` waits up to 3 minutes for `/callback`. It checks the state and handles `error=access_denied`, then answers the browser with a short page.
     - The code and verifier are swapped for tokens at `/api/token` (JUCE networking, no new library).
   - Tokens are sealed for the Windows user with DPAPI (`app/SecretBox`, crypt32, kept apart from the JUCE code) in `%LOCALAPPDATA%\Devil-DJ\spotify.tok`, loaded at start, and refreshed when within a minute of expiry (the refresh token is kept when the reply has none). Sign out deletes them. Tokens are never logged.
-  - Menu: Decks > Spotify > Client ID... (with instructions: create the app, register `http://127.0.0.1:43879/callback`), Sign in, Sign out. Settings: `spotifyClientId`, `spotifyRedirectPort` (decision D8).
+  - Menu: Options > Spotify > Client ID... (with instructions: create the app, register `http://127.0.0.1:43879/callback`), Sign in, Sign out. Settings: `spotifyClientId`, `spotifyRedirectPort` (decision D8).
 - Tests: 3 cases, all against a fake accounts server on 127.0.0.1 (nothing talks to Spotify).
   - The RFC 7636 challenge vector, the verifier charset, and sealing (the text isn't in the file, and it opens again).
   - Sign-in: the authorize parameters are right; the token request carries the code, client id, redirect and a verifier matching the challenge (the fake refuses otherwise); the tokens are back after a restart; a refresh within the minute (grant_type=refresh_token, the refresh token kept); a refused refresh says to sign in again; sign out removes the file.
