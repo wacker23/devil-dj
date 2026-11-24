@@ -6,11 +6,11 @@ import "../prelude.js";
 const g = globalThis;
 
 // One evaluation: returns the parsed __endEval reply, or throws what the code (or the test query) threw.
-function run(code) {
+function run(code, now = 1) {
     g.__beginEval();
     try {
         g.__completion = (0, eval)(`{${code}\n}`);
-        return parse(g.__endEval());
+        return parse(g.__endEval(now)); // the session tests swap at once; the P5-10 tests below wait for the line
     } catch (e) {
         g.__abortEval();
         throw e;
@@ -162,5 +162,86 @@ test("__query: onsets with their exact times, controls and source places", () =>
     for (let i = 0; i < 7; ++i)
         pieces.push(...g.__query(i, 7, i + 1, 7).split("\n").filter(Boolean));
     assert.equal(pieces.length, 8);
+    run("hush()");
+});
+
+// --- P5-10 hot swap ---
+
+// The onsets' begin times (as text) over [from, to) queried in windows of `step` cycles, eval-ing `code` (swap at
+// the cycle line) when the cursor reaches `evalAt` (a window always ends there, so every step size evaluates at the
+// same moment).
+function playThrough(from, to, step, evalAt, code, now = 0) {
+    const { Fraction } = g;
+    const out = [];
+    let replied = null;
+    for (let t = from; t.lt(to);) {
+        let next = t.add(step).min(to);
+        if (t.lt(evalAt))
+            next = next.min(evalAt);
+        if (replied === null && t.gte(evalAt))
+            replied = run(code, now);
+        for (const line of g.__query(t.n, t.d, next.n, next.d).split("\n").filter(Boolean)) {
+            const [times, fields] = line.split("|");
+            out.push(`${fields.split(";")[0].slice(2)}@${times.split(" ")[0]}`);
+        }
+        t = next;
+    }
+    return { out, replied };
+}
+
+const Fr = (n, d = 1) => g.Fraction(n, d);
+
+test("hot swap: the new pattern takes over exactly at the next cycle line, nothing doubled or missed", () => {
+    run('s("a*3")'); // at once
+    const { out, replied } = playThrough(Fr(0), Fr(4), Fr(1, 7), Fr(9, 7), 's("b*5")');
+    assert.equal(replied.swap, "cycle");
+    assert.deepEqual(out, [
+        "a@0/1", "a@1/3", "a@2/3", "a@1/1", "a@4/3", "a@5/3",
+        "b@2/1", "b@11/5", "b@12/5", "b@13/5", "b@14/5", "b@3/1", "b@16/5", "b@17/5", "b@18/5", "b@19/5",
+    ]);
+});
+
+test("hot swap: any window sizes give the same onsets, also when a window spans the line", () => {
+    const reference = (() => {
+        run('s("a*3")');
+        return playThrough(Fr(0), Fr(4), Fr(1, 7), Fr(9, 7), 's("b*5")').out;
+    })();
+    for (const step of [Fr(1, 3), Fr(3, 10), Fr(1, 96), Fr(5, 4), Fr(2)]) {
+        run('s("a*3")');
+        const { out } = playThrough(Fr(0), Fr(4), step, Fr(9, 7), 's("b*5")');
+        assert.deepEqual(out, reference, `step ${step}`);
+    }
+});
+
+test("hot swap: events of the new pattern that began before the line stay silent (no half notes)", () => {
+    run('s("a*2")');
+    // Evaluated at 1/4: the swap is at line 1. b lasts a cycle from x.5: the one over [0.5, 1.5) began before the
+    // line and is not played; 1.5 is.
+    const { out } = playThrough(Fr(0), Fr(4), Fr(1, 8), Fr(1, 4), 's("b").late(0.5)');
+    assert.deepEqual(out, ["a@0/1", "a@1/2", "b@3/2", "b@5/2", "b@7/2"]);
+});
+
+test("hot swap: only the newest of several waiting patterns plays; errors swap nothing", () => {
+    run('s("a")');
+    g.__query(0, 1, 1, 2);
+    run('s("b")', 0);
+    run('s("c")', 0); // replaces b before the line
+    assert.throws(() => run('s("d").gain("loud")', 0));
+    assert.equal(g.__query(1, 2, 1, 1), ""); // [1/2, 1): a has no onset there
+    assert.equal(g.__query(1, 1, 2, 1).split("|")[1], "s=c");
+});
+
+test("hot swap: 'now' (Ctrl+Shift+Enter) and hush() don't wait for the line", () => {
+    run('s("a*4")');
+    let { out, replied } = playThrough(Fr(0), Fr(1), Fr(1, 8), Fr(3, 8), 's("b*4")', 1);
+    assert.equal(replied.swap, "now");
+    assert.deepEqual(out, ["a@0/1", "a@1/4", "b@1/2", "b@3/4"]);
+    run('s("a*4")');
+    ({ out, replied } = playThrough(Fr(0), Fr(1), Fr(1, 8), Fr(3, 8), "hush()"));
+    assert.equal(replied.swap, "now");
+    assert.deepEqual(out, ["a@0/1", "a@1/4"]);
+    // Code without a pattern changes nothing and swaps nothing.
+    run('s("a")');
+    assert.equal(run("const x = 1;", 0).swap, "");
     run("hush()");
 });

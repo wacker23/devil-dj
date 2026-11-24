@@ -29,7 +29,8 @@ function emptyDeck() {
 const session = {
     slots: new Map(),     // name -> pattern (unnamed play() calls get "$0", "$1" ...)
     muted: new Set(),
-    active: silence,
+    active: silence,      // what plays now
+    next: null,           // P5-10: what takes over at the next cycle line (null: nothing waiting)
     hasPattern: false,    // something was ever given
     cpb: 4,               // beats per cycle
     dj: { decks: [emptyDeck(), emptyDeck(), emptyDeck(), emptyDeck()], master: Object.freeze({ bpm: 120, beat: 0 }) },
@@ -68,6 +69,7 @@ function hush() {
     const p = inEval("hush");
     p.slots = new Map();
     p.unnamed = 0;
+    p.hushed = true; // silence is never kept waiting for the cycle line
 }
 
 function setbpm(bpm) {
@@ -108,7 +110,7 @@ Object.defineProperty(globalThis, "master", { get: () => session.dj.master, conf
 // --- the C++ side's entry points ---
 
 globalThis.__beginEval = () => {
-    pending = { slots: null, mutes: [], bpm: null, cpb: null, unnamed: 0 };
+    pending = { slots: null, mutes: [], bpm: null, cpb: null, unnamed: 0, hushed: false };
     globalThis.__completion = undefined;
     return 0;
 };
@@ -119,8 +121,10 @@ globalThis.__abortEval = () => {
     return 0;
 };
 
-// The result as "key=value" lines: playing, changed, slots, muted, bpm, cpb, message.
-globalThis.__endEval = () => {
+// The result as "key=value" lines: playing, changed, swap, slots, muted, bpm, cpb, message.
+// P5-10: the new pattern takes over at the next cycle line (swap=cycle) - or at once with `now` (Ctrl+Shift+Enter),
+// when the code hushed, or for the very first pattern (swap=now). A pattern still waiting is replaced by the newer one.
+globalThis.__endEval = (now = 0) => {
     const p = inEval("__endEval");
     const completion = globalThis.__completion;
     globalThis.__completion = undefined;
@@ -151,7 +155,14 @@ globalThis.__endEval = () => {
     pending = null;
     session.slots = slots;
     session.muted = muted;
-    session.active = active;
+    const swapNow = Boolean(now) || p.hushed || !session.hasPattern;
+    if (changed) {
+        if (swapNow) {
+            session.active = active;
+            session.next = null;
+        } else
+            session.next = active;
+    }
     session.hasPattern = session.hasPattern || slots.size > 0;
     if (p.cpb !== null)
         session.cpb = p.cpb;
@@ -159,6 +170,7 @@ globalThis.__endEval = () => {
     return [
         `playing=${playing ? 1 : 0}`,
         `changed=${changed ? 1 : 0}`,
+        `swap=${!changed ? "" : swapNow ? "now" : "cycle"}`,
         `slots=${[...slots.keys()].join(",")}`,
         `muted=${[...muted].join(",")}`,
         `bpm=${p.bpm ?? ""}`,
@@ -174,15 +186,29 @@ globalThis.__setDj = (state) => {
     return 0;
 };
 
-// The playing pattern's events over [begin, end), one per line (tests, the console).
-globalThis.__show = (begin, end) => sortEvents(session.active.queryArc(F(begin), F(end))).map((e) => e.show()).join("\n");
+// The newest pattern (the one waiting for the cycle line, else the one playing): its events over [begin, end), one
+// per line (tests, the console).
+globalThis.__show = (begin, end) =>
+    sortEvents((session.next ?? session.active).queryArc(F(begin), F(end))).map((e) => e.show()).join("\n");
 
 // The onsets in [bn/bd, en/ed) cycles for the scheduler (P5-09), one per line:
 //   "<whole begin n>/<d> <whole end n>/<d>|key=value;key=value|start-end,start-end"
 // (the controls; then the source locations of the atoms, for highlighting). Plain values become controls (a word
 // a sound, a number n); characters that would break the format are replaced in strings.
 globalThis.__query = (bn, bd, en, ed) => {
-    const events = session.active.queryArc(new Fraction(bn, bd), new Fraction(en, ed));
+    const begin = new Fraction(bn, bd), end = new Fraction(en, ed);
+    let events;
+    // A pattern waiting for the cycle line: the old one up to the line, the new one from it (P5-10). The window
+    // pieces join exactly, so no onset is played twice or missed; the new pattern's events that began before the
+    // line (fragments) have no onset here and stay silent.
+    const line = begin.ceil();
+    if (session.next !== null && end.gt(line)) {
+        const old = begin.lt(line) ? session.active.queryArc(begin, new Fraction(line)) : [];
+        session.active = session.next;
+        session.next = null;
+        events = [...old, ...session.active.queryArc(new Fraction(line), end)];
+    } else
+        events = session.active.queryArc(begin, end);
     const lines = [];
     for (const e of events) {
         if (!e.hasOnset())

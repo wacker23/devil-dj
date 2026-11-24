@@ -11,6 +11,26 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P5-10 Hot swap
+- What changed:
+  - `prelude.js`: a new pattern waits as `session.next` and takes over exactly at the next cycle line (Ctrl+Enter).
+    - `__query` splits the window there: the old pattern up to the line, the new one from it.
+    - The new pattern's events that began before the line have no onset in the window, so no half notes start.
+    - A newer evaluation replaces a pattern still waiting.
+  - `__endEval(now)` swaps at once for Ctrl+Shift+Enter, when the code called `hush()` (silence never waits), and for the very first pattern. The reply says `swap=cycle|now`.
+  - Code without a pattern swaps nothing; errors swap nothing.
+  - `__show` shows the newest pattern (waiting, else playing).
+  - `CodeEvaluator::evaluate(code, swapNow)`, with `EvalResult::waitsForCycle`; `CodeDeckProducer::submit(code, swapNow)`. The keys themselves come with the editor (P5-14).
+- Tests:
+  - 5 node tests (119 in total):
+    - The swap: a*3 to the line, then b*5 from it, exactly.
+    - The same onsets for windows of 1/7, 1/3, 3/10, 1/96, 5/4 and 2 cycles, including windows that span the line.
+    - No half notes from the new pattern; only the newest waiting pattern plays; a bad pattern swaps nothing.
+    - Immediate swaps and hush.
+  - 1 Catch2 case on the producer (Release and Debug), at 128 BPM with jittered 25 ms ticks:
+    - With Ctrl+Enter, kicks on beats 0-7, then hats every half beat from beat 8 (the cycle line). Each sample is exact, nothing doubled or missed, no hat before the line and no kick after it.
+    - With Ctrl+Shift+Enter, the hats start at the first grid point after what was already sent (before the line), and no kick follows them.
+
 ## 2026-11-24 · P5-09 Pattern bridge + scheduler
 - What changed:
   - `app/CodeDeckProducer` runs on its own thread (a juce::Thread with a 16 MB stack), which owns the CodeEvaluator. Every 25 ms (or at once when code is submitted):

@@ -98,11 +98,12 @@ void CodeDeckProducer::setDj(const codebeat::DjHooks& hooks)
     dj = hooks;
 }
 
-void CodeDeckProducer::submit(std::string code)
+void CodeDeckProducer::submit(std::string code, bool swapNow)
 {
     {
         std::lock_guard<std::mutex> lock(mutex);
         pending = std::move(code);
+        pendingSwapNow = swapNow;
     }
     if (worker != nullptr)
         worker->notify(); // evaluate now rather than at the next tick
@@ -151,9 +152,11 @@ void CodeDeckProducer::tick()
     std::optional<std::string> code;
     std::optional<codebeat::DjHooks> hooks;
     std::optional<Clock> c;
+    bool swapNow = false;
     {
         std::lock_guard<std::mutex> lock(mutex);
         code.swap(pending);
+        swapNow = pendingSwapNow;
         hooks = dj;
         c = clock;
         if (lastTickSeconds >= 0.0)
@@ -180,7 +183,7 @@ void CodeDeckProducer::tick()
         evaluator->setDj(*hooks);
     if (code)
     {
-        const auto r = evaluator->evaluate(*code);
+        const auto r = evaluator->evaluate(*code, swapNow);
         if (r.ok && r.cpb)
             beatsPerCycle = *r.cpb;
         {

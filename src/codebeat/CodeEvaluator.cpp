@@ -89,7 +89,7 @@ CodeEvaluator::CodeEvaluator(JsLimits limits)
         startup = "the Code Beat language failed to load: " + r.error;
 }
 
-EvalResult CodeEvaluator::evaluate(std::string_view code)
+EvalResult CodeEvaluator::evaluate(std::string_view code, bool swapNow)
 {
     EvalResult out;
     if (!ready())
@@ -114,7 +114,8 @@ EvalResult CodeEvaluator::evaluate(std::string_view code)
     }
     // Work out the new pattern and test-query it (an error here comes from the user's pattern, so its place in the
     // user's code is reported when the stack has one).
-    const auto ended = js.callGlobal("__endEval", {}, js.limits().evalMs);
+    const double now[] = {swapNow ? 1.0 : 0.0};
+    const auto ended = js.callGlobal("__endEval", now, js.limits().evalMs);
     out.printed = js.takePrinted();
     if (!ended.ok)
     {
@@ -137,6 +138,8 @@ EvalResult CodeEvaluator::evaluate(std::string_view code)
             out.playing = value == "1";
         else if (key == "changed")
             out.changed = value == "1";
+        else if (key == "swap")
+            out.waitsForCycle = value == "cycle";
         else if (key == "slots")
             out.slots = splitList(value);
         else if (key == "muted")

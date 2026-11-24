@@ -257,3 +257,67 @@ TEST_CASE("Code deck: on its own thread in real time (jitter logged)", "[codebea
     for (std::size_t i = 1; i < events.size(); ++i)
         CHECK(events[i].sampleTime > events[i - 1].sampleTime);
 }
+
+TEST_CASE("Code deck: hot swap at the next cycle line - no onset doubled or missing (P5-10)", "[codebeat][scheduler][swap]")
+{
+    // 128 BPM, 4 beats a cycle: a cycle is 1.875 s; cycle line 2 is at 3.75 s, beat 8.
+    std::vector<ScheduledEvent> events, immediate;
+    std::vector<std::string> names, immediateNames;
+    bool waited = false, immediateWaited = true;
+    onBigStack([&]
+    {
+        Sim sim;
+        sim.producer->onEvaluated = [&](const devildj::codebeat::EvalResult& r) { waited = r.waitsForCycle; };
+        sim.start(R"(s("bd*4"))");
+        sim.tickTo(2.3);                     // in cycle 1
+        sim.producer->submit(R"(s("hh*8"))"); // Ctrl+Enter
+        sim.tickTo(6.0);
+        events = sim.events;
+        for (const auto& e : events)
+            names.push_back(sim.producer->soundName(e.soundIndex));
+
+        Sim now;
+        now.producer->onEvaluated = [&](const devildj::codebeat::EvalResult& r) { immediateWaited = r.waitsForCycle; };
+        now.start(R"(s("bd*4"))");
+        now.tickTo(2.3);
+        now.producer->submit(R"(s("hh*8"))", true); // Ctrl+Shift+Enter
+        now.tickTo(3.0);
+        immediate = now.events;
+        for (const auto& e : immediate)
+            immediateNames.push_back(now.producer->soundName(e.soundIndex));
+    });
+    CHECK(waited);
+    const double samplesPerBeat = 60.0 * 44100.0 / 128.0;
+    const auto line = std::llround(8.0 * samplesPerBeat);
+    // Kicks on beats 0..7 (to the line), then hats every half beat from beat 8: each exactly once, in order.
+    std::vector<std::pair<std::string, std::int64_t>> expected;
+    for (int b = 0; b < 8; ++b)
+        expected.emplace_back("bd", std::llround(b * samplesPerBeat));
+    for (int h = 0; h < 2 * 32; ++h)
+    {
+        const auto at = std::llround((8.0 + h * 0.5) * samplesPerBeat);
+        if (static_cast<double>(at) >= 6.0 * 44100.0)
+            break;
+        expected.emplace_back("hh", at);
+    }
+    std::vector<std::pair<std::string, std::int64_t>> got;
+    for (std::size_t i = 0; i < events.size(); ++i)
+        if (static_cast<double>(events[i].sampleTime) < 6.0 * 44100.0 - 0.1 * 44100.0) // the last window's tail aside
+            got.emplace_back(names[i], events[i].sampleTime);
+    expected.resize(std::min(expected.size(), got.size()));
+    REQUIRE(got.size() >= 8 + 8);
+    CHECK(got == expected);
+    CHECK(std::none_of(got.begin(), got.end(), [&](const auto& g) { return g.first == "hh" && g.second < line; }));
+    CHECK(std::none_of(got.begin(), got.end(), [&](const auto& g) { return g.first == "bd" && g.second >= line; }));
+
+    // Ctrl+Shift+Enter: hats from the very next window (before the line), no kick after them.
+    CHECK_FALSE(immediateWaited);
+    const auto firstHat = std::find(immediateNames.begin(), immediateNames.end(), "hh");
+    REQUIRE(firstHat != immediateNames.end());
+    const auto hatAt = immediate[static_cast<std::size_t>(firstHat - immediateNames.begin())].sampleTime;
+    CHECK(hatAt < line);
+    // The 100 ms already sent stays as it was; the first hat on the half-beat grid after it (0.234 s apart).
+    CHECK(static_cast<double>(hatAt) <= (2.3 + 0.1 + 0.035 + 0.235) * 44100.0);
+    for (std::size_t i = static_cast<std::size_t>(firstHat - immediateNames.begin()); i < immediate.size(); ++i)
+        CHECK(immediateNames[i] == "hh");
+}

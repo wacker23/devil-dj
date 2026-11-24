@@ -48,6 +48,7 @@ struct EvalResult
     bool timedOut = false, outOfMemory = false;
 
     bool changed = false;              // a new pattern (or mutes) took effect
+    bool waitsForCycle = false;        // P5-10: it takes over at the next cycle line (else it already plays)
     bool playing = false;              // something is playing now
     std::vector<std::string> slots;    // the play() slots ("$0" ... for unnamed ones)
     std::vector<std::string> muted;
@@ -64,10 +65,13 @@ public:
     bool ready() const noexcept { return startup.empty(); }
     const std::string& startupError() const noexcept { return startup; } // the prelude failed to load (a bug)
 
-    EvalResult evaluate(std::string_view code);
+    // The new pattern takes over at the next cycle line (Ctrl+Enter), or at once with swapNow (Ctrl+Shift+Enter);
+    // hush() and the very first pattern never wait. P5-10.
+    EvalResult evaluate(std::string_view code, bool swapNow = false);
     void setDj(const DjHooks& hooks);
 
-    // The playing pattern's events over [begin, end) cycles, one per line ("s:bd [0, 1/2)"): tests and the console.
+    // The newest pattern's events over [begin, end) cycles - the one waiting for the cycle line, else the one
+    // playing - one per line ("s:bd [0, 1/2)"): tests and the console.
     std::string show(double begin, double end);
     double beatsPerCycle(); // setcpb(), 4 by default
 

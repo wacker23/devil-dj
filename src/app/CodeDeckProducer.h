@@ -62,7 +62,8 @@ public:
 
     void setClock(const Clock& clock);
     void setDj(const codebeat::DjHooks& hooks); // used before the next evaluation / query
-    void submit(std::string code);              // evaluated on the next tick
+    // Evaluated on the next tick; the pattern takes over at the next cycle line, or at once with swapNow (P5-10).
+    void submit(std::string code, bool swapNow = false);
     std::function<double()> now;                // seconds; juce's high-resolution counter by default
     // Called on the producer thread after each evaluation (setbpm() requests are in it: the caller decides).
     std::function<void(const codebeat::EvalResult&)> onEvaluated;
@@ -86,6 +87,7 @@ private:
     std::optional<Clock> clock;
     std::optional<codebeat::DjHooks> dj;
     std::optional<std::string> pending;
+    bool pendingSwapNow = false;
     Status counters;
     double lastTickSeconds = -1.0, tickMsSum = 0.0;
     bool leadSeen = false;
