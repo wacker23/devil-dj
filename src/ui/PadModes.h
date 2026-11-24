@@ -23,6 +23,7 @@ namespace devildj::ui
 //               let go, the deck is where the track would be. Shift + pad 1 / 2 / 3: domain 8 / 16 / 32 beats.
 //   Pad FX    - the app's presets (app/PadFxPresets, P3-12): this file only gives the mode; the app plays them
 //   Sampler   - the sampler's current bank (P3-13): the app plays it; Shift + pad 1-4: bank 1-4
+//   Drum Swap - the deck's 8 Drum Swap slots (P6-05): the app plays them (on the next bar)
 enum class PadMode : std::uint8_t
 {
     HotCue,
@@ -36,8 +37,9 @@ enum class PadMode : std::uint8_t
     SequenceCall, // P3-15: the sampler bank's 8 sequences (no F key: the mode menu)
     BeatPatterns, // P4-09: the Beat Maker's patterns A-H (queued to the next bar while it plays)
     BeatPads,     // P4-11: the Beat Maker's drum tracks 1-8 (heard; recorded while its REC is on)
+    DrumSwap,     // P6-05: the deck's 8 Drum Swap slots (the app plays them)
 };
-inline constexpr int kPadModeCount = 11;
+inline constexpr int kPadModeCount = 12;
 
 const char* padModeName(PadMode mode) noexcept;
 // The task a mode is waiting for ("P3-07"), or nullptr when it works.

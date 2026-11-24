@@ -673,6 +673,7 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
         view.onHotCuePad = [this, d](int pad, bool down) { padAction(d, pad, false, !down); };
         view.onPadModeMenu = [this, d] { showPadModeMenu(d); };
         view.onPadFxMenu = [this, d](int pad) { showPadFxMenu(d, pad); };
+        view.onDrumSwapMenu = [this, d](int pad) { showDrumSwapMenu(d, pad); }; // P6-05
         view.onHotCueMenu = [this, d](int pad) { showHotCueMenu(d, pad); };
         view.onMemoryPanel = [this, d] { openMemoryPanel(d); };
         view.onLoopButton = [this, d](ui::DeckView::LoopButton b) { loopButton(d, b); };
@@ -817,6 +818,10 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
         w->setStemLookup([this](engine::BufferId id) { return registry.getStems(id); });
     deckA.stemStrip().onWaveView = [this](bool on) { waveA.setStemView(on); };
     deckB.stemStrip().onWaveView = [this](bool on) { waveB.setStemView(on); };
+    // Drum Swap (P6-05): the banks need the device rate; loaded as soon as the engine has one.
+    drumSwaps = std::make_unique<DrumSwapBank>(DrumSwapBank::defaultFolder());
+    drumSwapLoader = std::make_unique<juce::TimedCallback>([this] { loadDrumSwaps(); });
+    drumSwapLoader->startTimer(250);
     registerActions();
     reloadKeymap();
     keyHook = std::make_unique<ui::PhysicalKeyHook>([this](const ui::KeyboardController::KeyEvent& e)
@@ -1728,6 +1733,20 @@ void MainComponent::padAction(engine::DeckId deck, int pad, bool alternate, bool
             callSequence(bank, pad, true);
         return;
     }
+    if (padModes[deck] == ui::PadMode::DrumSwap) // P6-05: the deck's Drum Swap slots
+    {
+        if (release)
+            return;
+        if (alternate) // Shift + pad: capture the drums from the bar into this slot
+            captureDrumSwap(deck, pad, drumSwaps->captureBeats());
+        else if (drumSwaps->slot(deck, pad).empty())
+            libraryBrowser->setStatus("Drum Swap: slot " + juce::String(pad + 1) +
+                                      " is empty - Shift + pad captures the drums, right-click for more");
+        else
+            engine.send(engine::DrumSwap{deck, static_cast<std::uint8_t>(pad),
+                                         drumSwaps->multi(deck) ? engine::DrumSwapOp::Layer : engine::DrumSwapOp::Single});
+        return;
+    }
     if (padModes[deck] == ui::PadMode::Sampler) // P3-13: the sampler's bank
     {
         if (alternate)
@@ -1767,6 +1786,157 @@ void MainComponent::padAction(engine::DeckId deck, int pad, bool alternate, bool
 juce::File MainComponent::samplesFolder()
 {
     return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("Devil-DJ/Samples");
+}
+
+// ---- Drum Swap (P6-05) ----
+
+void MainComponent::loadDrumSwaps()
+{
+    const double rate = engine.readState().sampleRate;
+    if (rate <= 0.0)
+        return; // no device yet: try again
+    drumSwapLoader->stopTimer();
+    const int loaded = drumSwaps->load(rate);
+    for (engine::DeckId d = 0; d < DrumSwapBank::kDecks; ++d)
+        for (int s = 0; s < DrumSwapBank::kSlots; ++s)
+            if (const auto& slot = drumSwaps->slot(d, s); !slot.empty())
+            {
+                const auto id = registry.add(slot.audio);
+                if (!engine.send(engine::SetSwapLoop{d, static_cast<std::uint8_t>(s), slot.audio.get(), id,
+                                                     static_cast<float>(slot.beats)}))
+                    registry.release(id);
+            }
+    if (loaded > 0)
+        util::logInfo("Drum Swap: {} loops loaded", loaded);
+    showDrumSwapLooks();
+}
+
+void MainComponent::showDrumSwapLooks()
+{
+    for (engine::DeckId d = 0; d < 2; ++d)
+    {
+        std::array<juce::String, 8> names;
+        for (int s = 0; s < DrumSwapBank::kSlots; ++s)
+            names[static_cast<std::size_t>(s)] = drumSwaps->slot(d, s).name;
+        (d == 0 ? deckA : deckB).setDrumSwapLooks(names, drumSwaps->multi(d));
+    }
+}
+
+void MainComponent::putDrumSwap(engine::DeckId deck, int slot, DrumSwapSlot loop)
+{
+    const auto loopAudio = loop.audio;
+    const double beats = loop.beats;
+    const auto name = loop.name;
+    if (const auto error = drumSwaps->set(deck, slot, std::move(loop)); error.isNotEmpty())
+        util::logWarning("Drum Swap: {}", error.toStdString()); // it still plays this session
+    const auto id = registry.add(loopAudio);
+    if (!engine.send(engine::SetSwapLoop{deck, static_cast<std::uint8_t>(slot), loopAudio.get(), id,
+                                         static_cast<float>(beats)}))
+        registry.release(id);
+    libraryBrowser->setStatus("Drum Swap: " + name + " in slot " + juce::String(slot + 1) + " of deck " +
+                              juce::String::charToString(static_cast<juce::juce_wchar>('A' + deck)));
+    showDrumSwapLooks();
+}
+
+void MainComponent::clearDrumSwap(engine::DeckId deck, int slot)
+{
+    drumSwaps->clear(deck, slot);
+    engine.send(engine::SetSwapLoop{deck, static_cast<std::uint8_t>(slot), nullptr, 0, 0.0f});
+    showDrumSwapLooks();
+}
+
+void MainComponent::captureDrumSwap(engine::DeckId deck, int slot, int beats)
+{
+    if (deck >= 2)
+        return;
+    const auto& st = engine.readState().decks[deck];
+    const auto stems = st.stemsLoaded ? registry.getStems(st.stemsId) : nullptr;
+    if (stems == nullptr)
+    {
+        libraryBrowser->setStatus("Drum Swap: capture needs the track's stems (library right-click > Separate stems)");
+        return;
+    }
+    auto loop = captureDrums(*stems, deckGrids[deck].grid, st.positionSamples, beats);
+    if (!loop)
+    {
+        libraryBrowser->setStatus("Drum Swap: can't capture - " + juce::String::fromUTF8(loop.error().c_str()));
+        return;
+    }
+    DrumSwapSlot s;
+    s.name = "CAP " + juce::String(beats);
+    s.beats = beats;
+    s.audio = std::move(loop).value();
+    putDrumSwap(deck, slot, std::move(s));
+}
+
+void MainComponent::drumSwapFromBeat(engine::DeckId deck, int slot, int pattern)
+{
+    // At the deck's tempo (where its grid is now), exactly the pattern long (a seamless loop); rendered on a worker.
+    auto o = beatRenderOptions(pattern);
+    o.tailSeconds = 0.0;
+    const auto& st = engine.readState().decks[deck];
+    if (const auto& grid = deckGrids[deck].grid; !grid.empty())
+        o.masterBpm = grid.bpmAt(st.positionSamples) * (1.0 + st.tempoPercent / 100.0);
+    auto project = std::make_shared<const beatmaker::Project>(beatProject);
+    const auto safe = juce::Component::SafePointer<MainComponent>(this);
+    juce::Thread::launch(
+        [safe, project, o, deck, slot, pattern]
+        {
+            auto r = app::renderBeat(*project, o);
+            std::shared_ptr<const engine::TrackBuffer> audio = std::move(r.audio);
+            const double beats = r.beats;
+            juce::MessageManager::callAsync(
+                [safe, audio, beats, deck, slot, pattern]
+                {
+                    if (safe == nullptr || audio == nullptr || beats <= 0.0)
+                        return;
+                    DrumSwapSlot s;
+                    s.name = "BEAT " + juce::String::charToString(static_cast<juce::juce_wchar>('A' + pattern));
+                    s.beats = beats;
+                    s.audio = audio;
+                    safe->putDrumSwap(deck, slot, std::move(s));
+                });
+        });
+}
+
+void MainComponent::showDrumSwapMenu(engine::DeckId deck, int slot)
+{
+    if (deck >= 2)
+        return;
+    const auto& st = engine.readState().decks[deck];
+    juce::PopupMenu m;
+    m.addSectionHeader("Drum Swap slot " + juce::String(slot + 1));
+    juce::PopupMenu capture;
+    for (const int beats : DrumSwapBank::kCaptureBeats)
+        capture.addItem(juce::String(beats) + " beats", st.stemsLoaded, false,
+                        [this, deck, slot, beats] { captureDrumSwap(deck, slot, beats); });
+    m.addSubMenu("Capture the drums from the bar", capture, st.stemsLoaded);
+    juce::PopupMenu beat;
+    for (int p = 0; p < 8; ++p)
+        beat.addItem("Pattern " + juce::String::charToString(static_cast<juce::juce_wchar>('A' + p)),
+                     [this, deck, slot, p] { drumSwapFromBeat(deck, slot, p); });
+    m.addSubMenu("A Beat Maker pattern (at the deck's tempo)", beat);
+    m.addItem("Clear the slot", !drumSwaps->slot(deck, slot).empty(), false, [this, deck, slot] { clearDrumSwap(deck, slot); });
+    m.addSeparator();
+    const bool multi = drumSwaps->multi(deck);
+    m.addItem("Single: one loop at a time", true, !multi, [this, deck]
+              {
+                  drumSwaps->setMulti(deck, false);
+                  showDrumSwapLooks();
+              });
+    m.addItem("Multi: layer the loops", true, multi, [this, deck]
+              {
+                  drumSwaps->setMulti(deck, true);
+                  showDrumSwapLooks();
+              });
+    juce::PopupMenu length;
+    for (const int beats : DrumSwapBank::kCaptureBeats)
+        length.addItem(juce::String(beats) + " beats", true, drumSwaps->captureBeats() == beats,
+                       [this, beats] { drumSwaps->setCaptureBeats(beats); });
+    m.addSubMenu("Shift + pad captures", length);
+    m.addItem("Drums back (all off)", st.swapActive != 0, false,
+              [this, deck] { engine.send(engine::DrumSwap{deck, 0, engine::DrumSwapOp::Off}); });
+    m.showMenuAsync(juce::PopupMenu::Options().withMousePosition());
 }
 
 void MainComponent::captureToSampler(engine::DeckId deck, bool slicer)
@@ -2033,15 +2203,11 @@ void MainComponent::showBeatExportMenu()
     m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&beatPanel.grid().exportButton()));
 }
 
-void MainComponent::exportBeat(BeatExport what)
+BeatRenderOptions MainComponent::beatRenderOptions(int pattern)
 {
-    // Rendered on a worker thread from a copy of the project (a song can take a moment), then handed back here.
     const auto& es = engine.readState();
     app::BeatRenderOptions o;
-    o.pattern = beatPanel.grid().pattern();
-    o.song = what == BeatExport::SongWav || what == BeatExport::SongLibrary;
-    o.passes = what == BeatExport::Pattern4Wav ? 4 : 1;
-    o.tailSeconds = what == BeatExport::PatternSampler ? 0.0 : 2.0; // a sampler loop: exactly the pattern
+    o.pattern = pattern;
     o.masterBpm = es.masterBpm;
     o.sampleRate = es.sampleRate > 0.0 ? es.sampleRate : 48000.0;
     o.blockSize = es.blockSize > 0 ? es.blockSize : 256;
@@ -2058,6 +2224,16 @@ void MainComponent::exportBeat(BeatExport what)
             return it != samples->end() ? it->second : nullptr;
         };
     }
+    return o;
+}
+
+void MainComponent::exportBeat(BeatExport what)
+{
+    // Rendered on a worker thread from a copy of the project (a song can take a moment), then handed back here.
+    auto o = beatRenderOptions(beatPanel.grid().pattern());
+    o.song = what == BeatExport::SongWav || what == BeatExport::SongLibrary;
+    o.passes = what == BeatExport::Pattern4Wav ? 4 : 1;
+    o.tailSeconds = what == BeatExport::PatternSampler ? 0.0 : 2.0; // a sampler loop: exactly the pattern
     auto project = std::make_shared<const beatmaker::Project>(beatProject);
     const auto letter = juce::String::charToString(static_cast<juce::juce_wchar>('A' + o.pattern));
     const auto stamp = juce::Time::getCurrentTime().formatted("%Y-%m-%d %H%M%S");

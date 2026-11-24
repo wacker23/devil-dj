@@ -85,6 +85,33 @@ struct SetStem
     float value = 0.0f;
 };
 
+// Drum Swap (P6-05): a loop for one of a deck's 8 slots (`beats` long; nullptr empties it). Owned by the
+// BufferRegistry like a track (`bufferId` comes back when replaced).
+struct SetSwapLoop
+{
+    DeckId deck = 0;
+    std::uint8_t slot = 0;
+    const TrackBuffer* loop = nullptr;
+    BufferId bufferId = 0;
+    float beats = 0.0f;
+};
+
+// Drum Swap on the next bar (at once while the deck is paused): Single - this slot alone in place of the drums
+// stem (the slot playing again: the drums back); Layer - this slot on / off with the others (multi); Off - the
+// drums back. Needs the deck's stems.
+enum class DrumSwapOp : std::uint8_t
+{
+    Single,
+    Layer,
+    Off,
+};
+struct DrumSwap
+{
+    DeckId deck = 0;
+    std::uint8_t slot = 0;
+    DrumSwapOp op = DrumSwapOp::Single;
+};
+
 // Empties a deck; its buffer is handed back like a replaced one.
 struct UnloadTrack
 {
@@ -590,7 +617,7 @@ using EngineCommand =
                  SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle, SetSlicer, SlicerPad, FxSetEffect, FxCommand, SetColorFx, ReleaseFxCommand, PadFxSetEffect, PadFxCommand,
                  SamplerLoad, SamplerPad, SamplerSet, SequencerCommand, SequencerEvents,
                  StartTransition, CancelTransition, SetDrumSound, SetSynthSound, BeatMakerStop, CodeDeckStop, SetSampleSound,
-                 TransitionFxSetEffect, LoadStems, SetStem>;
+                 TransitionFxSetEffect, LoadStems, SetStem, SetSwapLoop, DrumSwap>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
 

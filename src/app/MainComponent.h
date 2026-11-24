@@ -27,6 +27,8 @@
 #include "app/BeatMakerProducer.h"
 #include "app/CodeBuffers.h"
 #include "app/CodeDeckProducer.h"
+#include "app/BeatRender.h"
+#include "app/DrumSwapBank.h"
 #include "app/StemDeckLoader.h"
 #include "app/StemService.h"
 #include "app/SampleBank.h"
@@ -322,6 +324,17 @@ private:
     // P3-14: the deck's loop (or, with slicer = true, its slicer range) into a sampler slot - the shown bank's first
     // empty one - and saved as a 32-bit float WAV in Documents\Devil-DJ\Samples.
     void captureToSampler(engine::DeckId deck, bool slicer);
+    // Drum Swap (P6-05): the banks (loaded once the device rate is known), the pads, capture, Beat Maker loops.
+    std::unique_ptr<DrumSwapBank> drumSwaps;
+    std::unique_ptr<juce::TimedCallback> drumSwapLoader;
+    void loadDrumSwaps();
+    void putDrumSwap(engine::DeckId deck, int slot, DrumSwapSlot loop);
+    void clearDrumSwap(engine::DeckId deck, int slot);
+    void captureDrumSwap(engine::DeckId deck, int slot, int beats);
+    void drumSwapFromBeat(engine::DeckId deck, int slot, int pattern);
+    void showDrumSwapMenu(engine::DeckId deck, int slot);
+    void showDrumSwapLooks();
+    BeatRenderOptions beatRenderOptions(int pattern); // the Beat Maker's render settings (export, Drum Swap)
     static juce::File samplesFolder();
     void chooseSampleFile(int slot);
     std::unique_ptr<juce::FileChooser> sampleChooser;

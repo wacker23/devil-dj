@@ -40,6 +40,7 @@ target_sources(DevilDJTests PRIVATE
     app/CodeBuffersTests.cpp
     app/StemServiceTests.cpp
     app/StemDeckLoaderTests.cpp
+    app/DrumSwapBankTests.cpp
     app/CodeRenderTests.cpp
     app/LayoutTests.cpp
     app/SettingsTests.cpp
@@ -82,6 +83,7 @@ target_sources(DevilDJTests PRIVATE
     engine/HotCueTests.cpp
     engine/LoopTests.cpp
     engine/StemPlaybackTests.cpp
+    engine/DrumSwapTests.cpp
     engine/SlipTests.cpp
     engine/ReverseTests.cpp
     engine/SlicerTests.cpp

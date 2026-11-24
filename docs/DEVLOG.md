@@ -11,6 +11,24 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-25 · P6-05 Drum Capture + Drum Swap
+- Owner decisions:
+  - Single mode plays one slot at a time, and the slot playing again brings the drums back; multi layers the loops.
+  - The slots are kept across runs.
+- What changed:
+  - `Deck`: 8 swap slots read in place of the drums stem, on the deck's beatgrid from the bar each loop started on. The drums stem's level, mute, solo and FX send apply to them. Switching is a 4 ms per-sample crossfade.
+  - Engine: `SetSwapLoop` (registry-owned loops), and `DrumSwap` with Single, Layer and Off, queued as a `Swap` action. It fires 4 ms plus key lock's read-ahead before the next downbeat, so the fade ends on the bar. Paused, it applies at once. `DeckState` gains swapLoaded, swapActive and swapQueued.
+  - App: `DrumSwapBank` keeps 8 slots per deck in `Documents\Devil-DJ\DrumSwap\Deck A|B` (24-bit WAV and bank.json), reloaded at the device rate. `captureDrums` takes 4/8/16/32 beats of the drums stem from the bar at or before the playhead. A Beat Maker pattern is rendered as a seamless loop at the deck's tempo (shared `beatRenderOptions`).
+  - UI: a DRUM SWAP pad mode, picked from the mode menu. A pad swaps on the next bar and shows NEXT while waiting; Shift+pad captures with the set length. Right-click a pad to capture 4/8/16/32 beats, take a Beat Maker pattern A-H, clear the slot, switch single/multi, set the Shift+pad length, or bring the drums back. "+" on the mode button means multi.
+- Tests / measurements:
+  - Playing, the fade runs from sample 95808 to 95999 against the bar at 96000. With key lock, the stretched output crosses the fade's midpoint at 95904, exactly 2 ms before the bar.
+  - No click: the largest sample-to-sample step through swapping in and out is 0.0034, where a cut would be 0.18.
+  - The loop's position follows the grid within 4e-8. Also tested: single, layer and off; presses before the bar; empty slots; no stems; loops handed back; a new track keeping the bank but playing its own drums; no audio-thread allocation (Debug).
+  - The bank survives a restart, is resampled at another device rate, and can be cleared. Capture starts on the bar.
+- Notes / follow-ups:
+  - Not checked by ear in the app yet.
+  - A seek between pressing and the bar keeps the queued swap at its bar position.
+
 ## 2026-11-25 · P6-04 Stem playback
 - What changed:
   - `engine::StemBuffer` (4 stems, 16-bit stereo at the device rate) and `engine::loadStems` (the cache's FLACs resampled to the track's rate and length, plus peaks for the view). `BufferRegistry` owns stems like tracks.

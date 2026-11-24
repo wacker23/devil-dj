@@ -55,6 +55,8 @@ const char* padModeName(PadMode mode) noexcept
             return "PATTERNS";
         case PadMode::BeatPads:
             return "BEAT PADS";
+        case PadMode::DrumSwap:
+            return "DRUM SWAP";
     }
     return "";
 }
@@ -133,6 +135,7 @@ PadLook padLook(PadMode mode, int pad, const engine::DeckState& deck, bool held)
         case PadMode::SequenceCall:
         case PadMode::BeatPatterns:
         case PadMode::BeatPads:
+        case PadMode::DrumSwap:
             look.text = "-";
             look.enabled = false;
             break;
@@ -206,6 +209,7 @@ std::vector<engine::EngineCommand> padCommands(PadMode mode, engine::DeckId deck
         case PadMode::SequenceCall:
         case PadMode::BeatPatterns:
         case PadMode::BeatPads:
+        case PadMode::DrumSwap:
             break;
     }
     return out;

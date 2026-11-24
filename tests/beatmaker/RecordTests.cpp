@@ -111,5 +111,5 @@ TEST_CASE("Live record: REC on the grid, 1-8 and the track names hit, the BEAT P
     CHECK(hits == std::vector<int>{4});
     CHECK(grid.cursorTrack() == 4);
     CHECK(juce::String(ui::padModeName(ui::PadMode::BeatPads)) == "BEAT PADS");
-    CHECK(ui::kPadModeCount == 11);
+    CHECK(ui::kPadModeCount == 12); // P6-05 added Drum Swap
 }

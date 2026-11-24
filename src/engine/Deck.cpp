@@ -37,6 +37,9 @@ void Deck::prepare(double newSampleRate, int maxBlockSize)
     for (auto* v : {&seekL, &seekR})
         v->assign(seekLength, 0.0f);
     blockRates.assign(static_cast<std::size_t>(maxBlock), 1.0);
+    keepRamp.assign(static_cast<std::size_t>(maxBlock), 1.0f); // Drum Swap (P6-05)
+    for (auto& r : swapRamps)
+        r.assign(static_cast<std::size_t>(maxBlock), 0.0f);
     stretcherPrimed = false;
 }
 
@@ -246,6 +249,10 @@ void Deck::setTrack(const TrackBuffer* track) noexcept
     buffer = track;
     stemBuffer = nullptr; // the old track's (the engine hands them back)
     resetStems();
+    swapOn = 0; // the slots stay; the new track starts with its own drums
+    keepGain = 1.0f;
+    for (auto& s : swaps)
+        s.gain = 0.0f;
     state = Transport::Paused;
     playhead = 0.0;
     cue = 0.0;
@@ -684,6 +691,94 @@ void Deck::resetStems() noexcept
     updateStemTargets();
 }
 
+// ---- Drum Swap (P6-05) ----
+
+void Deck::setSwapLoop(int slot, const TrackBuffer* loop, double beats) noexcept
+{
+    if (slot < 0 || slot >= kSwapSlots)
+        return;
+    auto& s = swaps[static_cast<std::size_t>(slot)];
+    s.loop = loop != nullptr && loop->numSamples() > 0 && beats > 0.0 ? loop : nullptr;
+    s.beats = s.loop != nullptr ? beats : 0.0;
+    if (s.loop == nullptr)
+    {
+        s.gain = 0.0f;
+        swapOn = static_cast<std::uint8_t>(swapOn & ~(1u << slot));
+    }
+}
+
+void Deck::setSwap(std::uint8_t mask, double anchor, double deckSamplesPerBeat) noexcept
+{
+    for (int k = 0; k < kSwapSlots; ++k)
+    {
+        const auto bit = static_cast<std::uint8_t>(1u << k);
+        auto& s = swaps[static_cast<std::size_t>(k)];
+        if (s.loop == nullptr)
+            mask = static_cast<std::uint8_t>(mask & ~bit);
+        else if ((mask & bit) && !(swapOn & bit)) // starting: from its first beat at the anchor
+        {
+            s.anchor = anchor;
+            s.deckSamplesPerBeat = deckSamplesPerBeat > 0.0 ? deckSamplesPerBeat : sampleRate / 2.0;
+        }
+    }
+    swapOn = mask;
+}
+
+double Deck::readAhead() const noexcept
+{
+    if (!stretchedNow() || stretcher == nullptr)
+        return 0.0;
+    return static_cast<double>(stretcher->inputLatency()) + stretcher->outputLatency() * rate();
+}
+
+std::uint8_t Deck::swapLoaded() const noexcept
+{
+    std::uint8_t m = 0;
+    for (int k = 0; k < kSwapSlots; ++k)
+        if (swaps[static_cast<std::size_t>(k)].loop != nullptr)
+            m = static_cast<std::uint8_t>(m | (1u << k));
+    return m;
+}
+
+// A loop at a deck position: the deck's beat since the anchor, wrapped to the loop, 4-point Hermite with the
+// loop's ends joined (a seamless loop).
+float Deck::swapRead(int slot, int channel, double position) const noexcept
+{
+    const auto& s = swaps[static_cast<std::size_t>(slot)];
+    const int len = s.loop->numSamples();
+    const double beat = (position - s.anchor) / s.deckSamplesPerBeat;
+    double b = std::fmod(beat, s.beats);
+    if (b < 0.0)
+        b += s.beats;
+    const double p = b * (static_cast<double>(len) / s.beats);
+    const auto i = static_cast<int>(std::floor(p));
+    const auto t = static_cast<float>(p - i);
+    const float* d = s.loop->audio.getReadPointer(std::min(channel, s.loop->audio.getNumChannels() - 1));
+    const auto at = [d, len](int k) { return d[((k % len) + len) % len]; };
+    const float xm1 = at(i - 1), x0 = at(i), x1 = at(i + 1), x2 = at(i + 2);
+    const float c1 = 0.5f * (x1 - xm1);
+    const float c2 = xm1 - 2.5f * x0 + 2.0f * x1 - 0.5f * x2;
+    const float c3 = 0.5f * (x2 - xm1) + 1.5f * (x0 - x1);
+    return ((c3 * t + c2) * t + c1) * t + x0;
+}
+
+// The drums stem's place in the mix: the stem itself and / or the swap loops, by this part's ramps.
+float Deck::drumsAt(int channel, double position, double rate, int index) const noexcept
+{
+    const auto i = static_cast<std::size_t>(std::clamp(index, 0, partSamples - 1));
+    float v = 0.0f;
+    if (keepRamp[i] != 0.0f)
+        v += keepRamp[i] * resampler.read(stemBuffer->channel(0, channel), stemBuffer->length, position, rate);
+    if (swapPart)
+        for (int k = 0; k < kSwapSlots; ++k)
+        {
+            const float g = swapRamps[static_cast<std::size_t>(k)][i];
+            if (g != 0.0f)
+                v += g * swapRead(k, channel, position);
+        }
+    return v;
+}
+
 void Deck::updateStemTargets() noexcept
 {
     bool anySolo = false;
@@ -716,22 +811,55 @@ void Deck::beginStemPart(int numSamples) noexcept
         defaults = defaults && mainFrom[i] == 1.0f && mainTo[i] == 1.0f && dryFrom[i] == 0.0f && dryTo[i] == 0.0f;
         dry = dry || dryFrom[i] > 0.0f || dryTo[i] > 0.0f;
     }
-    useStems = stemBuffer != nullptr && !defaults;
+    // Drum Swap: the drums stem's share and each loop's, sample by sample (a 4 ms crossfade on the sample).
+    partSamples = std::max(1, numSamples);
+    const auto swapStep = static_cast<float>(1.0 / std::max(1.0, kSwapFadeSeconds * sampleRate));
+    swapPart = false;
+    bool keepMoves = false;
+    const float keepTarget = swapOn != 0 && stemBuffer != nullptr ? 0.0f : 1.0f;
+    for (int n = 0; n < numSamples; ++n)
+    {
+        keepGain = keepGain < keepTarget ? std::min(keepTarget, keepGain + swapStep)
+                                         : std::max(keepTarget, keepGain - swapStep);
+        keepRamp[static_cast<std::size_t>(n)] = keepGain;
+        keepMoves = keepMoves || keepGain != 1.0f;
+    }
+    for (int k = 0; k < kSwapSlots; ++k)
+    {
+        auto& s = swaps[static_cast<std::size_t>(k)];
+        auto& ramp = swapRamps[static_cast<std::size_t>(k)];
+        const float target = (swapOn & (1u << k)) && s.loop != nullptr && stemBuffer != nullptr ? 1.0f : 0.0f;
+        if (s.loop == nullptr)
+            s.gain = 0.0f;
+        bool any = false;
+        for (int n = 0; n < numSamples; ++n)
+        {
+            s.gain = s.gain < target ? std::min(target, s.gain + swapStep) : std::max(target, s.gain - swapStep);
+            ramp[static_cast<std::size_t>(n)] = s.gain;
+            any = any || s.gain != 0.0f;
+        }
+        swapPart = swapPart || any;
+    }
+    lastSwapSounding = lastSwapSounding || swapPart;
+    useStems = stemBuffer != nullptr && (!defaults || swapPart || keepMoves);
     useDry = useStems && dry;
     if (!useDry)
         dryPrimed = false;
 }
 
 // The stems at one position, each through the resampler with its gain (ramped: t = 0 .. 1 along the part).
-float Deck::readMix(int channel, double position, double rate, const float* from, const float* to, float t) const noexcept
+float Deck::readMix(int channel, double position, double rate, const float* from, const float* to, float t,
+                     int index) const noexcept
 {
     float v = 0.0f;
     const int len = stemBuffer->length;
     for (int s = 0; s < kStems; ++s)
     {
         const float g = from[s] + (to[s] - from[s]) * t;
-        if (g != 0.0f)
-            v += g * resampler.read(stemBuffer->channel(s, channel), len, position, rate);
+        if (g == 0.0f)
+            continue;
+        v += g * (s == 0 ? drumsAt(channel, position, rate, index) // the drums stem, or what swaps it (P6-05)
+                         : resampler.read(stemBuffer->channel(s, channel), len, position, rate));
     }
     return v;
 }
@@ -745,15 +873,22 @@ void Deck::readFramesMix(std::int64_t from, int count, float* left, float* right
     {
         const auto p = from + i;
         const float t = count > 1 ? static_cast<float>(i) / static_cast<float>(count - 1) : 1.0f;
+        const int index = static_cast<int>(static_cast<std::int64_t>(i) * partSamples / std::max(1, count));
         float l = 0.0f, r = 0.0f;
         if (p >= 0 && p < len)
             for (int s = 0; s < kStems; ++s)
             {
-                const float g = (gFrom[s] + (gTo[s] - gFrom[s]) * t) * kScale;
+                const float g = gFrom[s] + (gTo[s] - gFrom[s]) * t;
                 if (g == 0.0f)
                     continue;
-                l += g * static_cast<float>(stemBuffer->channel(s, 0)[p]);
-                r += g * static_cast<float>(stemBuffer->channel(s, 1)[p]);
+                if (s == 0 && (swapPart || keepRamp[static_cast<std::size_t>(std::min(index, partSamples - 1))] != 1.0f))
+                {
+                    l += g * drumsAt(0, static_cast<double>(p), 1.0, index); // with Drum Swap (P6-05)
+                    r += g * drumsAt(1, static_cast<double>(p), 1.0, index);
+                    continue;
+                }
+                l += g * kScale * static_cast<float>(stemBuffer->channel(s, 0)[p]);
+                r += g * kScale * static_cast<float>(stemBuffer->channel(s, 1)[p]);
             }
         left[i] = l;
         right[i] = r;
@@ -819,13 +954,13 @@ void Deck::render(float* left, float* right, float* dryLeft, float* dryRight, in
         std::fill(dryLeft, dryLeft + numSamples, 0.0f);
         std::fill(dryRight, dryRight + numSamples, 0.0f);
     }
-    lastReadStems = lastDryActive = false;
+    lastReadStems = lastDryActive = lastSwapSounding = false;
     if (buffer == nullptr)
         return;
 
     if (numSamples > maxBlock) // larger than prepared: split (keeps the scratch buffers big enough)
     {
-        bool stems = false, dry = false;
+        bool stems = false, dry = false, swap = false;
         for (int done = 0; done < numSamples; done += maxBlock)
         {
             const int n = std::min(maxBlock, numSamples - done);
@@ -833,9 +968,11 @@ void Deck::render(float* left, float* right, float* dryLeft, float* dryRight, in
                    dryRight != nullptr ? dryRight + done : nullptr, n);
             stems = stems || lastReadStems;
             dry = dry || lastDryActive;
+            swap = swap || lastSwapSounding;
         }
         lastReadStems = stems;
         lastDryActive = dry;
+        lastSwapSounding = swap;
         return;
     }
     const auto at = [](float* p, int offset) { return p != nullptr ? p + offset : nullptr; };
@@ -962,12 +1099,12 @@ void Deck::renderPart(float* left, float* right, float* dryLeft, float* dryRight
             }
             else if (useStems)
             {
-                l += readMix(0, playhead, rate, mainFrom.data(), mainTo.data(), t) * g;
-                r += readMix(1, playhead, rate, mainFrom.data(), mainTo.data(), t) * g;
+                l += readMix(0, playhead, rate, mainFrom.data(), mainTo.data(), t, i) * g;
+                r += readMix(1, playhead, rate, mainFrom.data(), mainTo.data(), t, i) * g;
                 if (useDry)
                 {
-                    dl += readMix(0, playhead, rate, dryFrom.data(), dryTo.data(), t) * g;
-                    dr += readMix(1, playhead, rate, dryFrom.data(), dryTo.data(), t) * g;
+                    dl += readMix(0, playhead, rate, dryFrom.data(), dryTo.data(), t, i) * g;
+                    dr += readMix(1, playhead, rate, dryFrom.data(), dryTo.data(), t, i) * g;
                 }
             }
             else
@@ -1006,12 +1143,12 @@ void Deck::renderPart(float* left, float* right, float* dryLeft, float* dryRight
             const float g = tail.startGain * std::cos(kHalfPi * progress);
             if (useStems)
             {
-                l += readMix(0, tail.position, rate, mainFrom.data(), mainTo.data(), t) * g;
-                r += readMix(1, tail.position, rate, mainFrom.data(), mainTo.data(), t) * g;
+                l += readMix(0, tail.position, rate, mainFrom.data(), mainTo.data(), t, i) * g;
+                r += readMix(1, tail.position, rate, mainFrom.data(), mainTo.data(), t, i) * g;
                 if (useDry)
                 {
-                    dl += readMix(0, tail.position, rate, dryFrom.data(), dryTo.data(), t) * g;
-                    dr += readMix(1, tail.position, rate, dryFrom.data(), dryTo.data(), t) * g;
+                    dl += readMix(0, tail.position, rate, dryFrom.data(), dryTo.data(), t, i) * g;
+                    dr += readMix(1, tail.position, rate, dryFrom.data(), dryTo.data(), t, i) * g;
                 }
             }
             else

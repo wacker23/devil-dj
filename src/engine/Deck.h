@@ -189,6 +189,24 @@ public:
     bool stemSoloed(int stem) const noexcept { return stemSettings[static_cast<std::size_t>(stem)].solo; }
     bool stemFx(int stem) const noexcept { return stemSettings[static_cast<std::size_t>(stem)].fx; }
     bool readingStems() const noexcept { return lastReadStems; } // the last render read the stems, not the track
+
+    // Drum Swap (P6-05): up to 8 loops that can play instead of the drums stem (the drums stem's level, mute,
+    // solo and FX send then apply to them). A loop is `beats` long and follows the deck's beatgrid: from
+    // `anchor` (the bar it started on, buffer samples) at `deckSamplesPerBeat`, so it stays on the beat through
+    // tempo changes, loops, jumps, scratch and key lock. Switching crossfades the drums stem and the loops over
+    // kSwapFadeSeconds, sample by sample (the engine starts it that much before the bar, so the bar itself is
+    // whole). Needs the stems. The caller makes sure a replaced loop isn't read any more (audio thread).
+    static constexpr int kSwapSlots = 8;
+    static constexpr double kSwapFadeSeconds = 0.004;
+    void setSwapLoop(int slot, const TrackBuffer* loop, double beats) noexcept; // nullptr empties the slot
+    // Which slots play (bit = slot; 0 = the drums stem again). Slots turned on now start at `anchor`.
+    void setSwap(std::uint8_t mask, double anchor, double deckSamplesPerBeat) noexcept;
+    std::uint8_t swapMask() const noexcept { return swapOn; }
+    std::uint8_t swapLoaded() const noexcept;
+    bool swapSounding() const noexcept { return lastSwapSounding; } // the last render played a swap loop
+    // How far ahead of the playhead the deck reads the track now (key lock's stretcher; 0 without): a swap must
+    // start that much earlier to be heard on the bar.
+    double readAhead() const noexcept;
     bool dryActive() const noexcept { return lastDryActive; }
 
     Transport transport() const noexcept { return state; }
@@ -270,9 +288,28 @@ private:
     bool lastReadStems = false, lastDryActive = false;
     void updateStemTargets() noexcept;
     void beginStemPart(int numSamples) noexcept;
-    float readMix(int channel, double position, double rate, const float* from, const float* to, float t) const noexcept;
+    float readMix(int channel, double position, double rate, const float* from, const float* to, float t,
+                  int index) const noexcept;
     void readFramesMix(std::int64_t from, int count, float* left, float* right, const float* gFrom,
                        const float* gTo) const noexcept;
+    // Drum Swap (P6-05).
+    struct SwapSlot
+    {
+        const TrackBuffer* loop = nullptr;
+        double beats = 0.0;
+        double anchor = 0.0, deckSamplesPerBeat = 0.0;
+        float gain = 0.0f; // now (ramping toward on / off)
+    };
+    std::array<SwapSlot, kSwapSlots> swaps{};
+    std::uint8_t swapOn = 0;
+    float keepGain = 1.0f; // the drums stem's own share
+    std::vector<float> keepRamp;                           // per sample of this part
+    std::array<std::vector<float>, kSwapSlots> swapRamps;  // per sample of this part
+    bool swapPart = false;                                  // this part plays a loop or fades the drums
+    int partSamples = 1;
+    bool lastSwapSounding = false;
+    float swapRead(int slot, int channel, double position) const noexcept;
+    float drumsAt(int channel, double position, double rate, int index) const noexcept; // stem 0, with any swap
     std::unique_ptr<dsp::Stretcher> dryStretcher; // key lock for the dry output
     bool dryPrimed = false;
     std::vector<float> dryInL, dryInR, dryOutL, dryOutR;

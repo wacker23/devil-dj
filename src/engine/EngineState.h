@@ -55,6 +55,9 @@ struct DeckState
     std::array<float, 4> stemLevel{1.0f, 1.0f, 1.0f, 1.0f};
     std::uint8_t stemMute = 0, stemSolo = 0, stemFx = 0x0f;
     bool stemsActive = false, stemsDry = false;
+    // Drum Swap (P6-05): slots with a loop, slots playing, and the mask waiting for the next bar (-1: none).
+    std::uint8_t swapLoaded = 0, swapActive = 0;
+    int swapQueued = -1;
 
     // Loop (P3-03), in buffer samples.
     bool loopActive = false;

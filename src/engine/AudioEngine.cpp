@@ -449,6 +449,103 @@ void AudioEngine::apply(const SetStem& command) noexcept
     }
 }
 
+void AudioEngine::apply(const SetSwapLoop& command) noexcept
+{
+    if (command.deck >= kMaxDecks || command.slot >= Deck::kSwapSlots)
+    {
+        releaseBuffer(command.bufferId);
+        return;
+    }
+    auto& slot = decks[command.deck];
+    slot.deck.setSwapLoop(command.slot, command.loop, command.beats);
+    auto& id = slot.swapIds[command.slot];
+    if (id != 0 && id != command.bufferId)
+        releaseBuffer(id); // the deck reads the new one from the next render
+    id = command.loop != nullptr ? command.bufferId : 0;
+    if (command.loop == nullptr && command.bufferId != 0)
+        releaseBuffer(command.bufferId);
+}
+
+void AudioEngine::apply(const DrumSwap& command) noexcept
+{
+    if (command.deck >= kMaxDecks || command.slot >= Deck::kSwapSlots)
+        return;
+    auto& slot = decks[command.deck];
+    auto& deck = slot.deck;
+    if (deck.track() == nullptr || deck.stems() == nullptr)
+        return; // nothing to swap the drums of
+    // From where things will be once a swap already waiting has happened.
+    DeckSlot::QueuedAction* waiting = nullptr;
+    for (int k = 0; k < slot.queuedCount; ++k)
+        if (slot.queued[static_cast<std::size_t>(k)].kind == DeckSlot::QueuedAction::Kind::Swap)
+            waiting = &slot.queued[static_cast<std::size_t>(k)];
+    const std::uint8_t base = waiting != nullptr ? waiting->swapMask : deck.swapMask();
+    const auto bit = static_cast<std::uint8_t>(1u << command.slot);
+    std::uint8_t mask = 0;
+    switch (command.op)
+    {
+        case DrumSwapOp::Single:
+            mask = base == bit ? std::uint8_t{0} : bit;
+            break;
+        case DrumSwapOp::Layer:
+            mask = static_cast<std::uint8_t>(base ^ bit);
+            break;
+        case DrumSwapOp::Off:
+            mask = 0;
+            break;
+    }
+    mask = static_cast<std::uint8_t>(mask & deck.swapLoaded());
+
+    // The bar: the grid's next downbeat far enough ahead for the fade (and key lock's read-ahead) to end on it.
+    const auto& grid = slot.grid;
+    const double pos = deck.position();
+    const double rate = std::max(0.05, deck.rate());
+    const double lead = Deck::kSwapFadeSeconds * sampleRate * rate + deck.readAhead();
+    const bool moving = deck.isPlaying() && !deck.isReverse() && !deck.isStopping() && !deck.isScratching();
+    if (grid.empty())
+    {
+        if (waiting != nullptr)
+            waiting->swapMask = mask;
+        else
+            deck.setSwap(mask, pos, sampleRate / 2.0); // no grid: at once, 120 BPM
+        return;
+    }
+    const auto barAtOrAfter = [&grid](double sample)
+    {
+        auto b = static_cast<long long>(std::ceil(grid.beatAt(sample) - 1e-9));
+        for (int k = 0; k < 8 && grid.barBeatOf(b) != 1; ++k)
+            ++b;
+        return b;
+    };
+    if (!moving)
+    {
+        if (waiting != nullptr)
+            waiting->swapMask = mask;
+        else
+        {
+            // At once; new loops count from the bar at or before the playhead (so they're in step once it plays).
+            auto b = static_cast<long long>(std::floor(grid.beatAt(pos) + 1e-9));
+            for (int k = 0; k < 8 && grid.barBeatOf(b) != 1; ++k)
+                --b;
+            deck.setSwap(mask, grid.sampleAt(static_cast<double>(b)),
+                         grid.sampleAt(static_cast<double>(b + 1)) - grid.sampleAt(static_cast<double>(b)));
+        }
+        return;
+    }
+    const long long b = barAtOrAfter(pos + lead + rate * capacity);
+    const double bar = grid.sampleAt(static_cast<double>(b));
+    DeckSlot::QueuedAction a;
+    a.kind = DeckSlot::QueuedAction::Kind::Swap;
+    a.at = bar - lead;
+    a.to = bar;
+    a.swapMask = mask;
+    a.samplesPerBeat = grid.sampleAt(static_cast<double>(b + 1)) - bar;
+    if (waiting != nullptr)
+        *waiting = a;
+    else
+        queue(slot, a);
+}
+
 void AudioEngine::apply(const UnloadTrack& command) noexcept
 {
     if (command.deck < kMaxDecks)
@@ -819,7 +916,7 @@ void AudioEngine::apply(const HotCue& command) noexcept
                 for (int k = 0; k < slot.queuedCount; ++k)
                 {
                     const auto& a = slot.queued[static_cast<std::size_t>(k)];
-                    if (a.kind == DeckSlot::QueuedAction::Kind::Play || a.loopLength > 0.0)
+                    if (a.kind != DeckSlot::QueuedAction::Kind::Jump || a.loopLength > 0.0) // plays, swaps, loops
                         slot.queued[static_cast<std::size_t>(kept++)] = a;
                 }
                 slot.queuedCount = kept;
@@ -944,7 +1041,7 @@ void AudioEngine::dropQueuedJumps(DeckSlot& slot) noexcept
     for (int k = 0; k < slot.queuedCount; ++k)
     {
         const auto& a = slot.queued[static_cast<std::size_t>(k)];
-        if (a.kind == DeckSlot::QueuedAction::Kind::Play)
+        if (a.kind != DeckSlot::QueuedAction::Kind::Jump) // plays and Drum Swaps (P6-05) stay
             slot.queued[static_cast<std::size_t>(kept++)] = a;
     }
     slot.queuedCount = kept;
@@ -1712,6 +1809,10 @@ bool AudioEngine::renderDeckWithActions(DeckSlot& slot, float* l, float* r, floa
         {
             startPlaying(slot);
         }
+        else if (action.kind == DeckSlot::QueuedAction::Kind::Swap) // P6-05: the fade starts; it ends on the bar
+        {
+            slot.deck.setSwap(action.swapMask, action.to, action.samplesPerBeat);
+        }
         else
         {
             if (action.loopLength > 0.0) // a hot loop: looping from its start, now that the jump is there
@@ -2427,6 +2528,12 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
                 s.stemFx |= bit;
         }
         s.stemsActive = d.readingStems();
+        s.swapLoaded = d.swapLoaded(); // P6-05
+        s.swapActive = d.swapMask();
+        s.swapQueued = -1;
+        for (int q = 0; q < slot.queuedCount; ++q)
+            if (slot.queued[static_cast<std::size_t>(q)].kind == DeckSlot::QueuedAction::Kind::Swap)
+                s.swapQueued = slot.queued[static_cast<std::size_t>(q)].swapMask;
         s.stemsDry = d.dryActive();
         s.loopActive = d.loopActive();
         s.loopStart = d.loopStart();

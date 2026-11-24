@@ -125,6 +125,8 @@ private:
     void apply(const UnloadTrack& command) noexcept;
     void apply(const LoadStems& command) noexcept; // P6-04
     void apply(const SetStem& command) noexcept;
+    void apply(const SetSwapLoop& command) noexcept; // P6-05
+    void apply(const DrumSwap& command) noexcept;
     void apply(const Play& command) noexcept;
     void apply(const Pause& command) noexcept;
     void apply(const TogglePlay& command) noexcept;
@@ -247,6 +249,7 @@ private:
         const TrackBuffer* pendingBuffer = nullptr;
         BufferId pendingId = 0;
         BufferId stemsId = 0;    // P6-04: the stems on the deck (released with its track)
+        std::array<BufferId, Deck::kSwapSlots> swapIds{}; // P6-05: the Drum Swap loops (kept across tracks)
         bool dryWasActive = false; // the dry strip was running last chunk
         util::Beatgrid grid; // P2-14, in this deck's buffer samples
         bool synced = false;      // P2-19
@@ -259,10 +262,13 @@ private:
             {
                 Play, // at master beat `at`
                 Jump, // when the playhead crosses buffer sample `at`: to `to` (+ the overshoot)
+                Swap, // P6-05: when the playhead crosses `at`: Drum Swap to `swapMask`, new loops from bar `to`
             };
             Kind kind = Kind::Play;
             double at = 0.0, to = 0.0;
             double loopLength = 0.0; // Jump to a hot loop: loop from `to` for this long once there (P3-03)
+            std::uint8_t swapMask = 0;   // Swap (P6-05)
+            double samplesPerBeat = 0.0; // Swap: the grid's beat at the bar
         };
         static constexpr int kMaxQueued = 16;
         std::array<QueuedAction, kMaxQueued> queued{};

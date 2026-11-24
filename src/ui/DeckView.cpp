@@ -187,6 +187,8 @@ DeckView::DeckView(engine::AudioEngine& audioEngine, engine::DeckId deckId, Trac
                 if (onHotCueMenu)
                     onHotCueMenu(i);
             }
+            else if (padModeNow == PadMode::DrumSwap && onDrumSwapMenu)
+                onDrumSwapMenu(i);
             else if (padModeNow == PadMode::PadFx && onPadFxMenu)
             {
                 onPadFxMenu(i);
@@ -554,6 +556,8 @@ void DeckView::setPadMode(PadMode mode)
         text << " " << (padFxBank + 1);
     if (mode == PadMode::Sampler)
         text << " " << (samplerBank + 1);
+    if (mode == PadMode::DrumSwap && drumSwapMulti)
+        text << " +";
     modeButton.setButtonText(text);
     juce::String tip;
     switch (mode)
@@ -593,6 +597,11 @@ void DeckView::setPadMode(PadMode mode)
         case PadMode::Sampler:
             tip = "Sampler: the pads play the sampler's bank (one-shot / loop: press; gate: hold); Shift + pad 1-4: "
                   "bank 1-4. Load the slots in the SAMPLER panel.";
+            break;
+        case PadMode::DrumSwap:
+            tip = "Drum Swap: a pad plays its loop in place of the drums stem from the next bar (again: the drums "
+                  "back; multi (+) layers the loops). Shift + pad: capture the drums from the bar into it. Right-click: "
+                  "capture 4 / 8 / 16 / 32 beats, a Beat Maker pattern, clear, single / multi. Needs the track's stems.";
             break;
         case PadMode::Slicer:
             tip = "Slicer: the next 8 / 16 / 32 beats in 8 slices (shown on the waveform); hold a pad to roll its "
@@ -648,6 +657,17 @@ void DeckView::setBeatPadNames(const std::array<juce::String, 8>& names, bool re
         refreshPads();
 }
 
+void DeckView::setDrumSwapLooks(const std::array<juce::String, 8>& names, bool multi)
+{
+    if (names == drumSwapNames && multi == drumSwapMulti)
+        return;
+    drumSwapNames = names;
+    drumSwapMulti = multi;
+    if (padModeNow == PadMode::DrumSwap)
+        setPadMode(padModeNow); // multi in the mode button
+    refreshPads();
+}
+
 void DeckView::setSamplerBank(int bank)
 {
     samplerBank = std::clamp(bank, 0, engine::Sampler::kBanks - 1);
@@ -699,6 +719,17 @@ void DeckView::refreshPads()
                 look.colour = beatRecording ? 0xE0483C : 0xE8A23C;
                 look.enabled = name.isNotEmpty();
                 look.lit = held;
+            }
+            if (padModeNow == PadMode::DrumSwap) // the deck's Drum Swap slots (P6-05)
+            {
+                const auto& name = drumSwapNames[static_cast<std::size_t>(i)];
+                const auto bit = 1 << i;
+                const bool queuedOn = state.swapQueued >= 0 && (state.swapQueued & bit) && !(state.swapActive & bit);
+                const bool queuedOff = state.swapQueued >= 0 && !(state.swapQueued & bit) && (state.swapActive & bit);
+                look.text = name.isEmpty() ? juce::String("-") : name + (queuedOn || queuedOff ? " NEXT" : "");
+                look.colour = queuedOn || queuedOff ? 0xE8A23C : 0xF0A030;
+                look.enabled = state.stemsLoaded; // an empty slot can still be captured into (Shift / right-click)
+                look.lit = held || (state.swapActive & bit) != 0 || queuedOn;
             }
             if (padModeNow == PadMode::Sampler) // the sampler's bank
             {
