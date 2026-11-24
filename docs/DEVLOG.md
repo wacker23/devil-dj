@@ -11,6 +11,27 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P5-01 Fraction + time spans
+- What changed:
+  - `js/codebeat/fraction.js`: exact rationals on plain numbers (no BigInt).
+    - Always normalised and frozen.
+    - add / sub / mul (cross-reduced) / div / neg / abs, compare (exact even past the cross-multiplication range), min / max.
+    - Exact floor / ceil (no float division), sam / nextSam / cyclePos.
+    - `fromNumber(x, maxDenominator)` by continued fractions, for clock positions and typed decimals.
+    - `parse` for "1/3", "0.1" (exactly 1/10) and "1.5e-1".
+    - `F()` accepts fractions, numbers, strings, [n, d] pairs and the editor's string literals.
+    - Any result that would leave the safe-integer range throws a RangeError instead of drifting.
+  - `js/codebeat/span.js`: [begin, end) spans.
+    - duration, midpoint, contains, spanCycles (split at whole cycles), wholeCycle, cyclePos.
+    - withTime / withEnd / withCycle (ends kept in order, so a reflection works for rev).
+    - intersection: touching spans don't overlap; a zero-width span inside or at the begin of another does, for point queries.
+  - `package.json` (`"type": "module"`, for node only).
+- Tests: 15 node tests (`cd js/codebeat; node --test`), also run by ctest as `js.codebeat` when Node.js is found; CI installs Node 20.
+  - 96,000 steps of 1/96000 sum to exactly 1.
+  - Overflow throws.
+  - Every n/d with d <= 200 round-trips through `fromNumber`.
+  - Span splitting leaves no gaps.
+
 ## 2026-11-23 · P4-21 Spotify playlist import
 - What changed:
   - `app/SpotifyApi` reads the owner's playlists (`/v1/me/playlists`, following `next`) and each one's tracks (title, artists, album, duration, ISRC; local files and episodes are skipped). It waits on 429 (Retry-After, 1-30 s) and refreshes the token once on 401. Only track lists are read: no Spotify audio is ever streamed or cached.

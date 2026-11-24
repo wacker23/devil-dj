@@ -1,0 +1,9 @@
+{
+  "name": "devildj-codebeat",
+  "private": true,
+  "type": "module",
+  "description": "The Code Beat pattern language (Devil-DJ). Plain ES2023, no dependencies; package.json exists only for node --test.",
+  "scripts": {
+    "test": "node --test"
+  }
+}

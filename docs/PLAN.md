@@ -486,7 +486,7 @@ Spec: `docs/CODEBEAT_SPEC.md`. The pattern language is written from scratch in p
 
 ### Language (JS, tested with `node --test`)
 
-- [ ] **P5-01 Fraction + time spans** — `fraction.js` (BigInt-free rational with safe integer checks), `span.js` (begin/end, cycle splitting). Done when: tests.
+- [x] **P5-01 Fraction + time spans** — `fraction.js` (BigInt-free rational with safe integer checks), `span.js` (begin/end, cycle splitting). Done when: tests.
 - [ ] **P5-02 Pattern core** — `pattern.js`: `Pattern(query)`, events with `whole`/`part`/`value`, `pure`, `silence`, `fmap`, `withTime`, `fast`, `slow`, `early`, `late`, `rev`, `stack`, `slowcat` (`cat`), `fastcat` (`seq`), `appLeft/appRight/appBoth` for patterned arguments. Done when: spec examples in CODEBEAT_SPEC §3 pass as tests.
 - [ ] **P5-03 Mini-notation parser** — hand-written recursive-descent parser for the grammar in CODEBEAT_SPEC §4 (sequence, `~`, `[ ]`, `< >`, `,`, `*`, `/`, `!`, `@`, `?`, `(k,n,r)`, `:n`), producing patterns with source locations per atom. Done when: grammar test table passes; clear error messages with column numbers.
 - [ ] **P5-04 Controls** — `s/sound`, `n`, `note` (names and MIDI numbers), `gain`, `pan`, `speed`, `lpf`, `hpf`, `resonance`, `room`, `delay`, `crush`, `attack/decay/sustain/release`, `cut` (choke), `bank`. Done when: tests.

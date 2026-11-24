@@ -183,3 +183,13 @@ add_test(NAME tools.check_licenses
 
 add_test(NAME tools.check_licenses.unittests
     COMMAND Python3::Interpreter -m unittest discover -s "${PROJECT_SOURCE_DIR}/tools/tests" -v)
+
+# Code Beat pattern language (P5-01): the JS tests under node, when Node.js is installed (it is optional for building).
+find_program(DEVILDJ_NODE node)
+if(DEVILDJ_NODE)
+    add_test(NAME js.codebeat
+        COMMAND "${DEVILDJ_NODE}" --test
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/js/codebeat")
+else()
+    message(STATUS "Node.js not found: the js.codebeat tests are skipped")
+endif()
