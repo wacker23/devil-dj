@@ -132,18 +132,123 @@ CodeDeckProducer::Status CodeDeckProducer::status()
 std::string CodeDeckProducer::soundName(std::uint16_t index)
 {
     std::lock_guard<std::mutex> lock(mutex);
-    return index < sounds.size() ? sounds[index] : std::string();
+    if (index >= sounds.size())
+        return {};
+    const auto& name = sounds[index];
+    return name.ends_with("~synth") ? name.substr(0, name.size() - 6) : name; // a synth's one sound for every n
 }
 
-std::uint16_t CodeDeckProducer::soundIndex(const std::string& name)
+void CodeDeckProducer::setSoundBank(std::shared_ptr<CodeSoundBank> b)
 {
     std::lock_guard<std::mutex> lock(mutex);
-    if (const auto it = soundIds.find(name); it != soundIds.end())
-        return it->second;
-    const auto index = static_cast<std::uint16_t>(std::min<std::size_t>(sounds.size(), 0xffff));
-    sounds.push_back(name);
-    soundIds.emplace(name, index);
-    return index;
+    bank = std::move(b);
+}
+
+std::vector<std::pair<std::uint16_t, CodeSound>> CodeDeckProducer::takeNewSounds()
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    std::vector<std::pair<std::uint16_t, CodeSound>> out;
+    out.swap(newSounds);
+    return out;
+}
+
+void CodeDeckProducer::warn(const std::string& warning)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        auto& w = counters.warnings;
+        if (std::find(w.begin(), w.end(), warning) != w.end())
+            return; // each once
+        w.push_back(warning);
+        if (w.size() > 50)
+            w.erase(w.begin());
+    }
+    if (onWarning)
+        onWarning(warning);
+}
+
+std::optional<std::uint16_t> CodeDeckProducer::soundIndex(const std::string& name, const CodeSound* resolved)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (const auto it = soundIds.find(name); it != soundIds.end())
+            return it->second;
+        if (sounds.size() < static_cast<std::size_t>(engine::Voices::kSounds))
+        {
+            const auto index = static_cast<std::uint16_t>(sounds.size());
+            sounds.push_back(name);
+            soundKinds.push_back(resolved != nullptr ? resolved->voice : engine::VoiceKind::DrumSynth);
+            soundIds.emplace(name, index);
+            if (resolved != nullptr)
+                newSounds.emplace_back(index, *resolved);
+            return index;
+        }
+    }
+    warn("more than " + std::to_string(engine::Voices::kSounds) + " different sounds: \"" + name + "\" is silent");
+    return std::nullopt;
+}
+
+bool CodeDeckProducer::resolveSound(const std::string& sound, const std::string& n, bool hasNote, engine::ScheduledEvent& ev)
+{
+    std::shared_ptr<CodeSoundBank> b;
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        b = bank;
+    }
+    if (b == nullptr) // no bank (tests): every name is a drum synth of its own
+    {
+        const auto index = soundIndex(n.empty() ? sound : sound + ":" + n, nullptr);
+        if (index)
+            ev.soundIndex = *index;
+        return index.has_value();
+    }
+    // A note with no sound plays the triangle synth.
+    const std::string name = sound.empty() ? std::string("tri") : sound;
+    const int number = n.empty() ? 0 : static_cast<int>(std::lround(real(n).value_or(0.0)));
+    const std::string key = name + ":" + std::to_string(number);
+    std::optional<std::uint16_t> index;
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (const auto it = soundIds.find(key); it != soundIds.end())
+            index = it->second;
+        else if (const auto syn = soundIds.find(name + "~synth"); syn != soundIds.end())
+            index = syn->second; // a synth: one sound whatever its n
+    }
+    if (!index)
+    {
+        const double t = now();
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            if (const auto it = unknownUntil.find(name); it != unknownUntil.end() && t < it->second)
+            {
+                ++counters.unknownSounds;
+                return false;
+            }
+        }
+        const auto resolved = b->resolve(name, number);
+        if (resolved.kind == CodeSound::Kind::Unknown)
+        {
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                ++counters.unknownSounds;
+                unknownUntil[name] = t + 2.0; // looked up again in 2 s (a folder may be copied in)
+            }
+            warn(resolved.warning);
+            return false;
+        }
+        index = soundIndex(resolved.kind == CodeSound::Kind::Synth ? name + "~synth" : key, &resolved);
+        if (!index)
+            return false;
+    }
+    ev.soundIndex = *index;
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        ev.kind = soundKinds[*index];
+    }
+    // A synth's n is a pitch: semitones above middle C (when no note is given).
+    if (ev.kind == engine::VoiceKind::Synth && !hasNote && !n.empty())
+        ev.note = 60.0f + static_cast<float>(real(n).value_or(0.0));
+    return true;
 }
 
 void CodeDeckProducer::tick()
@@ -273,6 +378,7 @@ void CodeDeckProducer::emit(const std::string& reply, const engine::ClockSnapsho
 
         std::string sound;
         std::string sampleNumber;
+        bool hasNote = false;
         double legato = 1.0;
         std::string_view fields = line.substr(bar1 + 1, bar2 - bar1 - 1);
         while (!fields.empty())
@@ -298,7 +404,10 @@ void CodeDeckProducer::emit(const std::string& reply, const engine::ClockSnapsho
             if (key == "n")
                 sampleNumber = std::string(value);
             else if (key == "note")
+            {
                 ev.note = f;
+                hasNote = true;
+            }
             else if (key == "gain")
                 ev.gain = f;
             else if (key == "pan")
@@ -330,7 +439,8 @@ void CodeDeckProducer::emit(const std::string& reply, const engine::ClockSnapsho
             else if (key == "cut")
                 ev.chokeGroup = static_cast<std::uint8_t>(std::clamp(*x, 0.0, 255.0));
         }
-        ev.soundIndex = soundIndex(sampleNumber.empty() ? sound : sound + ":" + sampleNumber);
+        if (!resolveSound(sound, sampleNumber, hasNote, ev))
+            continue; // an unknown sound (warned) or one too many
         const double beats = ((*end - *begin) * cpb).toDouble();
         ev.durationSeconds = static_cast<float>(beats * 60.0 / map.bpm * legato);
 

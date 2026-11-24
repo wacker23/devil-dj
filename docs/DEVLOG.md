@@ -11,6 +11,29 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P5-11 Sound bank
+- What changed:
+  - `app/CodeSoundBank` maps names to sounds (CODEBEAT_SPEC §10). It is thread-safe and only lists files; decoding stays with the sample bank (P5-12).
+    - Drums: kick / bd, snare / sd, clap / cp, hat / hh, ohat / oh, tom / lt / mt / ht, rim / rs, cow / cb, shaker / sh play the Beat Maker drum synths; `:n` picks that drum's n-th preset, wrapping.
+    - Synths: sine / saw / square / tri / supersaw (7-voice unison) / subbass / fm play synth voices, with plain waves the code's filters shape.
+    - Sample folders: any folder in `Documents\Devil-DJ\Samples` with wav / aif / aiff / flac files, sorted in natural order; `:n` picks one, wrapping, also negative. A folder wins over a built-in of the same name, so a "kick" folder plays the owner's kicks.
+    - Folders are rescanned at most every 2 s when a name isn't found, so a folder copied in while playing is picked up.
+    - Unknown names give a warning with the nearest name (edit distance <= 2): `unknown sound "bdd" - did you mean "bd"?`.
+    - `names()` lists everything, for completion (P5-16).
+  - `CodeDeckProducer` resolves each new name through the bank:
+    - The event gets its voice kind.
+    - A synth is one sound whatever its n, and its n is a pitch (60 + n) when no note is given; a note with no s plays the triangle synth.
+    - Sounds are capped at Voices::kSounds (256), with a warning past that.
+    - New sounds wait in `takeNewSounds()` for the engine to install (P5-12).
+    - Unknown names: one warning each (`onWarning` and `status().warnings`); their events are counted (`unknownSounds`) and not played; the name is looked up again after 2 s.
+    - With no bank set, names pass as before (the P5-09 tests).
+- Tests: 5 new Catch2 cases (Release and Debug).
+  - All 20 drum names and their kinds, presets picked by n and wrapping.
+  - The 7 synths and their settings.
+  - Sample folders: natural sort, wrap, negative n, case, a folder over a built-in, an empty folder that isn't a sound, a new folder found on rescan.
+  - Warnings with and without a suggestion.
+  - On the producer: drum, synth and sine events with their kinds and notes (c4 = 60, n 0 / 7 = 60 / 67), 4 sounds installed once, the unknown name warned once and its 8+ hits not played.
+
 ## 2026-11-24 · P5-10 Hot swap
 - What changed:
   - `prelude.js`: a new pattern waits as `session.next` and takes over exactly at the next cycle line (Ctrl+Enter).

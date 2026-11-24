@@ -321,3 +321,64 @@ TEST_CASE("Code deck: hot swap at the next cycle line - no onset doubled or miss
     for (std::size_t i = static_cast<std::size_t>(firstHat - immediateNames.begin()); i < immediate.size(); ++i)
         CHECK(immediateNames[i] == "hh");
 }
+
+TEST_CASE("Code deck: sounds through the sound bank - kinds, synth notes, warnings for unknown names (P5-11)", "[codebeat][scheduler][sounds]")
+{
+    const auto folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("devildj-nosamples", "");
+    folder.createDirectory();
+    std::vector<ScheduledEvent> events;
+    std::vector<std::string> names, warned;
+    std::vector<std::pair<std::uint16_t, devildj::app::CodeSound>> installed;
+    CodeDeckProducer::Status st;
+    bool noneLater = false;
+    onBigStack([&]
+    {
+        Sim sim;
+        sim.producer->setSoundBank(std::make_shared<devildj::app::CodeSoundBank>(folder));
+        sim.producer->onWarning = [&](const std::string& w) { warned.push_back(w); };
+        sim.start(R"(stack(s("bd:1 sd"), note("c4").s("saw"), n("0 7").s("sine"), s("bdd*4")))");
+        sim.tickTo(1.2); // past the sd at half a cycle (0.94 s)
+        installed = sim.producer->takeNewSounds();
+        sim.tickTo(4.0); // the next cycles: the same sounds, no new ones, the warning not repeated
+        events = sim.events;
+        for (const auto& e : events)
+            names.push_back(sim.producer->soundName(e.soundIndex));
+        st = sim.producer->status();
+        noneLater = sim.producer->takeNewSounds().empty();
+    });
+    CHECK(noneLater);
+    folder.deleteRecursively();
+
+    using devildj::engine::VoiceKind;
+    // Cycle 0: bd:1, sd:0 (drum synths), saw at c4 (60), sine at n 0 and 7 (60, 67); no bdd.
+    std::vector<std::string> cycle0;
+    for (std::size_t i = 0; i < events.size(); ++i)
+        if (events[i].sampleTime < static_cast<std::int64_t>(1.875 * 44100.0))
+            cycle0.push_back(names[i]);
+    std::sort(cycle0.begin(), cycle0.end());
+    CHECK(cycle0 == std::vector<std::string>{"bd:1", "saw", "sd:0", "sine", "sine"});
+    for (std::size_t i = 0; i < events.size(); ++i)
+    {
+        INFO(names[i]);
+        if (names[i] == "bd:1" || names[i] == "sd:0")
+            CHECK(events[i].kind == VoiceKind::DrumSynth);
+        else
+            CHECK(events[i].kind == VoiceKind::Synth);
+        if (names[i] == "saw")
+            CHECK(events[i].note == 60.0f);
+    }
+    std::vector<float> sineNotes;
+    for (std::size_t i = 0; i < events.size(); ++i)
+        if (names[i] == "sine" && events[i].sampleTime < static_cast<std::int64_t>(1.875 * 44100.0))
+            sineNotes.push_back(events[i].note);
+    CHECK(sineNotes == std::vector<float>{60.0f, 67.0f});
+    // The sounds to install, each once with what it is.
+    REQUIRE(installed.size() == 4);
+    CHECK(installed[0].second.kind == devildj::app::CodeSound::Kind::Drum);
+    CHECK(std::count_if(installed.begin(), installed.end(), [](const auto& s) { return s.second.voice == VoiceKind::Synth; }) == 2);
+    // The unknown name: one warning, its hits counted and not played.
+    CHECK(warned == std::vector<std::string>{"unknown sound \"bdd\" - did you mean \"bd\"?"});
+    CHECK(st.warnings == warned);
+    CHECK(st.unknownSounds >= 8);
+    CHECK(std::none_of(names.begin(), names.end(), [](const std::string& n) { return n.find("bdd") != std::string::npos; }));
+}
