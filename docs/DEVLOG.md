@@ -11,6 +11,25 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P5-02 Pattern core
+- What changed:
+  - `js/codebeat/event.js`: `Event{whole, part, value, context}` (frozen).
+    - The onset test (§2), and withSpan / withValue / withContext.
+    - Combined source locations, and a readable `show()`: "a [0, 1/2)", "a [0, 2) part [1, 2)", "a ~[0, 1/4)" for signals.
+  - `js/codebeat/pattern.js`:
+    - `Pattern(query)` over `State{span, controls}`, with queryArc, `onsets`, splitQueries.
+    - withQuerySpan / withQueryTime / withEventSpan / withEventTime / `withTime`, `fmap` / withValue, filters.
+    - `appLeft` / `appRight` / `appBoth`, and `innerJoin` / `outerJoin`.
+    - `fast`, `slow` (0 is silence, negative reverses), `early`, `late`, and `rev` (per cycle; long events reflected whole).
+    - `pure`, `silence`, `stack`, `slowcat` / `cat` (each pattern sees its own cycles in turn), `fastcat` / `seq`, `lift2`.
+    - Patterned arguments through `patterned()`: the argument picks the value per event, and the structure stays the changed pattern's.
+    - Strings become patterns through a hook that the mini-notation parser (P5-03) will fill.
+- Tests: 25 new (40 in total in js/codebeat), plus 2 todos.
+  - Every §3 row that needs only the core: pure, fastcat, slowcat, stack, fast, slow, rev, early.
+  - The two todo rows need later tasks: `every` (P5-05) and `s().off` (controls P5-04, off P5-05).
+  - Also covered: cross-cycle and zero-width queries, nesting, fractional / zero / negative factors, the three app forms, patterned fast / early, contexts carried, and determinism.
+  - Windows of 1/7 cycle add up to the whole 4-cycle query with no gaps or doubles.
+
 ## 2026-11-24 · P5-01 Fraction + time spans
 - What changed:
   - `js/codebeat/fraction.js`: exact rationals on plain numbers (no BigInt).
