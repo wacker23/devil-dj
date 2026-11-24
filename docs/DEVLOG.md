@@ -11,6 +11,24 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P5-05 Transformations tier 1
+- What changed:
+  - `js/codebeat/transforms.js` adds these as Pattern methods; numeric arguments may be patterned:
+    - time and cycles: `every(n, fn)` (cycles where cycle mod n = 0), `whenCycle(pred, fn)`, `iter(n)`, `palindrome()`, `ply(n)` (via a new `squeezeJoin`), `hurry(f)`;
+    - layering: `superimpose(fn)`, `layer(...fns)`, `off(t, fn)`;
+    - randomness: `degradeBy(p)` / `degrade()`, `sometimesBy(p, fn)` / `sometimes` / `often` / `rarely`, `seed(n)`;
+    - structure: `struct("x ~ x x")`, `mask("1 0 1 1")`, `euclid(k, n, r)`;
+    - arithmetic: `add` / `sub` / `mul` / `div` (on numbers; on a control object's note, else n; or field by field), `scale("C:minor")`;
+    - new functions `run(n)` and `euclid(k, n, r)`.
+  - Random choices are seeded by the hash of (seed, a salt from the call's text and chance, the event's start). The same code gives the same choices, and two different calls choose independently.
+  - `js/codebeat/scales.js`: the 13 scales of §5.4; the root defaults to octave 3; negative and over-the-octave degrees wrap.
+  - Mini-notation: `:` may also join a name ("C:minor"), so scale names work inside patterns like `"<C:major F:major>"`.
+- Tests: 19 new (94 in total, no todo left).
+  - The last two §3 rows, `every(2, rev)` and `s("kick").off(1/8, x => x.gain(0.5))`, now pass.
+  - Every transform is covered, including the shares of the random ones within +-7 % over 640 events.
+  - All 13 scales are checked.
+  - A chain of transforms queried in 1/5-cycle windows gives exactly the onsets of one 8-cycle query.
+
 ## 2026-11-24 · P5-04 Controls
 - What changed:
   - `js/codebeat/controls.js` has every control as a function and as a method, with structure from the left and fields merged (the later one wins).

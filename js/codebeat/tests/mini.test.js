@@ -212,7 +212,7 @@ test("errors: modifiers without what they need", () => {
     assert.equal(error("a?2").message, 'column 3: "?" needs a chance between 0 and 1, not 2');
     assert.equal(error("a(3)").message, 'column 4: the euclid rhythm needs (pulses, steps) - expected "," but found ")"');
     assert.equal(error("a(3,8").message, 'column 2: missing ")" for the "(" at column 2');
-    assert.equal(error("kick:x").message, 'column 5: ":" needs a whole number after it (the sample number)');
+    assert.equal(error("kick:-").message, 'column 5: ":" needs a whole number (the sample number) or a name after it');
     assert.equal(error("! a").message, 'column 1: "!" on its own repeats the step before it, but there is none');
 });
 

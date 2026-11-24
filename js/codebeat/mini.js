@@ -237,8 +237,14 @@ class Parser {
             } else if (t.type === ":") {
                 this.next();
                 const n = this.peek();
+                if (n.type === "word" && !n.space) {
+                    // "c:minor" (a scale), "kit:name": one word joined by ":".
+                    this.next();
+                    pat = pat.fmap((v) => `${v}:${n.text}`);
+                    continue;
+                }
                 if (n.type !== "number" || n.space || !/^\d+$/.test(n.text))
-                    this.fail('":" needs a whole number after it (the sample number)', t.start);
+                    this.fail('":" needs a whole number (the sample number) or a name after it', t.start);
                 this.next();
                 const index = Number(n.text);
                 pat = pat.fmap((v) => (typeof v === "string" ? { s: v, n: index } : this.fail('":" goes after a sound name', t.start)));

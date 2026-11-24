@@ -56,8 +56,7 @@ test("§3 early(1/4): b [1/4,3/4), a [3/4,5/4), and the tail of the previous a",
     assert.deepEqual(onsets(seq("a", "b").early(F(1, 4)), 0, 1), ["b [1/4, 3/4)", "a [3/4, 5/4) part [3/4, 1)"]);
 });
 
-test.todo("§3 every(2, rev) - P5-05");
-test.todo("§3 s(\"kick\").off(1/8, x => x.gain(0.5)) - off is P5-05 (controls are in since P5-04)");
+// The every(2, rev) and s("kick").off(1/8, ...) rows are in transforms.test.js (P5-05).
 
 // --- the rest of the core ---
 

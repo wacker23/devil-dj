@@ -30,3 +30,12 @@ export function randomAt(seed, salt, t) {
     h = addNumber(h, time.d);
     return h / 0x100000000;
 }
+
+// A text's 32-bit hash: salts that differ for different code but stay the same when the code moves.
+export function hashString(text) {
+    let h = 0x811c9dc5;
+    const s = String(text);
+    for (let i = 0; i < s.length; ++i)
+        h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
+    return h >>> 0;
+}
