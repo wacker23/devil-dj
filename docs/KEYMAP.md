@@ -102,7 +102,7 @@ The same tools are on each deck's GRID button (and TAP); editing a grid locks it
 | Load to Deck C / D (4-deck mode) | Shift+Tab / Shift+Enter |
 | Rate selected track(s) 1–5 / clear | Ctrl+Shift+1…5 / Ctrl+Shift+0 (or click a star; the same star again clears) |
 | Preview selected track in headphones (hold) | Ctrl+Space |
-| Switch bottom panel: Browser → Beat Maker → Code Beat | Ctrl+Tab |
+| Switch bottom panel: Browser → Beat Maker → MIX (transition editor) → CODE (code deck) | Ctrl+Tab |
 
 ## Beat Maker (when its panel has focus)
 

@@ -11,6 +11,30 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P5-12 Code deck channel
+- What changed:
+  - Engine:
+    - Mixer channel 6, `kCodeDeckChannel` "CODE" (`kMaxChannels` is 7; parameter ids are not stored anywhere, so nothing moves).
+    - The Beat Maker's voice parts are now one `VoiceModule` shape (voices, event queue, due events, scratch, echo / reverb sends). There are two of them, the Beat Maker's and the code deck's, rendered by the same `renderVoices(module, channel)`.
+    - The `room` / `delay` controls feed the code deck's own reverb / echo; the echo is 3/16 of a bar (0.75 beat).
+    - The channel has its strip, color FX, pad / release FX, cue, crossfader side and meter like every channel. The FX units can target it (FxTarget::CodeDeck; the FX panel's target cycle and menu include CODE).
+    - `codeDeckEvents()`: the producer's queue.
+    - `SetDrumSound` / `SetSynthSound` / `SetSampleSound` have a `source` (Beat Maker by default), so the code deck has its own sound tables.
+    - `CodeDeckStop` (hush) drops its queued events and releases its voices.
+    - The state reports `codeLateEvents` / `codeVoices`.
+  - App:
+    - MainComponent runs the code deck's producer (its own thread) with the sound bank on the samples folder.
+    - The app timer hands it the clock and the DJ hooks (each deck's tempo, beat, bar, phrase, playing).
+    - It installs new sounds into the code deck's voices: drums and synths as commands; samples decoded by the sample bank, with a retry when the command queue is full.
+    - It sends `CodeDeckStop` when the code goes silent (hush).
+  - UI:
+    - `ui/CodeChannelStrip`: level, filter, CUE, A / THRU / B, and a status line (playing / silent, voices, late, the last warning or error).
+    - It sits in a new fourth page of the bottom panel (browser -> Beat Maker -> MIX -> CODE). The page's editor area waits for P5-13.
+- Tests: 2 new Catch2 cases (Release and Debug).
+  - **Crossfade** with a deck playing 300 Hz on A and the code deck holding C7 (2093 Hz) on B. At the A side the deck is 0.40 and the code deck 0.0004. At the centre they are 0.28 / 0.09. At the B side they are 0.0001 / 0.12. No late events or unknown sounds.
+  - The code deck's kicks are on the CODE channel only (BEATS silent, no Beat Maker voices); cue works; CodeDeckStop releases every voice.
+- Not done here: there is no way to type code in the app yet (P5-13 editor, P5-14 keys), so the crossfade is checked by the test, not by hand. setbpm() is reported but not applied (it needs the code deck as clock master).
+
 ## 2026-11-24 · P5-11 Sound bank
 - What changed:
   - `app/CodeSoundBank` maps names to sounds (CODEBEAT_SPEC §10). It is thread-safe and only lists files; decoding stays with the sample bank (P5-12).

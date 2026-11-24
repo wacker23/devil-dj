@@ -222,6 +222,9 @@ struct EngineState
     // The Beat Maker (P4-10): its channel is channels[kBeatMakerChannel].
     std::uint64_t beatLateEvents = 0; // events that arrived after their sample
     int beatVoices = 0;               // sounding now (drums + synths + samples)
+    // The code deck (P5-12): its channel is channels[kCodeDeckChannel].
+    std::uint64_t codeLateEvents = 0;
+    int codeVoices = 0;
     TransitionState transition; // P3-17
 };
 

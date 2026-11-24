@@ -20,9 +20,11 @@
 #include "ui/KeymapEditor.h"
 #include "ui/NextTrackPanel.h"
 #include "ui/BeatChannelStrip.h"
+#include "ui/CodeChannelStrip.h"
 #include "ui/TransitionEditor.h"
 #include "ui/BeatMakerPanel.h"
 #include "app/BeatMakerProducer.h"
+#include "app/CodeDeckProducer.h"
 #include "app/SampleBank.h"
 #include "app/TransitionStore.h"
 #include "app/SpotifyAuth.h"
@@ -184,7 +186,7 @@ private:
     // edit) and the step grid, shown in the browser's place (Ctrl+Tab switches).
     beatmaker::Project beatProject;
     ui::BeatMakerPanel beatPanel;
-    int bottomPanel = 0; // 0 the browser, 1 the Beat Maker, 2 the transition editor (P4-17)
+    int bottomPanel = 0; // 0 the browser, 1 the Beat Maker, 2 the transition editor (P4-17), 3 the code deck (P5-12)
     // The transition editor (P4-17): the next transition, from the deck playing to the other one - Auto, then as
     // edited; the T key plays it while it is for the two tracks on the decks.
     ui::TransitionEditor mixEditor;
@@ -215,6 +217,14 @@ private:
     // P4-10: the producer thread that plays the patterns into the engine, and the BEATS channel strip.
     std::unique_ptr<app::BeatMakerProducer> beatProducer;
     ui::BeatChannelStrip beatStrip{engine};
+    // The code deck (P5-12): its producer (its own thread, the JS runtime), the sound names, its channel strip.
+    std::shared_ptr<app::CodeSoundBank> codeSounds;
+    std::unique_ptr<app::CodeDeckProducer> codeProducer;
+    std::vector<std::pair<std::uint16_t, app::CodeSound>> codeSoundsToSend; // not yet taken by the engine
+    bool codeWasPlaying = false;
+    ui::CodeChannelStrip codeStrip{engine};
+    juce::Label codePanel; // the code editor's place (P5-13)
+    void updateCodeDeck(); // the app's timer: clock, DJ hooks, new sounds, hush, the strip
     std::array<std::optional<beatmaker::SoundRef>, 128> sentDrumSounds;
     std::array<std::optional<beatmaker::SynthPreset>, 128> sentSynthSounds;
     // P4-13: user samples, decoded once and kept; what each drum sound index was last given.

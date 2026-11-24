@@ -372,6 +372,18 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     // The producer (P4-10): its own thread, pushing into the engine's Beat Maker queue.
     beatProducer = std::make_unique<app::BeatMakerProducer>(
         [this](const engine::ScheduledEvent& e) { return engine.beatMakerEvents().tryPush(e); });
+    // The code deck (P5-12): its producer thread pushes into the engine's code deck queue; names resolve in the
+    // samples folder (the Beat Maker's) and the built-in drums and synths.
+    codeSounds = std::make_shared<app::CodeSoundBank>(samplesFolder());
+    codeProducer = std::make_unique<app::CodeDeckProducer>(
+        [this](const engine::ScheduledEvent& e) { return engine.codeDeckEvents().tryPush(e); });
+    codeProducer->setSoundBank(codeSounds);
+    addChildComponent(codeStrip);
+    codePanel.setText("Code Beat - the code editor goes here (next in the plan). The CODE channel is at the right.",
+                      juce::dontSendNotification);
+    codePanel.setJustificationType(juce::Justification::centred);
+    codePanel.setColour(juce::Label::textColourId, juce::Colour(0xff8a8a96));
+    addChildComponent(codePanel);
     beatPanel.onChanged = [this]
     {
         beatSaveTimer->startTimer(1000);
@@ -507,6 +519,7 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
             // The producer's clock: the engine's sample clock, master beat and tempo, and when (P4-10).
             const auto& es = engine.readState();
             beatProducer->setClock({es.sampleClock, es.masterBeat, es.masterBpm, es.sampleRate, es.hostTimeSeconds});
+            updateCodeDeck();
             const auto onPads = [this](ui::PadMode m) { return padModes[0] == m || padModes[1] == m; };
             if (!beatPanel.isVisible() && !onPads(ui::PadMode::BeatPatterns) && !onPads(ui::PadMode::BeatPads))
                 return;
@@ -2127,10 +2140,66 @@ juce::File MainComponent::beatProjectFile()
         .getChildFile(juce::String("Current") + beatmaker::kFileExtension);
 }
 
+void MainComponent::updateCodeDeck()
+{
+    const auto& es = engine.readState();
+    codeProducer->setClock({es.sampleClock, es.masterBeat, es.masterBpm, es.sampleRate, es.hostTimeSeconds});
+    // The DJ hooks: deckA ... deckD for the code (tempo, beat, bar, phrase, playing).
+    codebeat::DjHooks dj;
+    for (std::size_t i = 0; i < dj.decks.size(); ++i)
+    {
+        const auto& d = es.decks[i];
+        auto& h = dj.decks[i];
+        h.bpm = d.hasGrid ? d.gridBpm * d.rate : 0.0;
+        h.beat = d.beat;
+        h.bar = static_cast<int>(std::floor(d.beat / 4.0));
+        h.phrase = static_cast<int>(std::floor(d.beat / 16.0));
+        h.playing = d.playing;
+    }
+    dj.masterBpm = es.masterBpm;
+    dj.masterBeat = es.masterBeat;
+    codeProducer->setDj(dj);
+    // Sounds named for the first time: into the code deck's voices (samples decoded here, on the message thread).
+    for (auto& s : codeProducer->takeNewSounds())
+        codeSoundsToSend.push_back(std::move(s));
+    while (!codeSoundsToSend.empty())
+    {
+        const auto& [index, sound] = codeSoundsToSend.front();
+        bool sent = true;
+        if (sound.kind == app::CodeSound::Kind::Drum)
+            sent = engine.send(engine::SetDrumSound{index, sound.drum, engine::SourceId::CodeDeck});
+        else if (sound.kind == app::CodeSound::Kind::Synth)
+            sent = engine.send(engine::SetSynthSound{index, sound.synth, engine::SourceId::CodeDeck});
+        else if (sound.kind == app::CodeSound::Kind::Sample)
+            sent = engine.send(engine::SetSampleSound{index, sampleBank.get(sound.sample.getFullPathName().toStdString()).data,
+                                                      engine::SourceId::CodeDeck});
+        if (!sent)
+            break; // the command queue is full: the rest next time
+        codeSoundsToSend.erase(codeSoundsToSend.begin());
+    }
+    // hush(): what is queued goes, what sounds fades out.
+    const auto st = codeProducer->status();
+    if (codeWasPlaying && !st.playing)
+        engine.send(engine::CodeDeckStop{});
+    codeWasPlaying = st.playing;
+    if (codeStrip.isVisible())
+    {
+        codeStrip.refresh();
+        juce::String text = !st.ready ? juce::String("starting...")
+                            : st.lastError.empty() ? juce::String(st.playing ? "playing" : "silent") + " - " +
+                                                         juce::String(es.codeVoices) + " voices, " +
+                                                         juce::String(static_cast<juce::int64>(st.late + es.codeLateEvents)) + " late"
+                                                   : juce::String("error: ") + juce::String::fromUTF8(st.lastError.c_str());
+        if (!st.warnings.empty())
+            text << "\n" << juce::String::fromUTF8(st.warnings.back().c_str());
+        codeStrip.setStatus(text);
+    }
+}
+
 void MainComponent::switchBottomPanel()
 {
-    // Browser -> Beat Maker -> transition editor -> (Code Beat, Phase 5) -> browser.
-    bottomPanel = (bottomPanel + 1) % 3;
+    // Browser -> Beat Maker -> transition editor -> code deck (P5-12) -> browser.
+    bottomPanel = (bottomPanel + 1) % 4;
     resized();
     if (bottomPanel == 1)
         beatPanel.showView(beatPanel.view());
@@ -3532,6 +3601,12 @@ void MainComponent::resized()
         beatStrip.setVisible(bottomPanel == 1);
         mixEditor.setBounds(l.nextTrack.isEmpty() ? l.browser : l.browser.getUnion(l.nextTrack));
         mixEditor.setVisible(bottomPanel == 2);
+        // The code deck: its editor's place and, at its right, its channel strip (P5-12).
+        auto code = l.nextTrack.isEmpty() ? l.browser : l.browser.getUnion(l.nextTrack);
+        codeStrip.setBounds(code.removeFromRight(std::min(140, code.getWidth() / 6)));
+        codePanel.setBounds(code);
+        codeStrip.setVisible(bottomPanel == 3);
+        codePanel.setVisible(bottomPanel == 3);
     }
     deckA.setBounds(l.deckA);
     deckB.setBounds(l.deckB);

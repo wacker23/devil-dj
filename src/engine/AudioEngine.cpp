@@ -53,18 +53,21 @@ void AudioEngine::prepare(double newSampleRate, int maxBlockSize)
         strip.prepare(sampleRate, capacity);
     sampler.prepare(sampleRate, capacity); // P3-13
     // The Beat Maker (P4-10): its voices and its send effects (a 3/4-beat echo and the reverb, fully wet).
-    beatMaker->voices.prepare(sampleRate, capacity);
-    beatMaker->scratch.setSize(6, capacity, false, true, false);
-    if (beatMaker->delay == nullptr)
+    for (auto* module : {beatMaker.get(), codeDeck.get()}) // the Beat Maker's voices (P4-10), the code deck's (P5-12)
     {
-        beatMaker->delay = dsp::fx::makeEffect(dsp::fx::EffectType::Echo);
-        beatMaker->reverb = dsp::fx::makeEffect(dsp::fx::EffectType::Reverb);
+        module->voices.prepare(sampleRate, capacity);
+        module->scratch.setSize(6, capacity, false, true, false);
+        if (module->delay == nullptr)
+        {
+            module->delay = dsp::fx::makeEffect(dsp::fx::EffectType::Echo);
+            module->reverb = dsp::fx::makeEffect(dsp::fx::EffectType::Reverb);
+        }
+        module->delay->prepare(sampleRate, capacity);
+        module->delay->setBeats(0.75); // 3/16 of a bar (CODEBEAT_SPEC 5.6)
+        module->reverb->prepare(sampleRate, capacity);
+        module->reverb->setBeats(1.0);
+        module->due.clear();
     }
-    beatMaker->delay->prepare(sampleRate, capacity);
-    beatMaker->delay->setBeats(0.75);
-    beatMaker->reverb->prepare(sampleRate, capacity);
-    beatMaker->reverb->setBeats(1.0);
-    beatMaker->due.clear();
     transitionFxBus.setSize(4, capacity, false, true, false); // P4-18
     sequencer.reset();                      // P3-15
     if (!tapPrepared) // P3-16: once, for the fastest rate (the recorder thread may be reading it later)
@@ -1997,13 +2000,18 @@ void AudioEngine::renderDecks(int numSamples) noexcept
         }
     }
     renderSampler(numSamples); // its own channel (P3-13)
-    renderBeatMaker(numSamples); // and the Beat Maker's (P4-10)
+    renderVoices(*beatMaker, kBeatMakerChannel, numSamples); // and the Beat Maker's (P4-10)
+    renderVoices(*codeDeck, kCodeDeckChannel, numSamples);   // and the code deck's (P5-12)
     processTransitionFx(numSamples); // a transition's send effects and their tails (P4-18)
 }
 
-void AudioEngine::renderBeatMaker(int numSamples) noexcept
+AudioEngine::VoiceModule& AudioEngine::moduleOf(SourceId source) noexcept
 {
-    auto& b = *beatMaker;
+    return source == SourceId::CodeDeck ? *codeDeck : *beatMaker;
+}
+
+void AudioEngine::renderVoices(VoiceModule& b, int channel, int numSamples) noexcept
+{
     // The events its producer has sent, then those due in this block - each voice starts on its own sample.
     b.due.drain(b.queue);
     const auto lateBefore = b.due.lateEvents();
@@ -2023,17 +2031,17 @@ void AudioEngine::renderBeatMaker(int numSamples) noexcept
     b.reverb->process(s.getWritePointer(4), s.getWritePointer(5), numSamples, ctx);
     for (int c = 2; c < 6; ++c)
         juce::FloatVectorOperations::add(c % 2 == 0 ? l : r, s.getReadPointer(c), numSamples);
-    mixChannel(kBeatMakerChannel, l, r, numSamples);
+    mixChannel(channel, l, r, numSamples);
 }
 
 void AudioEngine::apply(const SetDrumSound& command) noexcept
 {
-    beatMaker->voices.setDrumSound(command.index, command.sound);
+    moduleOf(command.source).voices.setDrumSound(command.index, command.sound);
 }
 
 void AudioEngine::apply(const SetSynthSound& command) noexcept
 {
-    beatMaker->voices.setSynthSound(command.index, command.sound);
+    moduleOf(command.source).voices.setSynthSound(command.index, command.sound);
 }
 
 void AudioEngine::apply(const TransitionFxSetEffect& command) noexcept
@@ -2063,7 +2071,7 @@ void AudioEngine::processTransitionFx(int numSamples) noexcept
 
 void AudioEngine::apply(const SetSampleSound& command) noexcept
 {
-    beatMaker->voices.setSample(command.index, command.sample);
+    moduleOf(command.source).voices.setSample(command.index, command.sample);
 }
 
 void AudioEngine::apply(const BeatMakerStop&) noexcept
@@ -2074,6 +2082,16 @@ void AudioEngine::apply(const BeatMakerStop&) noexcept
     {
     }
     beatMaker->voices.releaseAll();
+}
+
+void AudioEngine::apply(const CodeDeckStop&) noexcept
+{
+    codeDeck->due.clear();
+    EventQueue::value_type e{};
+    while (codeDeck->queue.tryPop(e))
+    {
+    }
+    codeDeck->voices.releaseAll();
 }
 
 void AudioEngine::renderSampler(int numSamples) noexcept
@@ -2129,6 +2147,7 @@ void AudioEngine::mixChannel(int channel, float* l, float* r, int numSamples) no
         releaseFx[i].process(l, r, numSamples, beatContext()); // Release FX (P3-11)
         processFx(channel < kMaxDecks              ? static_cast<FxTarget>(channel)
                   : channel == kBeatMakerChannel ? FxTarget::BeatMaker
+                  : channel == kCodeDeckChannel  ? FxTarget::CodeDeck
                                                  : FxTarget::Sampler,
                   l, r, numSamples); // FX units on this channel (P3-08)
         m.meter.process(l, r, numSamples);
@@ -2239,6 +2258,9 @@ void AudioEngine::publish(int numChannels, int numSamples, double elapsedSeconds
     current.outputChannels = numChannels;
     current.cueRouted = cueIsRouted(layout, numChannels);
     current.buffersAwaitingRelease = static_cast<std::uint32_t>(numPendingReleases);
+    current.codeLateEvents = codeDeck->late; // P5-12
+    current.codeVoices = codeDeck->voices.activeSampleVoices() + codeDeck->voices.activeSynthVoices() +
+                         codeDeck->voices.activeDrumVoices();
     current.beatLateEvents = beatMaker->late; // P4-10
     current.beatVoices = beatMaker->voices.activeSampleVoices() + beatMaker->voices.activeSynthVoices() + beatMaker->voices.activeDrumVoices();
     {

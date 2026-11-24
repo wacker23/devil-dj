@@ -216,11 +216,12 @@ void FxPanel::nextEffect(int unit)
 void FxPanel::cycleTarget(int unit)
 {
     const auto now = engine.readState().fx[static_cast<std::size_t>(unit)].target;
-    // Deck A -> deck B -> the sampler -> the Beat Maker -> the master -> deck A.
+    // Deck A -> deck B -> the sampler -> the Beat Maker -> the code deck -> the master -> deck A.
     const auto next = now == engine::FxTarget::Deck0       ? engine::FxTarget::Deck1
                       : now == engine::FxTarget::Deck1     ? engine::FxTarget::Sampler
                       : now == engine::FxTarget::Sampler   ? engine::FxTarget::BeatMaker
-                      : now == engine::FxTarget::BeatMaker ? engine::FxTarget::Master
+                      : now == engine::FxTarget::BeatMaker ? engine::FxTarget::CodeDeck
+                      : now == engine::FxTarget::CodeDeck  ? engine::FxTarget::Master
                                                            : engine::FxTarget::Deck0;
     sendFx(unit, engine::FxOp::Target, 0, 0, static_cast<float>(next));
 }
@@ -276,7 +277,7 @@ void FxPanel::showTargetMenu(int unit)
     juce::PopupMenu m;
     const auto now = engine.readState().fx[static_cast<std::size_t>(unit)].target;
     for (const auto t : {engine::FxTarget::Deck0, engine::FxTarget::Deck1, engine::FxTarget::Sampler,
-                         engine::FxTarget::BeatMaker, engine::FxTarget::Master})
+                         engine::FxTarget::BeatMaker, engine::FxTarget::CodeDeck, engine::FxTarget::Master})
         m.addItem(targetText(t), true, now == t,
                   [this, unit, t] { sendFx(unit, engine::FxOp::Target, 0, 0, static_cast<float>(t)); });
     m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&units[static_cast<std::size_t>(unit)].target));

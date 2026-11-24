@@ -33,6 +33,7 @@ target_sources(DevilDJTests PRIVATE
     app/SpotifyAuthTests.cpp
     app/SpotifyImportTests.cpp
     app/CodeSoundBankTests.cpp
+    app/CodeDeckChannelTests.cpp
     app/LayoutTests.cpp
     app/SettingsTests.cpp
     app/SoakTestTests.cpp

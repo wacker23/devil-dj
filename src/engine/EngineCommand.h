@@ -510,17 +510,24 @@ struct CancelTransition
 
 // The Beat Maker (P4-10): the voices' sound tables (index = pattern x 16 + track), and a stop that drops the
 // events still waiting and fades out what sounds.
+// The sound tables of a voice module: the Beat Maker's, or the code deck's (P5-12).
 struct SetDrumSound
 {
     std::uint16_t index = 0;
     DrumSound sound;
+    SourceId source = SourceId::BeatMaker;
 };
 struct SetSynthSound
 {
     std::uint16_t index = 0;
     dsp::SynthParams sound;
+    SourceId source = SourceId::BeatMaker;
 };
 struct BeatMakerStop
+{
+};
+// hush(): the code deck's queued events dropped, its voices released through their envelopes (P5-12).
+struct CodeDeckStop
 {
 };
 // P4-18: the effect a transition's FX lane sends into, for the outgoing (0) or incoming (1) deck (prepared and
@@ -536,6 +543,7 @@ struct SetSampleSound
 {
     std::uint16_t index = 0;
     const SampleData* sample = nullptr;
+    SourceId source = SourceId::BeatMaker;
 };
 
 // Beat sync (P2-19): the deck follows the master clock's tempo (half / double aware) and phase.
@@ -552,7 +560,7 @@ using EngineCommand =
                  SetClockSource, SetInternalTempo, SetSync, SetQuantize, BeatJump, JumpBy, SetHotCues, HotCue,
                  SetCuePoint, Loop, SetSlip, SetReverse, Stop, SetStopStyle, SetSlicer, SlicerPad, FxSetEffect, FxCommand, SetColorFx, ReleaseFxCommand, PadFxSetEffect, PadFxCommand,
                  SamplerLoad, SamplerPad, SamplerSet, SequencerCommand, SequencerEvents,
-                 StartTransition, CancelTransition, SetDrumSound, SetSynthSound, BeatMakerStop, SetSampleSound,
+                 StartTransition, CancelTransition, SetDrumSound, SetSynthSound, BeatMakerStop, CodeDeckStop, SetSampleSound,
                  TransitionFxSetEffect>;
 
 static_assert(std::is_trivially_copyable_v<EngineCommand>, "EngineCommand must stay trivially copyable");
