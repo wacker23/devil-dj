@@ -32,6 +32,8 @@ Template:
   - The API against a fake `get`: paging, 429, 401 then refresh, skipping non-tracks.
   - An import into a temporary database through the window: playlists created, a name clash numbered, the missing text.
 - Owner: after signing in (P4-20), import one real playlist and check the matches, the ambiguous choices and the missing list.
+- Follow-up fix: Spotify's 2026 change refuses `/playlists/{id}/tracks` (403); tracks are read from `/items` now. Apps in development mode may read only playlists the user made or collaborates on, and the window now says so.
+- 2026-11-24: owner signed in with their own Client ID (D8) and imported one of their playlists successfully. Done check met.
 
 ## 2026-11-23 · P4-20 Spotify sign-in
 - What changed:
