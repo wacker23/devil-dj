@@ -11,6 +11,25 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-25 · P6-03 Stem separation job: HTDemucs on the CPU, stems as FLAC in the cache
+- What changed:
+  - `tools/htdemucs/export_onnx.py` (dev-only PyTorch venv) exports the network core of HTDemucs, without its STFT, to `build/models/htdemucs_core.onnx` (174 MB), with reference input and output. The weights are the owner's own copy: not committed and never shipped (LICENSES: weights not cleared).
+  - `analysis/StemSeparator`: the STFT and inverse STFT ported from demucs; the track normalised and cut into 7.8 s segments with a quarter overlap and triangular weights; output streamed through a rolling window; "quality" adds two shifted passes. "other" is the remainder, so the four stems add back to the track exactly.
+  - `InferenceOptions::fullOptimization`.
+  - `app/StemService`: one job at a time on a background thread. It decodes at 44.1 kHz, separates, and writes four 16-bit stereo FLACs plus stems.json to `%LOCALAPPDATA%\Devil-DJ\cache\stems\<content hash>\`. It writes into `<hash>.part` and renames it at the end, so a cancelled or failed job leaves nothing.
+  - Library right-click > Separate stems: Fast or Quality, Cancel stem jobs, and Show stems in Explorer. Progress shows in the browser's activity line and the status overlay. With no model, a message says where to put it.
+  - The model is read from `Documents\Devil-DJ\Models\htdemucs_core.onnx` (copied there on the owner's machine).
+- Tests / measurements:
+  - One segment against PyTorch: max error 2.84e-5 on the CPU.
+  - 25 s streamed (Release): fast 26 s, quality 55 s; stems sum back at -153 dB.
+  - StemService on 9 s at 48 kHz: the four FLACs add back to the resampled track at -71 dB (16-bit rounding). Tests also cover no model, a decode failure, repeats, and cancel.
+  - Owner's 6.6-minute track (hidden `[.stemseval]` test): 243 s on the CPU (0.61 x real time), sum -153 dB. The task's limit is -30 dB.
+- Notes / follow-ups:
+  - Always on the CPU: DirectML (ORT 1.24) gives wrong results for this network at every optimisation level (off by about 1e5).
+  - The target-laptop timing (D4) is still open; these numbers are from the owner's current machine.
+  - Shipping a stem model in a release stays open: HTDemucs's weights aren't cleared.
+  - Playing the stems is P6-04.
+
 ## 2026-11-24 · P6-02 Beat tracker v2: dropped
 - Owner decision (2026-11-24): drop v2 and keep v1. The evaluation was on the owner's 100 tracks, none BPM-tagged: the two agree on 89, and on 10 of the other 11 v1 gives a whole BPM where v2 is 0.5-3.5 BPM off. So v2 doesn't show itself better.
 - Done by the task's own rule ("or v2 is dropped"). The analysis service and the app stay on v1; nothing is re-analysed.

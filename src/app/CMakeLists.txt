@@ -59,6 +59,8 @@ target_sources(devildj_app_core INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/PlayTracker.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/Settings.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/SoakTest.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/StemService.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/StemService.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/SoakTest.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/Settings.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/SettingsKeys.h")

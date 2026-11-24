@@ -8,6 +8,7 @@ add_library(devildj_analysis STATIC
     InferenceSession.cpp
     KeyDetector.cpp
     Loudness.cpp
+    StemSeparator.cpp
     WaveformBuilder.cpp
     WaveformCache.cpp
     TrackFeatures.cpp)
@@ -25,6 +26,7 @@ target_sources(devildj_analysis PUBLIC
         InferenceSession.h
         KeyDetector.h
         Loudness.h
+        StemSeparator.h
         WaveformBuilder.h
         WaveformCache.h
         TrackFeatures.h)

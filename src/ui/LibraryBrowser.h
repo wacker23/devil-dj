@@ -161,6 +161,12 @@ public:
     // or on tracks to check again or relocate (search a folder by file name + size). The app does the work.
     std::function<void()> onCheckMissing;
     std::function<void(const std::vector<std::int64_t>& trackIds)> onRelocate; // empty = every missing track
+
+    // Stems (P6-03): right-click > Separate stems (fast or quality); the app runs the jobs.
+    std::function<void(const std::vector<std::int64_t>& trackIds, bool quality)> onSeparateStems;
+    std::function<void()> onCancelStems;
+    std::function<bool()> stemsBusy;                     // jobs queued or running: offer to cancel them
+    std::function<juce::File(std::int64_t trackId)> stemsFolder; // a track's stems if separated, else {}
     void showMissing();
     juce::PopupMenu menuForMissing();
 

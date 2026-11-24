@@ -10,6 +10,7 @@ target_sources(DevilDJTests PRIVATE
     analysis/AnalysisServiceTests.cpp
     analysis/InferenceSessionTests.cpp
     analysis/BeatThisTests.cpp
+    analysis/StemSeparatorTests.cpp
     analysis/AnalysisSmokeTests.cpp
     analysis/BeatTrackerTests.cpp
     analysis/KeyDetectorTests.cpp
@@ -37,6 +38,7 @@ target_sources(DevilDJTests PRIVATE
     app/CodeSoundBankTests.cpp
     app/CodeDeckChannelTests.cpp
     app/CodeBuffersTests.cpp
+    app/StemServiceTests.cpp
     app/CodeRenderTests.cpp
     app/LayoutTests.cpp
     app/SettingsTests.cpp

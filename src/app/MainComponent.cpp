@@ -22,6 +22,7 @@
 #include "library/MissingFiles.h"
 #include "library/PlaylistFiles.h"
 #include "library/TrackRepository.h"
+#include "app/StemService.h"
 #include "MainLayout.h"
 #include "RecordingSheets.h"
 #include "util/Log.h"
@@ -232,6 +233,25 @@ util::Result<analysis::DecodedAudio> decodeForAnalysis(const std::filesystem::pa
     a.numSamples = buffer->audio.getNumSamples();
     a.sampleRate = buffer->sampleRate;
     a.owner = buffer;
+    return R::ok(std::move(a));
+}
+// Stems (P6-03): decoded at the model's rate (the decoder's sinc resampler), copied out of the track buffer.
+util::Result<StemAudio> decodeForStems(const juce::File& file)
+{
+    using R = util::Result<StemAudio>;
+    engine::DecodeOptions options;
+    options.targetSampleRate = analysis::demucs::kSampleRate;
+    auto decoded = engine::decodeTrack(file, options);
+    if (!decoded)
+        return R::fail(decoded.error());
+    const auto& buffer = *decoded.value();
+    const int n = buffer.audio.getNumSamples();
+    StemAudio a;
+    a.sampleRate = buffer.sampleRate;
+    const float* l = buffer.audio.getReadPointer(0);
+    const float* r = buffer.audio.getNumChannels() > 1 ? buffer.audio.getReadPointer(1) : l;
+    a.left.assign(l, l + n);
+    a.right.assign(r, r + n);
     return R::ok(std::move(a));
 }
 } // namespace
@@ -703,6 +723,27 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
         analysisProgress->startTimer(500);
     }
     libraryBrowser->onRelocate = [this](const std::vector<std::int64_t>& ids) { relocateMissingFiles(ids); };
+    if (libraryDb != nullptr)
+    {
+        stemService = std::make_unique<StemService>(cacheFolder(), StemService::defaultModel(), &decodeForStems);
+        libraryBrowser->onSeparateStems = [this](const std::vector<std::int64_t>& ids, bool quality)
+        { separateStems(ids, quality); };
+        libraryBrowser->onCancelStems = [this]
+        {
+            stemService->cancelAll();
+            util::logInfo("Stems: jobs cancelled");
+        };
+        libraryBrowser->stemsBusy = [this] { return !stemService->status().idle(); };
+        libraryBrowser->stemsFolder = [this](std::int64_t id) -> juce::File
+        {
+            if (gridReader == nullptr)
+                return {};
+            const auto t = library::TrackRepository(*gridReader).get(id);
+            if (!t || !stemService->ready(t->contentHash))
+                return {};
+            return stemService->folderFor(t->contentHash);
+        };
+    }
     if (libraryDb != nullptr)
         juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this)]
                                         {
@@ -1271,6 +1312,7 @@ MainComponent::~MainComponent()
     importJob = nullptr;   // stops a running import (between batches) before the browser goes
     analysisProgress = nullptr;
     analysisService = nullptr; // stops the workers (a track in progress stays not analyzed)
+    stemService = nullptr;     // cancels a separation in progress (its half-written stems are removed)
     if (libraryDb != nullptr)
         libraryDb->removeChangeListener(gridListener);
     gridReader = nullptr;
@@ -3378,6 +3420,7 @@ void MainComponent::showAnalysisProgress()
 {
     if (analysisService == nullptr)
         return;
+    showStemProgress();
     const auto s = analysisService->status();
     if (s.idle())
     {
@@ -3387,13 +3430,82 @@ void MainComponent::showAnalysisProgress()
             ++analysisRuns; // the matcher looks again (P3-19)
         }
         analysisTotal = 0;
-        libraryBrowser->setActivity({});
+        libraryBrowser->setActivity(stemActivity()); // the stems line when analysis has nothing to say
         return;
     }
     // "Analyzing 12 of 500" - the total grows when an import adds tracks.
     analysisTotal = std::max(analysisTotal, s.done + s.failed + s.running + s.queued);
     const int finished = std::min(analysisTotal, s.done + s.failed);
     libraryBrowser->setActivity("Analyzing " + juce::String(finished + 1) + " of " + juce::String(analysisTotal));
+}
+
+void MainComponent::separateStems(const std::vector<std::int64_t>& trackIds, bool quality)
+{
+    if (stemService == nullptr || gridReader == nullptr)
+        return;
+    const auto model = StemService::defaultModel();
+    if (!model.existsAsFile())
+    {
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::InfoIcon, "Separate stems",
+            "Stem separation needs a model file, which Devil-DJ doesn't include:\n\n" + model.getFullPathName() +
+                "\n\nMake it with tools/htdemucs/export_onnx.py and copy it there.");
+        return;
+    }
+    library::TrackRepository tracks(*gridReader);
+    int queued = 0, ready = 0, missing = 0;
+    for (const auto id : trackIds)
+    {
+        const auto t = tracks.get(id);
+        if (!t)
+            continue;
+        const juce::File file(juce::String::fromUTF8(t->path.c_str()));
+        if (t->missing || !file.existsAsFile() || t->contentHash.empty())
+        {
+            ++missing;
+            continue;
+        }
+        if (stemService->ready(t->contentHash))
+        {
+            ++ready;
+            continue;
+        }
+        StemRequest r;
+        r.trackId = id;
+        r.file = file;
+        r.contentHash = t->contentHash;
+        r.title = t->title.empty() ? file.getFileNameWithoutExtension() : juce::String::fromUTF8(t->title.c_str());
+        r.quality = quality ? analysis::StemSeparator::Quality::Quality : analysis::StemSeparator::Quality::Fast;
+        stemService->enqueue(std::move(r));
+        ++queued;
+    }
+    util::logInfo("Stems: {} queued ({}), {} already separated, {} missing", queued, quality ? "quality" : "fast",
+                  ready, missing);
+    showStemProgress();
+}
+
+juce::String MainComponent::stemActivity()
+{
+    if (stemService == nullptr)
+        return {};
+    const auto s = stemService->status();
+    if (!s.running)
+        return {};
+    return "Stems: " + s.running->title + " " + juce::String(juce::roundToInt(s.progress * 100.0)) + " %" +
+           (s.queued > 0 ? " (" + juce::String(s.queued) + " more)" : juce::String());
+}
+
+void MainComponent::showStemProgress()
+{
+    if (stemService == nullptr)
+        return;
+    const auto s = stemService->status();
+    if (s.done != stemsDone)
+        util::logInfo("Stems: {} done in {:.0f} s", s.lastDone.toStdString(), s.lastSeconds);
+    if (s.failed != stemsFailed)
+        util::logError("Stems: {}", s.lastError.toStdString());
+    stemsDone = s.done;
+    stemsFailed = s.failed;
 }
 
 void MainComponent::setLayout(int waveforms, bool bigBrowser)
@@ -3665,6 +3777,8 @@ juce::StringArray MainComponent::statusLines()
     lines.add("Crossfader: hold G / H glide, Shift+G / Shift+H snap, B centre;  CUE: Ctrl+E (A), Ctrl+O (B)");
     if (soak.isRunning())
         lines.add(soak.statusLine());
+    if (const auto stems = stemActivity(); stems.isNotEmpty())
+        lines.add(stems);
     lines.add("Mixer: Ctrl+A/S/D, Ctrl+J/K/L kill; hold Shift+3/4, Shift+9/0 filter; Shift+5, Shift+- reset");
     lines.add("Waveforms: drag = scratch (playing) / scrub (paused), wheel = nudge, Ctrl+wheel = zoom");
     for (const auto* w : {&waveA, &waveB})

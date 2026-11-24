@@ -48,7 +48,8 @@ util::Result<std::unique_ptr<InferenceSession>> InferenceSession::open(const std
     const auto make = [&](bool gpu) -> std::unique_ptr<Ort::Session>
     {
         Ort::SessionOptions options;
-        options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+        options.SetGraphOptimizationLevel(o.fullOptimization ? GraphOptimizationLevel::ORT_ENABLE_ALL
+                                                             : GraphOptimizationLevel::ORT_ENABLE_BASIC);
         if (o.cpuThreads > 0)
             options.SetIntraOpNumThreads(o.cpuThreads);
         if (gpu)

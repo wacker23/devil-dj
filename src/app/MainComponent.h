@@ -27,6 +27,7 @@
 #include "app/BeatMakerProducer.h"
 #include "app/CodeBuffers.h"
 #include "app/CodeDeckProducer.h"
+#include "app/StemService.h"
 #include "app/SampleBank.h"
 #include "app/TransitionStore.h"
 #include "app/SpotifyAuth.h"
@@ -368,6 +369,11 @@ private:
     // Analysis (P2-12): imported and not-yet-analyzed tracks, in the background; progress in the browser.
     std::unique_ptr<analysis::AnalysisService> analysisService;
     std::unique_ptr<juce::TimedCallback> analysisProgress;
+    // Stems (P6-03): right-click > Separate stems; FLACs in the cache, progress in the browser after analysis.
+    std::unique_ptr<StemService> stemService;
+    int stemsDone = 0, stemsFailed = 0;
+    void separateStems(const std::vector<std::int64_t>& trackIds, bool quality);
+    juce::String stemActivity();
     // History (P2-23): plays over 60 s go into this run's session (created with its first play).
     PlayTracker playTracker;
     std::unique_ptr<juce::TimedCallback> historyTimer;
@@ -412,6 +418,7 @@ private:
     void exportLoop(engine::DeckId deck);
     std::unique_ptr<juce::FileChooser> loopChooser;
     void showAnalysisProgress();
+    void showStemProgress();
     int analysisTotal = 0;
     std::unique_ptr<juce::FileChooser> importChooser;
     ui::DebugOverlay overlay;

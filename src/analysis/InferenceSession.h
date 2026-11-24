@@ -27,6 +27,7 @@ struct InferenceOptions
     bool preferGpu = true;   // DirectML when it can be used
     int gpuDevice = 0;       // the DirectX adapter (0 = the default one)
     int cpuThreads = 0;      // 0 = ONNX Runtime's choice
+    bool fullOptimization = true; // false: only ONNX Runtime's basic graph optimisations (some fusions misbehave on DirectML)
 };
 
 struct Tensor

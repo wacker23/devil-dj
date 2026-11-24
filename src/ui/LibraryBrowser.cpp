@@ -1881,6 +1881,33 @@ juce::PopupMenu LibraryBrowser::menuForTracks()
                       if (self != nullptr)
                           self->removeSelectedFromPlaylist();
                   });
+    if (onSeparateStems)
+    {
+        juce::PopupMenu stems;
+        stems.addItem("Fast (about half real time)", [self, ids]
+                      {
+                          if (self != nullptr && self->onSeparateStems)
+                              self->onSeparateStems(ids, false);
+                      });
+        stems.addItem("Quality (about 3x slower)", [self, ids]
+                      {
+                          if (self != nullptr && self->onSeparateStems)
+                              self->onSeparateStems(ids, true);
+                      });
+        if (stemsBusy && stemsBusy())
+        {
+            stems.addSeparator();
+            stems.addItem("Cancel stem jobs", [self]
+                          {
+                              if (self != nullptr && self->onCancelStems)
+                                  self->onCancelStems();
+                          });
+        }
+        m.addSubMenu("Separate stems", stems);
+        if (stemsFolder && ids.size() == 1)
+            if (const auto folder = stemsFolder(ids.front()); folder.isDirectory())
+                m.addItem("Show stems in Explorer", [folder] { folder.getChildFile("drums.flac").revealToUser(); });
+    }
     m.addSeparator();
     const auto file = selectedTrackFile();
     m.addItem("Show in Explorer", file.existsAsFile(), false, [file] { file.revealToUser(); });
