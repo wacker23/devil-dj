@@ -75,6 +75,7 @@ Machine-readable allowlist read by `tools/check_licenses.py`. `Package id` is th
 | juce | FetchContent | JUCE-EULA | yes |
 | signalsmith-linear | FetchContent (header-only) | MIT | yes |
 | signalsmith-stretch | FetchContent (header-only) | MIT | yes |
+| quickjs-ng | FetchContent | MIT | yes |
 | sqlite3 | vcpkg | Public-Domain | yes |
 | taglib | vcpkg | MPL-1.1 | yes |
 | zlib | vcpkg (via taglib) | Zlib | yes |

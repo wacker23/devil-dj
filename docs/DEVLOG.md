@@ -11,6 +11,31 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P5-07 QuickJS integration
+- What changed:
+  - quickjs-ng v0.18.0 (MIT; owner approved the dependency 2026-11-24) comes in through FetchContent.
+    - Only its `qjs` library is built: no quickjs-libc and none of its executables (EXCLUDE_FROM_ALL).
+    - `CMAKE_POLICY_DEFAULT_CMP0091 NEW`, because its CMake 3.10 minimum would otherwise build it with /MD against our static runtime.
+    - Its own warnings are silenced.
+    - Listed in the LICENSES.md manifest; check_licenses passes.
+  - `codebeat/JsRuntime` is a plain static library (no JUCE code): one runtime and one context per instance.
+    - Limits: memory 64 MB, JS stack 1 MB (4 MB in Debug, whose C frames per JS call are far bigger), and per-call time budgets (eval 200 ms, query 5 ms) through the interrupt handler.
+    - `evalScript` (the completion value), `evalModule` (settles the module's promise), `callGlobal(name, numbers)`.
+    - Errors come back with their message and line / column (from the stack), and flags for timed out / out of memory.
+    - `print()` lines are kept for the console (the last 1000).
+    - Thread-confined (asserted); the code-deck thread needs stackBytes + 1 MB of stack.
+  - The pattern language (js/codebeat/*.js, not the tests) is embedded with `juce_add_binary_data`.
+    - `import` resolves only those files, by plain name ("mini.js", "./mini.js").
+    - Anything else is refused: system modules, paths, drive letters, "..".
+- Tests: 6 cases, 91 checks, all on Debug and Release.
+  - Completion values and errors with their lines.
+  - No std / os / require / process / fetch / timers. Imports of os, std, paths, win.ini and a test file are refused, and so is dynamic import.
+  - An endless loop is stopped after 200 ms, also inside try/catch and in a module; a spinning query after 5 ms; the runtime stays usable.
+  - 16 MB memory exhausted gives an out-of-memory error and then recovers; endless recursion gives a RangeError.
+  - print() lines are collected and capped.
+  - Every library file is embedded. Fractions, mini-notation, controls, signals and every() run inside QuickJS on a 16 MB-stack thread, and a mini-notation error reaches C++ with its message.
+- Note for P5-09: the code-deck thread must be created with a large stack (juce::Thread's stack size), at least stackBytes + 1 MB.
+
 ## 2026-11-24 · P5-06 Signals
 - What changed:
   - `js/codebeat/signals.js`: continuous patterns, all in [0, 1] over one cycle.

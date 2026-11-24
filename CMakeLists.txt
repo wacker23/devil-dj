@@ -37,6 +37,7 @@ add_subdirectory(src/library)
 add_subdirectory(src/matcher)
 add_subdirectory(src/engine)
 add_subdirectory(src/beatmaker)
+add_subdirectory(src/codebeat)
 add_subdirectory(src/ui)
 add_subdirectory(src/app)
 

@@ -41,6 +41,7 @@ target_sources(DevilDJTests PRIVATE
     beatmaker/SequencerTests.cpp
     beatmaker/SwitchTests.cpp
     codebeat/CodeBeatSmokeTests.cpp
+    codebeat/JsRuntimeTests.cpp
     dsp/DriftBufferTests.cpp
     dsp/DrumSynthTests.cpp
     dsp/SynthTests.cpp
@@ -149,6 +150,7 @@ target_link_libraries(DevilDJTests PRIVATE
     devildj::library
     devildj::matcher
     devildj::beatmaker
+    devildj::codebeat
     TagLib::tag
     juce::juce_core
     juce::juce_data_structures

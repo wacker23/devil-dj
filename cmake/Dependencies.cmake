@@ -30,6 +30,31 @@ FetchContent_Declare(
     SYSTEM)
 FetchContent_MakeAvailable(signalsmith-linear signalsmith-stretch)
 
+# quickjs-ng: the JavaScript engine for Code Beat (P5-07). MIT. Only its `qjs` library is used: no quickjs-libc
+# (no std / os modules, no file or network access), none of its executables (EXCLUDE_FROM_ALL).
+# Its CMakeLists asks for CMake 3.10, which would leave the MSVC runtime choice (CMP0091) at the old default (/MD)
+# and clash with our static runtime; the policy default makes it honour CMAKE_MSVC_RUNTIME_LIBRARY.
+set(CMAKE_POLICY_DEFAULT_CMP0091 NEW)
+set(QJS_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+set(QJS_BUILD_LIBC OFF CACHE BOOL "" FORCE)
+set(QJS_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    quickjs-ng
+    GIT_REPOSITORY https://github.com/quickjs-ng/quickjs.git
+    GIT_TAG v0.18.0
+    GIT_SHALLOW TRUE
+    SYSTEM
+    EXCLUDE_FROM_ALL)
+FetchContent_MakeAvailable(quickjs-ng)
+if(MSVC)
+    # Its own warnings are its upstream's business: drop the -Wall (= /Wall) it sets and silence the rest.
+    get_target_property(devildj_qjs_options qjs COMPILE_OPTIONS)
+    list(REMOVE_ITEM devildj_qjs_options -Wall)
+    list(APPEND devildj_qjs_options /w)
+    set_target_properties(qjs PROPERTIES COMPILE_OPTIONS "${devildj_qjs_options}")
+endif()
+unset(CMAKE_POLICY_DEFAULT_CMP0091)
+
 # vcpkg manifest packages (vcpkg.json). Triplet x64-windows-static: static libraries and static CRT.
 find_package(unofficial-sqlite3 CONFIG REQUIRED) # SQLite: public domain
 find_package(TagLib CONFIG REQUIRED)             # TagLib: MPL-1.1 (used unmodified); pulls in zlib + utfcpp
