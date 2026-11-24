@@ -11,6 +11,26 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-24 · P5-03 Mini-notation parser
+- What changed:
+  - `js/codebeat/mini.js`: a hand-written tokenizer and recursive-descent parser for the §4.1 grammar.
+    - Sequences, rests `~` / `-`, `[ ]`, `< >`, `,`.
+    - `*` / `/` with a number or a [pattern], `!n` and a bare `!`, `@` weights, `?` / `?p` (seeded), `(k,n,r)` euclid with patterned arguments, `:n` making `{ s, n }`.
+    - Numbers (including `.5` and `-1`) are values; words allow `#`, `_`, `.` and letters of any alphabet.
+  - Each atom's event carries `{ start, end }` in the string, plus the literal's offset (an editor string-literal object works too).
+  - Errors are a `MiniError` (a SyntaxError) with a short message, the column, and the buffer index for the editor, e.g. `column 4: unexpected ")" - did you forget "("?` and `missing "]" for the "[" at column 3`.
+  - Loading mini.js makes every string given to a pattern function mini-notation.
+  - `js/codebeat/euclid.js`: Bjorklund, written from the algorithm's description; rotation; negative pulses invert.
+  - `js/codebeat/random.js`: a deterministic 32-bit hash of (seed, salt, exact time) -> [0, 1).
+    - Each `?` is salted by its string's text and its number in the string, so moving code keeps its randomness, and different strings don't drop together.
+  - `pattern.js` gains `compress(begin, end)` and `timecat` (weighted steps).
+- Tests: 26 new (66 in total, 2 todo for P5-04 / P5-05).
+  - Every §4.2 row.
+  - Bjorklund (3,8), (5,8), (7,16), (4,12), the edges, and the onset count for every k <= n <= 24.
+  - Nesting, patterned factors, modifier chains, words, and source locations with offsets.
+  - 17 error messages with their columns.
+  - The hash's spread (10 buckets within +-15 %).
+
 ## 2026-11-24 · P5-02 Pattern core
 - What changed:
   - `js/codebeat/event.js`: `Event{whole, part, value, context}` (frozen).

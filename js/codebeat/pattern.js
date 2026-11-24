@@ -252,6 +252,29 @@ export class Pattern {
         }).splitQueries();
     }
 
+    // Each cycle squeezed into [begin, end) of the same cycle (0 <= begin <= end <= 1); silence elsewhere.
+    compress(begin, end) {
+        const b = F(begin), e = F(end);
+        if (b.gt(e) || b.lt(0) || e.gt(1))
+            throw new RangeError(`compress needs 0 <= begin <= end <= 1, got ${b}, ${e}`);
+        if (b.eq(e))
+            return silence;
+        const width = e.sub(b);
+        const pat = this;
+        return new Pattern((state) => {
+            const cycle = state.span.begin.sam();
+            const window = new Span(cycle.add(b), cycle.add(e));
+            const span = state.span.intersection(window);
+            if (span === null)
+                return [];
+            const toInner = (t) => cycle.add(t.sub(cycle).sub(b).div(width));
+            const toOuter = (t) => cycle.add(b).add(t.sub(cycle).mul(width));
+            return pat
+                .query(state.setSpan(span.withTime(toInner)))
+                .map((ev) => ev.withSpan((s) => s.withTime(toOuter)));
+        }).splitQueries();
+    }
+
     // --- shorthands for the constructors ---
 
     stack(...others) {
@@ -340,6 +363,25 @@ export function fastcat(...items) {
     if (pats.length === 0)
         return silence;
     return slowcat(...pats)._fast(pats.length);
+}
+
+// Steps with relative weights in one cycle: timecat([3, a], [1, b]) = a over [0, 3/4), b over [3/4, 1).
+export function timecat(...steps) {
+    const list = steps.length === 1 && Array.isArray(steps[0]) && Array.isArray(steps[0][0]) ? steps[0] : steps;
+    const items = list.map(([w, p]) => [F(w), reify(p)]);
+    const total = items.reduce((sum, [w]) => sum.add(w), F(0));
+    if (items.length === 0 || total.n === 0)
+        return silence;
+    let at = F(0);
+    const parts = [];
+    for (const [w, p] of items) {
+        if (w.n < 0)
+            throw new RangeError(`A step weight can't be negative (${w})`);
+        const next = at.add(w);
+        parts.push(p.compress(at.div(total), next.div(total)));
+        at = next;
+    }
+    return stack(...parts);
 }
 
 export const seq = fastcat;
