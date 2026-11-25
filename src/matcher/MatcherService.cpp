@@ -90,7 +90,7 @@ std::optional<Suggestion> MatcherService::scoreOne(library::Connection& db, cons
         return std::nullopt;
     const auto c = contextFor(db, r, *a);
     const auto* preset = findPreset(presets, r.preset);
-    const auto s = score(c, *b, preset != nullptr ? preset->weights : defaultPresets().front().weights);
+    const auto s = score(c, *b, r.weights ? *r.weights : preset != nullptr ? preset->weights : defaultPresets().front().weights);
     Suggestion out;
     out.trackId = trackId;
     out.score = s.score;
@@ -129,7 +129,7 @@ MatchResult MatcherService::run(library::Connection& db, const MatchRequest& r, 
     c.c10 = c10;
     c.c90 = c90;
     const auto* preset = findPreset(presets, r.preset);
-    const Weights weights = preset != nullptr ? preset->weights : defaultPresets().front().weights;
+    const Weights weights = r.weights ? *r.weights : preset != nullptr ? preset->weights : defaultPresets().front().weights;
     for (const auto& s : rank(c, candidates, weights, 10))
     {
         Suggestion out;

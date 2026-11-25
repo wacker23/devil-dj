@@ -11,6 +11,27 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-26 · P6-12 Personal ranker v1
+- What changed:
+  - `matcher/Ranker`: pairs from the choice log, weighted and turned round by the outcome. A pairwise logistic loss plus a pull toward the preset (λ = 20), trained by Adam with weights kept non-negative.
+  - The learnt weights are scaled to the preset's sum, then blended with α = n/(n+200). Stored in `matcher_models` "personal-v1".
+  - `Weights` gains the three interaction terms; the scorer adds them, and they are 0 in the presets.
+  - A request can carry its own weights. `MatcherService` uses them, and `scoreOne` does too.
+  - App:
+    - loads the model at start and blends it into the current preset for every suggestion;
+    - logs the model version with each choice;
+    - trains at exit when there are new choices.
+  - New window: Options > Track Matcher log > "What you care about", with bars for the weights in use against the preset, the α, TRAIN NOW and RESET.
+- Tests / measurements:
+  - Synthetic-log check (done-when): a synthetic owner who cares about groove, vocals and tags (unlike the Balanced preset) over 1,500 impressions (13,500 pairs). The weight ordering comes back with Spearman 0.99 (the preset's is 0.34), groove > vocal > tags at the top, and every weight ≥ 0.
+  - With 3 impressions the weights move under 0.1 from the preset.
+  - Training time (done-when): 10,008 pairs in 65 ms (Release).
+  - Also tested: pairs and their weights per outcome, blending (α 0 / 0.5 / 0.9), the scorer's interaction terms, the stored model (versions, reset), and the care view.
+- Notes / follow-ups:
+  - No easy negatives (see MATCHER_SPEC §7.2 as built).
+  - The model learns relative to whichever preset was selected when it trains; it is blended into whichever preset is selected at suggestion time.
+  - The Phase 6 gate's "the ranker beats Balanced" needs real logged sessions and the evaluation tool (P6-13).
+
 ## 2026-11-26 · P6-11 Choice logging + thumbs
 - What changed:
   - `matcher/ChoiceLog`: x(A, B) is the 11 features plus 3 intent interactions (14 values, null when missing). It stores the `choice_log` rows (the table was already in schema v2) and exports CSV (one row per shown track) and JSON.

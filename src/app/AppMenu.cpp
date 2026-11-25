@@ -145,6 +145,8 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
         choices.addItem(ChoiceLogExportJson, "Export as JSON...");
         choices.addSeparator();
         choices.addItem(ChoiceLogDelete, "Delete the log...");
+        choices.addSeparator();
+        choices.addItem(ChoiceLogCare, "What you care about (the personal ranker)...");
         menu.addSubMenu("Track Matcher log", choices);
         menu.addSeparator();
         juce::PopupMenu keyMenu;
@@ -385,6 +387,7 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
         case ChoiceLogExportCsv:
         case ChoiceLogExportJson:
         case ChoiceLogDelete:
+        case ChoiceLogCare:
             if (onChoiceLog)
                 onChoiceLog(menuItemID - ChoiceLogToggle);
             break;

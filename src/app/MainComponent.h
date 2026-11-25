@@ -29,6 +29,8 @@
 #include "app/CodeDeckProducer.h"
 #include "app/BeatRender.h"
 #include "app/ChoiceTracker.h"
+#include "matcher/Ranker.h"
+#include "ui/CareView.h"
 #include "app/SmartCues.h"
 #include "app/VocalPresence.h"
 #include "library/PhraseRepository.h"
@@ -294,6 +296,15 @@ private:
     std::optional<matcher::MatchRequest> suggestionsRequest; // what the shown suggestions answer
     std::unique_ptr<juce::FileChooser> choiceExportChooser;
     void logChoice(engine::DeckId deck); // a track loaded on `deck`
+    // P6-12: the personal ranker - loaded at start, blended into the matcher's weights, trained at exit (or now).
+    std::optional<matcher::PersonalModel> personalModel;
+    matcher::Weights matcherWeights() const; // the preset's, blended with the personal ranker's
+    juce::String modelVersion() const;
+    void trainPersonalModel();
+    void showCareView();
+    void refreshCareView();
+    std::unique_ptr<ui::CareView> careView;
+    juce::Component::SafePointer<juce::DialogWindow> careWindow;
     void showSuggestions();
     void previewSuggestion(bool down);
     struct Preview

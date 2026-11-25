@@ -8,6 +8,8 @@ target_sources(devildj_ui INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/DebugOverlay.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/AutomixPanel.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/AutomixPanel.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/CareView.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/CareView.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/DeckView.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/StemStrip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/StemStrip.h"

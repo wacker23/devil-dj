@@ -200,6 +200,8 @@ loss = − Σ_pairs log P  +  λ ‖w − w_preset‖²        // stays close to
 - Blending: `w = (1 − α)·w_preset + α·w_learned`, `α = n / (n + 200)` where n = number of impressions.
 - Shown to the user as "What you care about": bar chart of normalized weights, with reset.
 
+As built (P6-12, `matcher/Ranker`): pairs from the log only - the 5 random easy negatives are left out (their x isn't in the log; it would mean scoring the library at training time). Pair weights: mixed / thumbs up 2, a plain choice 1; ejected 0.5 and thumbs down 2 with the pair turned round. A value missing on either side counts 0. Full-batch Adam, 400 steps, w ≥ 0 by projection, λ = 20 (the preset weighs about as much as 20 pairs). The learnt weights are scaled to the preset's sum of the 11 features before blending. The three interaction weights go into the score as Σ v·g over the same total weight (0 in every preset). Stored in `matcher_models` "personal-v1" (JSON: based_on, dims, w). The app loads it at start, blends it into the current preset's weights for every request, writes "personal-v1.<version> a=<alpha>" as the log's model version, and trains at exit when there are choices it hasn't seen (Options > Track Matcher log > What you care about: TRAIN NOW, RESET).
+
 ### 7.3 Model v2 (optional, Phase 7 or research)
 
 - A small gradient-boosted-tree or MLP ranker trained offline in Python on exported logs and shipped as ONNX (`matcher/ranker.onnx`), used if it beats v1 on the evaluation tool.

@@ -120,6 +120,7 @@ target_sources(DevilDJTests PRIVATE
     matcher/MatcherSmokeTests.cpp
     matcher/MatcherTests.cpp
     matcher/MatcherV2Tests.cpp
+    matcher/RankerTests.cpp
     ui/UiSmokeTests.cpp
     ui/DeckViewTests.cpp
     ui/PadModeTests.cpp
@@ -143,6 +144,7 @@ target_sources(DevilDJTests PRIVATE
     ui/TouchTests.cpp
     ui/WaveformViewTests.cpp
     ui/StemStripTests.cpp
+    ui/CareViewTests.cpp
     util/BeatgridTests.cpp
     util/CrashHandlerTests.cpp
     util/FractionTests.cpp

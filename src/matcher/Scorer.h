@@ -36,6 +36,9 @@ const char* featureName(FeatureId id) noexcept; // "tempo", "key", ... (the pres
 struct Weights
 {
     std::array<double, kFeatureCount> w{};
+    // P6-12: the personal ranker's interaction terms - energy delta x intent up, x intent down, sound x intent
+    // switch - added to the score (over the same total weight). 0 in every preset.
+    std::array<double, 3> interactions{};
     double& operator[](FeatureId id) noexcept { return w[static_cast<std::size_t>(id)]; }
     double operator[](FeatureId id) const noexcept { return w[static_cast<std::size_t>(id)]; }
 };

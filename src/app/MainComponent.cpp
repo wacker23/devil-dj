@@ -374,7 +374,13 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
         // P6-11: the choice log - ids handed out here (after the table's last), written in the background.
         choiceSession = static_cast<std::int64_t>(juce::Time::currentTimeMillis() / 1000);
         if (gridReader != nullptr)
+        {
             nextChoiceId = gridReader->queryInt("SELECT coalesce(max(id), 0) + 1 FROM choice_log").value_or(1);
+            personalModel = matcher::loadPersonalModel(*gridReader); // P6-12
+            if (personalModel)
+                util::logInfo("Personal ranker v{}: {} choices, alpha {:.2f}", personalModel->version,
+                              personalModel->impressions, matcher::blendAlpha(personalModel->impressions));
+        }
         choiceTracker.add = [this](const matcher::Impression& m) -> std::optional<std::int64_t>
         {
             auto copy = m;
@@ -1400,6 +1406,13 @@ void MainComponent::toggleKeyLock(engine::DeckId deck)
 
 MainComponent::~MainComponent()
 {
+    if (careWindow != nullptr) // P6-12: its content is ours
+        delete careWindow.getComponent();
+    // P6-12: the personal ranker learns what was logged since it last trained (well under a second).
+    if (libraryDb != nullptr && gridReader != nullptr && choiceLogging)
+        if (const int logged = matcher::ChoiceLogRepository(*gridReader).count();
+            logged > (personalModel ? personalModel->impressions : 0))
+            trainPersonalModel();
     if (codeRenderJob != nullptr)
         codeRenderJob->stopThread(30000); // a render finishes on its own (it can't be stopped half-way)
     saveCodeBuffers(); // what was typed in the last second too
@@ -2227,6 +2240,8 @@ void MainComponent::askMatcher(bool now)
                                                                                            : matcher::KeyPolicy::Relaxed;
     r.scope.playlistId = matcherScope == 1 ? libraryBrowser->shownPlaylist() : 0;
     r.preset = matcherPresets[static_cast<std::size_t>(std::clamp(matcherPreset, 0, static_cast<int>(matcherPresets.size()) - 1))].name;
+    if (personalModel) // P6-12: the personal ranker's blend
+        r.weights = matcherWeights();
     matcherService->request(std::move(r));
 }
 
@@ -2258,7 +2273,7 @@ void MainComponent::logChoice(engine::DeckId deck)
         m.intent = request.intent;
         m.preset = request.preset;
         m.scope = request.scope.playlistId != 0 ? "playlist:" + std::to_string(request.scope.playlistId) : "library";
-        m.modelVersion = "rules"; // the preset's weights (P6-12 brings the personal ranker)
+        m.modelVersion = modelVersion().toStdString(); // P6-12: "rules", or the personal ranker's version and alpha
         if (suggestionsFor == a)
             for (std::size_t i = 0; i < suggestions.size(); ++i)
             {
@@ -2285,6 +2300,11 @@ void MainComponent::choiceLogMenu(int op)
 {
     if (libraryDb == nullptr || gridReader == nullptr)
         return;
+    if (op == 4)
+    {
+        showCareView();
+        return;
+    }
     if (op == 3)
     {
         const int n = matcher::ChoiceLogRepository(*gridReader).count();
@@ -2326,6 +2346,103 @@ void MainComponent::choiceLogMenu(int op)
             libraryBrowser->setStatus(error ? "Export failed: " + juce::String(*error)
                                             : juce::String(rows.size()) + " choices exported to " + file.getFullPathName());
         });
+}
+
+// ---- the personal ranker (P6-12) ----
+
+matcher::Weights MainComponent::matcherWeights() const
+{
+    const auto& preset =
+        matcherPresets[static_cast<std::size_t>(std::clamp(matcherPreset, 0, static_cast<int>(matcherPresets.size()) - 1))];
+    if (!personalModel)
+        return preset.weights;
+    return matcher::blendWeights(preset.weights, personalModel->weights, personalModel->impressions);
+}
+
+juce::String MainComponent::modelVersion() const
+{
+    if (!personalModel)
+        return "rules";
+    return juce::String(matcher::kPersonalModelName) + "." + juce::String(personalModel->version) + " a=" +
+           juce::String(matcher::blendAlpha(personalModel->impressions), 2);
+}
+
+void MainComponent::trainPersonalModel()
+{
+    if (libraryDb == nullptr)
+        return;
+    const auto& preset =
+        matcherPresets[static_cast<std::size_t>(std::clamp(matcherPreset, 0, static_cast<int>(matcherPresets.size()) - 1))];
+    std::optional<matcher::PersonalModel> trained;
+    const auto now = static_cast<std::int64_t>(juce::Time::currentTimeMillis() / 1000);
+    const auto t0 = juce::Time::getMillisecondCounterHiRes();
+    // On the writer thread (it reads the log and writes the model; well under a second for 10k pairs).
+    libraryDb->writeAndWait([&](library::Connection& c) { trained = matcher::retrainPersonalModel(c, preset.weights, preset.name, now); });
+    if (!trained)
+        return;
+    personalModel = trained;
+    util::logInfo("Personal ranker v{}: trained on {} choices in {:.0f} ms (alpha {:.2f})", trained->version,
+                  trained->impressions, juce::Time::getMillisecondCounterHiRes() - t0,
+                  matcher::blendAlpha(trained->impressions));
+    refreshCareView();
+}
+
+void MainComponent::refreshCareView()
+{
+    if (careView == nullptr)
+        return;
+    ui::CareView::State s;
+    const auto& preset =
+        matcherPresets[static_cast<std::size_t>(std::clamp(matcherPreset, 0, static_cast<int>(matcherPresets.size()) - 1))];
+    s.presetName = preset.name;
+    const auto p = matcher::rankWeightsOf(preset.weights);
+    const auto used = matcher::rankWeightsOf(matcherWeights());
+    const auto w = matcherWeights();
+    for (int k = 0; k < ui::CareView::kDims; ++k)
+    {
+        s.preset[static_cast<std::size_t>(k)] = p[static_cast<std::size_t>(k)];
+        s.inUse[static_cast<std::size_t>(k)] = k < matcher::kFeatureCount ? used[static_cast<std::size_t>(k)]
+                                                                           : w.interactions[static_cast<std::size_t>(k - matcher::kFeatureCount)];
+        s.names[static_cast<std::size_t>(k)] = matcher::choiceDimName(k);
+    }
+    s.logged = gridReader != nullptr ? matcher::ChoiceLogRepository(*gridReader).count() : 0;
+    if (personalModel)
+    {
+        s.trained = true;
+        s.impressions = personalModel->impressions;
+        s.alpha = matcher::blendAlpha(personalModel->impressions);
+        s.trainedWhen = "trained " + juce::Time(personalModel->trainedAt * 1000).formatted("%Y-%m-%d %H:%M");
+    }
+    careView->setState(std::move(s));
+}
+
+void MainComponent::showCareView()
+{
+    if (careWindow != nullptr)
+    {
+        careWindow->toFront(true);
+        return;
+    }
+    careView = std::make_unique<ui::CareView>();
+    careView->onTrain = [this] { trainPersonalModel(); };
+    careView->onReset = [this]
+    {
+        if (libraryDb == nullptr)
+            return;
+        libraryDb->writeAndWait([](library::Connection& c) { matcher::resetPersonalModel(c); });
+        personalModel.reset();
+        util::logInfo("Personal ranker: reset (the preset's weights again)");
+        refreshCareView();
+    };
+    refreshCareView();
+    juce::DialogWindow::LaunchOptions o;
+    o.content.setNonOwned(careView.get());
+    o.dialogTitle = "What you care about";
+    o.dialogBackgroundColour = juce::Colour(0xff17181c);
+    o.escapeKeyTriggersCloseButton = true;
+    o.useNativeTitleBar = true;
+    o.resizable = false;
+    careWindow = o.launchAsync();
 }
 
 std::optional<double> MainComponent::energyOf(std::int64_t trackId)

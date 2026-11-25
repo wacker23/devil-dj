@@ -6,6 +6,7 @@ add_library(devildj_matcher STATIC
     CandidateQuery.cpp
     Features.cpp
     MatcherService.cpp
+    Ranker.cpp
     Scorer.cpp)
 add_library(devildj::matcher ALIAS devildj_matcher)
 
@@ -18,6 +19,7 @@ target_sources(devildj_matcher PUBLIC
         CandidateQuery.h
         Features.h
         MatcherService.h
+        Ranker.h
         Scorer.h)
 
 target_include_directories(devildj_matcher PUBLIC "${PROJECT_SOURCE_DIR}/src")

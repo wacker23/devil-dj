@@ -195,6 +195,18 @@ Scored score(const Context& c, const TrackInfo& b, const Weights& weights)
         if (w > 0.0 && !feature.reason.empty())
             contributions[static_cast<std::size_t>(contributing++)] = {w * *feature.value, i};
     }
+    // P6-12: the personal ranker's interaction terms (none in the presets).
+    if (weights.interactions != std::array<double, 3>{} && total > 0.0)
+    {
+        const auto delta = energyDelta(c, b);
+        const auto& sound = f[static_cast<std::size_t>(FeatureId::Sound)].value;
+        if (delta && c.intent == Intent::Up)
+            sum += weights.interactions[0] * *delta;
+        if (delta && c.intent == Intent::Down)
+            sum += weights.interactions[1] * *delta;
+        if (sound && c.intent == Intent::Switch)
+            sum += weights.interactions[2] * *sound;
+    }
     s.score = total > 0.0 ? sum / total : 0.0;
     // Penalties (§4.11).
     if (!b.artist.empty())

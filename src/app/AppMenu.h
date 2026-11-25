@@ -86,7 +86,8 @@ public:
     std::function<void(bool show)> onNextTrackPanel; // P3-24
     // P4-20: Spotify - 0 the Client ID, 1 sign in, 2 sign out, 3 import playlists (P4-21).
     std::function<void(int op)> onSpotify;
-    // P6-11: the Track Matcher's choice log - 0 logging on / off, 1 export CSV, 2 export JSON, 3 delete it.
+    // P6-11: the Track Matcher's choice log - 0 logging on / off, 1 export CSV, 2 export JSON, 3 delete it;
+    // P6-12: 4 "What you care about" (the personal ranker).
     std::function<void(int op)> onChoiceLog;
     void setChoiceLogging(bool on) noexcept { choiceLogging = on; }
     void setSpotifyState(bool hasClientId, bool signedIn) noexcept
@@ -163,6 +164,7 @@ private:
         ChoiceLogExportCsv,
         ChoiceLogExportJson,
         ChoiceLogDelete,
+        ChoiceLogCare,
         ReloadKeymap,
         EditKeymap,
         OpenKeymapFolder,

@@ -32,6 +32,7 @@ struct MatchRequest
     Intent intent = Intent::Hold;
     Scope scope;
     std::string preset = "Balanced";
+    std::optional<Weights> weights; // P6-12: the personal ranker's blend (instead of the preset's)
     KeyPolicy keyPolicy = KeyPolicy::Relaxed;
     PlayedPolicy playedPolicy = PlayedPolicy::Exclude;
     double maxStretch = 0.08;
