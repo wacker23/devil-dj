@@ -23,6 +23,7 @@
 #include "library/PlaylistFiles.h"
 #include "library/TrackRepository.h"
 #include "app/PhraseEdit.h"
+#include "util/MixRegions.h"
 #include "library/CueFeedbackRepository.h"
 #include "library/CueRepository.h"
 #include "MainLayout.h"
@@ -2144,6 +2145,25 @@ void MainComponent::askMatcher(bool now)
         snap.masterFraction = s.decks[static_cast<std::size_t>(master)].positionSamples /
                               s.decks[static_cast<std::size_t>(master)].lengthSamples;
     snap.analysisVersion = analysisRuns;
+    // P6-10: is A in its mix-out region (its MIX OUT, else before its outro phrase, else before its end)?
+    bool inOutro = false;
+    if (master >= 0)
+    {
+        const auto& d = deckGrids[static_cast<std::size_t>(master)];
+        const auto& st = s.decks[static_cast<std::size_t>(master)];
+        if (d.bufferRate > 0.0 && st.lengthSamples > 0)
+        {
+            std::vector<util::PhraseSpan> spans;
+            for (const auto& p : d.phrases.phrases)
+                spans.push_back({p.startSeconds, p.bars});
+            const auto toSeconds = [&](const std::optional<double>& x)
+            { return x ? std::optional<double>(*x / d.bufferRate) : std::nullopt; };
+            const auto regions = util::mixRegions(spans, toSeconds(d.mixIn), toSeconds(d.mixOut), d.grid.firstBpm(),
+                                                  st.lengthSamples / d.bufferRate);
+            inOutro = st.positionSamples / d.bufferRate >= regions.outStart;
+        }
+    }
+    snap.masterInOutro = inOutro;
     const bool fire = matcherTriggers.update(snap);
     if ((!fire && !now) || master < 0 || deckTrackId(static_cast<engine::DeckId>(master)) == 0)
         return;
@@ -2159,6 +2179,7 @@ void MainComponent::askMatcher(bool now)
     const auto& a = s.decks[static_cast<std::size_t>(master)];
     matcher::MatchRequest r;
     r.contextTrackId = deckTrackId(static_cast<engine::DeckId>(master));
+    r.aInOutro = inOutro;
     r.aBpmNow = a.gridBpm > 0.0 ? a.gridBpm * (1.0 + a.tempoPercent / 100.0) : 0.0;
     r.keyLockOff = !s.decks[static_cast<std::size_t>(1 - master)].keyLock;
     r.nowUnixSeconds = juce::Time::currentTimeMillis() / 1000;

@@ -29,6 +29,7 @@ JsLimits testLimits()
 {
     JsLimits l;
     l.stackBytes = 512 * 1024; // Debug builds use more C stack per JS call
+    l.evalMs = 200.0;          // the release budget, in both builds (the loop test checks it)
     return l;
 }
 } // namespace

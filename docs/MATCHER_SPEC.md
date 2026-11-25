@@ -101,6 +101,8 @@ Reason: `Similar sound 84 %`.
 A 48-d groove profile: average accent strength at each of 16 sixteenth-note positions per bar in three bands (low/kick, mid/snare, high/hats), normalized. `f_groove = cosine` mapped to [0, 1]. Distinguishes four-on-the-floor, broken beat, half-time.
 Reason: `Same groove`.
 
+As built (P6-10): the regions come from `util::mixRegions` (MIX IN / MIX OUT, else the phrases, else the ends). eB is B's energy over its mix-in region and B's sound its intro vector; A's are its whole-track values until its playhead enters its mix-out region (`Context::aInOutro`, also a trigger), then the region's energy and its outro vector. Region energy = the 0..1 energy curve averaged over the region by window overlap (at query time, so mix points count at once); the intro / outro sound vectors are computed by the analysis on the phrases it finds (`track_embeddings` 'sound_v1' / 'intro', 'outro').
+
 ### 4.6 Vocal clash (Phase 6)
 
 From vocal presence per phrase (vocal stem energy or a vocal detector): `f_vocal = 1 − 0.8·(vocal(A.mixOut) · vocal(B.mixIn))`. Reason when low: `Vocal clash`.
@@ -108,6 +110,7 @@ From vocal presence per phrase (vocal stem energy or a vocal detector): `f_vocal
 ### 4.7 Mixability (Phase 6)
 
 Rewards tracks built for mixing: B has a DJ-friendly intro (≥ 16 bars, sparse, little vocal), A has a usable outro. `f_mix = 0.5·introQuality(B) + 0.5·outroQuality(A)`. Reason: `Long intro`.
+As built (P6-10): quality = 0.4·min(1, bars / 16) + 0.3·clamp(0.5 + track energy − region energy) + 0.3·(1 − vocal); a side without phrases counts 0.5 (its unknown parts 0.5 too); no value when neither has phrases. Vocal: reasons `Vocal clash` (product ≥ 0.4) and `No vocals over the mix`.
 
 ### 4.8 Tags and genre
 

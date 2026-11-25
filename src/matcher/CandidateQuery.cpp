@@ -2,6 +2,7 @@
 
 #include "analysis/TrackFeatures.h"
 #include "library/Connection.h"
+#include "util/MixRegions.h"
 
 #include <algorithm>
 #include <cctype>
@@ -69,6 +70,79 @@ TrackInfo rowToTrack(library::Statement& st, const SoundStats& stats)
     return t;
 }
 
+// A region's energy: the 0..1 energy curve (per energy window) averaged over [t0, t1], by overlap.
+std::optional<double> regionEnergy(const std::vector<analysis::EnergyWindow>& windows, const std::vector<float>& curve,
+                                   double t0, double t1)
+{
+    double sum = 0.0, weight = 0.0;
+    for (std::size_t i = 0; i < std::min(windows.size(), curve.size()); ++i)
+    {
+        const double a = std::max(t0, static_cast<double>(windows[i].startSeconds));
+        const double b = std::min(t1, static_cast<double>(windows[i].startSeconds + windows[i].seconds));
+        if (b > a)
+        {
+            sum += curve[i] * (b - a);
+            weight += b - a;
+        }
+    }
+    if (weight <= 0.0)
+        return std::nullopt;
+    return sum / weight;
+}
+
+// P6-10: phrases, mix points, the energy curve, the region sound vectors and vocal presence -> the regions' values.
+void addStructure(library::Connection& db, std::vector<TrackInfo>& tracks, const SoundStats& stats)
+{
+    std::unordered_map<std::int64_t, std::size_t> index;
+    for (std::size_t i = 0; i < tracks.size(); ++i)
+        index[tracks[i].id] = i;
+    std::unordered_map<std::int64_t, std::vector<util::PhraseSpan>> phrases;
+    if (auto* st = db.prepare("SELECT track_id, start_seconds, bars FROM phrases ORDER BY track_id, idx"))
+        while (st->step())
+            if (index.count(st->getInt(0)) > 0)
+                phrases[st->getInt(0)].push_back({st->getDouble(1), static_cast<int>(st->getInt(2))});
+    std::unordered_map<std::int64_t, std::pair<std::optional<double>, std::optional<double>>> points; // in, out
+    if (auto* st = db.prepare("SELECT c.track_id, c.kind, c.start_sample, t.sample_rate FROM cues c JOIN tracks t ON "
+                              "t.id = c.track_id WHERE c.kind IN (4, 5) AND t.sample_rate > 0"))
+        while (st->step())
+            if (index.count(st->getInt(0)) > 0)
+            {
+                const double seconds = static_cast<double>(st->getInt(2)) / static_cast<double>(st->getInt(3));
+                auto& p = points[st->getInt(0)];
+                (st->getInt(1) == 4 ? p.first : p.second) = seconds;
+            }
+    if (auto* st = db.prepare("SELECT track_id, segment, vec FROM track_embeddings WHERE model = 'sound_v1' AND "
+                              "segment IN ('intro', 'outro')"))
+        while (st->step())
+            if (const auto it = index.find(st->getInt(0)); it != index.end())
+                (st->getText(1) == "intro" ? tracks[it->second].soundIntro : tracks[it->second].soundOutro) =
+                    normalized(analysis::unpackFloats(st->getBlob(2)), stats);
+    if (auto* st = db.prepare("SELECT t.id, t.duration_ms, f.energy_features, f.energy_curve, f.vocal_intro, "
+                              "f.vocal_outro FROM tracks t LEFT JOIN track_features f ON f.track_id = t.id"))
+        while (st->step())
+        {
+            const auto it = index.find(st->getInt(0));
+            if (it == index.end())
+                continue;
+            auto& t = tracks[it->second];
+            t.vocalIntro = st->getOptionalDouble(4);
+            t.vocalOutro = st->getOptionalDouble(5);
+            const double duration = static_cast<double>(st->getOptionalInt(1).value_or(0)) / 1000.0;
+            const auto& ph = phrases[t.id];
+            const auto& pt = points[t.id];
+            const auto r = util::mixRegions(ph, pt.first, pt.second, t.bpm, duration);
+            t.introBars = r.introBars;
+            t.outroBars = r.outroBars;
+            if (!ph.empty() || pt.second || duration > 0.0)
+                t.outStartSeconds = r.outStart;
+            const auto windows = analysis::unpackWindows(st->getBlob(2));
+            const auto curve = analysis::unpackHalves(st->getBlob(3));
+            t.energyIn = regionEnergy(windows, curve, r.inStart, r.inEnd);
+            if (duration > 0.0 || !ph.empty() || pt.second)
+                t.energyOut = regionEnergy(windows, curve, r.outStart, r.outEnd);
+        }
+}
+
 void addTagsAndPlays(library::Connection& db, std::vector<TrackInfo>& tracks, std::int64_t now)
 {
     std::unordered_map<std::int64_t, std::size_t> index;
@@ -108,6 +182,7 @@ std::vector<TrackInfo> loadCandidates(library::Connection& db, const Scope& scop
     while (st->step())
         out.push_back(rowToTrack(*st, stats));
     addTagsAndPlays(db, out, now);
+    addStructure(db, out, stats); // P6-10
     return out;
 }
 
@@ -123,6 +198,7 @@ std::optional<TrackInfo> loadTrack(library::Connection& db, std::int64_t trackId
     std::vector<TrackInfo> one{rowToTrack(*st, stats)};
     st->reset();
     addTagsAndPlays(db, one, now);
+    addStructure(db, one, stats); // P6-10
     return one.front();
 }
 

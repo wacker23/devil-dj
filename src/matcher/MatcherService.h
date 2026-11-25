@@ -25,6 +25,7 @@ namespace devildj::matcher
 struct MatchRequest
 {
     std::int64_t contextTrackId = 0;
+    bool aInOutro = false; // P6-10: A's playhead is in its mix-out region
     double aBpmNow = 0.0;
     bool keyLockOff = false;
     bool allowKeyShift = false;
@@ -98,6 +99,7 @@ public:
         int masterDeck = -1;
         std::array<std::int64_t, 2> trackIds{};
         double masterFraction = 0.0; // A's playhead / length
+        bool masterInOutro = false;  // P6-10: A entered its mix-out region (suggestions change)
         int settingsVersion = 0;
         int analysisVersion = 0; // bumped when an analysis pass finishes
     };

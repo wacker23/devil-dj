@@ -3,7 +3,7 @@
 // The Code Beat JavaScript sandbox (P5-07, CODEBEAT_SPEC §8.2): one quickjs-ng runtime and context.
 //
 // - Memory is capped (64 MB by default) and so is the JS stack; running out is a normal error, not a crash.
-// - Every evaluation has a time budget (eval 200 ms, query 5 ms by default). An interrupt handler stops code that
+// - Every evaluation has a time budget (eval 200 ms, query 5 ms by default in Release; 1000 / 50 ms in Debug). An interrupt handler stops code that
 //   runs over - an endless loop included, even inside try/catch - and the runtime stays usable.
 // - No std / os modules, no require, no timers, no file or network access: `import` resolves only the Code Beat
 //   library modules embedded in the program (js/codebeat/*.js), by name.
@@ -31,7 +31,11 @@ struct JsLimits
 #else
     std::size_t stackBytes = std::size_t{4} << 20;
 #endif
+#ifdef NDEBUG
     double evalMs = 200.0;
+#else
+    double evalMs = 1000.0; // unoptimised QuickJS: the starter examples came close to 200 ms on a busy machine
+#endif
 #ifdef NDEBUG
     double queryMs = 5.0;
 #else

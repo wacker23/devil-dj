@@ -69,6 +69,7 @@ MatchResult MatcherService::run(library::Connection& db, const MatchRequest& r, 
         return result;
     Context c;
     c.a = *a;
+    c.aInOutro = r.aInOutro;
     c.aBpmNow = r.aBpmNow > 0.0 ? r.aBpmNow : a->bpm;
     c.keyLockOff = r.keyLockOff;
     c.allowKeyShift = r.allowKeyShift;
@@ -141,6 +142,7 @@ bool MatcherTriggers::update(const Snapshot& now)
     const auto& was = *last;
     const bool fire = now.masterDeck != was.masterDeck || now.trackIds != was.trackIds ||
                       (was.masterFraction < 0.75 && now.masterFraction >= 0.75) ||
+                      now.masterInOutro != was.masterInOutro ||
                       now.settingsVersion != was.settingsVersion || now.analysisVersion != was.analysisVersion;
     last = now;
     return fire && now.masterDeck >= 0;

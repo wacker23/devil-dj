@@ -11,6 +11,29 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-25 · P6-10 Matcher v2 features
+- What changed:
+  - `util::mixRegions`: the mix-in region (32 beats from the MIX IN, else the first phrase) and the mix-out region (32 beats before the MIX OUT, else before the outro phrase, else before the end), shared by analysis, matcher and app.
+  - Analysis version 8: the phrase step also stores the intro and outro regions' sound vectors (`track_embeddings`).
+  - Matcher:
+    - Each candidate gets its regions' energy (from the energy curve, computed when the matcher runs, so mix points count at once), intro/outro sound, vocal_intro/outro and phrase lengths.
+    - Vocal clash: `1 - 0.8 x vocal(A out) x vocal(B in)`.
+    - Mixability: intro and outro quality from length, sparseness and vocals.
+    - B is judged over its mix-in region. A uses whole-track values until its playhead enters its mix-out region, then that region's energy and outro sound.
+  - App: tells the matcher whether A is in its outro, and the change triggers new suggestions.
+  - Scorer: reasons are now sorted by index rather than by copying strings. Scoring 5,000 candidates had crept to 27-28 ms against the 30 ms budget; it is now about 24 ms.
+- Tests / measurements:
+  - The regions from mix points, phrases and the ends.
+  - Vocal clash and mixability values and reasons.
+  - Done-when check: before A's outro the peak-energy B ranks first; once A is in its outro, the low-energy B that sounds like A's outro ranks first.
+  - A vocal clash and a short intro rank lower. The trigger fires when A enters its outro.
+  - Loaded from the library: regions' energy 0.2 and 0.8 from the curve, MIX OUT used, phrase lengths, vocals and the outro vector.
+  - The analyzer makes the intro/outro vectors.
+- Notes / follow-ups:
+  - The intro/outro sound vectors come from the analysis's phrases. Edited phrases or mix points change the regions' energy at once, but the sound vectors only after the next analysis.
+  - The library is analyzed once more (version 8).
+  - Debug only: the Code Beat evaluation budget is now 1000 ms (Release stays 200 ms). The starter-examples test hit 200 ms in unoptimised builds on a busy machine, in a different example each run. The endless-loop test pins 200 ms.
+
 ## 2026-11-25 · P6-09 Vocal presence
 - What changed:
   - `app/VocalPresence`: the vocal stem's level per 0.1 s window, cached as `vocal.json` beside the stems. A window counts as vocal above -40 dBFS and within 18 dB of the track's loud vocals (95th percentile), so separation bleed and instrumentals read as no vocals.

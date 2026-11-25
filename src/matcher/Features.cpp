@@ -170,6 +170,44 @@ Feature grooveFit(std::span<const float> a, std::span<const float> b)
 
 // ---- tags ----
 
+Feature vocalFit(std::optional<double> vocalOutA, std::optional<double> vocalInB)
+{
+    Feature f;
+    if (!vocalOutA || !vocalInB)
+        return f;
+    const double clash = std::clamp(*vocalOutA, 0.0, 1.0) * std::clamp(*vocalInB, 0.0, 1.0);
+    f.value = 1.0 - 0.8 * clash;
+    if (clash >= 0.4)
+        f.reason = "Vocal clash";
+    else if (*vocalOutA < 0.2 && *vocalInB < 0.2)
+        f.reason = "No vocals over the mix";
+    return f;
+}
+
+double regionQuality(const RegionShape& r) noexcept
+{
+    if (r.bars <= 0)
+        return 0.5;
+    const double length = std::clamp(r.bars / 16.0, 0.0, 1.0);
+    const double sparse = r.energy && r.trackEnergy ? std::clamp(0.5 + (*r.trackEnergy - *r.energy), 0.0, 1.0) : 0.5;
+    const double quiet = r.vocal ? 1.0 - std::clamp(*r.vocal, 0.0, 1.0) : 0.5;
+    return 0.4 * length + 0.3 * sparse + 0.3 * quiet;
+}
+
+Feature mixFit(const RegionShape& outroA, const RegionShape& introB)
+{
+    Feature f;
+    if (outroA.bars <= 0 && introB.bars <= 0)
+        return f;
+    const double in = regionQuality(introB), out = regionQuality(outroA);
+    f.value = 0.5 * in + 0.5 * out;
+    if (introB.bars >= 16 && in >= 0.7)
+        f.reason = "Long intro";
+    else if (outroA.bars >= 16 && out >= 0.7)
+        f.reason = "Long outro to mix over";
+    return f;
+}
+
 Feature tagsFit(const std::vector<std::string>& a, const std::vector<std::string>& b)
 {
     Feature f;

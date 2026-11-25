@@ -118,6 +118,7 @@ target_sources(DevilDJTests PRIVATE
     library/TagReaderTests.cpp
     matcher/MatcherSmokeTests.cpp
     matcher/MatcherTests.cpp
+    matcher/MatcherV2Tests.cpp
     ui/UiSmokeTests.cpp
     ui/DeckViewTests.cpp
     ui/PadModeTests.cpp

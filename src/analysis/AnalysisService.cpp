@@ -5,6 +5,7 @@
 #include "analysis/FeatureNormalizer.h"
 #include "analysis/Loudness.h"
 #include "analysis/PhraseDetector.h"
+#include "util/MixRegions.h"
 #include "analysis/TrackFeatures.h"
 #include "analysis/WaveformCache.h"
 #include "dsp/SincResampler.h"
@@ -124,9 +125,34 @@ void AnalysisService::phraseAnalyzer(const AnalysisInput& input, AnalysisResult&
     if (a.phrases.empty())
         return;
     std::vector<library::StoredPhrase> out;
+    std::vector<util::PhraseSpan> spans;
     for (const auto& p : a.phrases)
+    {
         out.push_back({p.startSeconds, p.bars, p.energy});
+        spans.push_back({p.startSeconds, p.bars});
+    }
     result.phrases = std::move(out);
+
+    // P6-10: the sound of the mix-in and mix-out regions (the matcher compares A's outro with B's intro).
+    const auto grid = g->rescaled(AnalysisInput::kMonoRate);
+    const double duration = input.durationSeconds();
+    const auto regions = util::mixRegions(spans, std::nullopt, std::nullopt, grid.firstBpm(), duration);
+    const auto soundOf = [&](double from, double to) -> std::optional<std::vector<std::uint8_t>>
+    {
+        const auto a0 = static_cast<int>(std::clamp(from, 0.0, duration) * AnalysisInput::kMonoRate);
+        const auto a1 = std::min(static_cast<int>(input.mono.size()),
+                                 static_cast<int>(std::clamp(to, 0.0, duration) * AnalysisInput::kMonoRate));
+        if (a1 - a0 < static_cast<int>(4.0 * AnalysisInput::kMonoRate)) // under 4 s: not enough to say
+            return std::nullopt;
+        auto shifted = grid;
+        shifted.shiftSamples(-static_cast<double>(a0));
+        const auto f = computeTrackFeatures(input.mono.data() + a0, a1 - a0, AnalysisInput::kMonoRate, shifted);
+        if (!f.sound)
+            return std::nullopt;
+        return packFloats(*f.sound);
+    };
+    result.soundIntro = soundOf(regions.inStart, regions.inEnd);
+    result.soundOutro = soundOf(regions.outStart, regions.outEnd);
 }
 
 void AnalysisService::basicsAnalyzer(const AnalysisInput& input, AnalysisResult& result)
@@ -440,6 +466,19 @@ void AnalysisService::flushResults(bool force)
                                 return false;
                             featuresDirty = true;
                         }
+                        for (const auto& [segment, vec] : {std::pair{"intro", &r.soundIntro}, std::pair{"outro", &r.soundOutro}})
+                            if (*vec) // P6-10: the regions' sound vectors
+                            {
+                                auto* e = c.prepare("INSERT INTO track_embeddings (track_id, model, segment, dim, vec) "
+                                                    "VALUES (?, 'sound_v1', ?, ?, ?) ON CONFLICT(track_id, model, segment) "
+                                                    "DO UPDATE SET dim = excluded.dim, vec = excluded.vec");
+                                if (e == nullptr || !e->bind(1, id)
+                                                         .bind(2, segment)
+                                                         .bind(3, kSoundDims)
+                                                         .bind(4, std::span<const std::uint8_t>(**vec))
+                                                         .run())
+                                    return false;
+                            }
                         if (r.phrases) // P6-06: unless the owner edited them
                         {
                             library::PhraseRepository phrases(c);

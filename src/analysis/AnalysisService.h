@@ -68,6 +68,9 @@ struct AnalysisResult
     std::optional<std::vector<std::uint8_t>> energyFeatures, soundVector, groove;
     // P6-06: the phrases (written unless the owner edited the track's).
     std::optional<std::vector<library::StoredPhrase>> phrases;
+    // P6-10: the sound vector (raw, packed floats) of the mix-in and mix-out regions (util/MixRegions, from the
+    // phrases found here) - track_embeddings 'sound_v1' / 'intro', 'outro'.
+    std::optional<std::vector<std::uint8_t>> soundIntro, soundOutro;
 };
 
 // An analyzer is a pure function of the input (unit-testable with generated signals). Bump kAnalysisVersion
@@ -77,8 +80,8 @@ using Analyzer = std::function<void(const AnalysisInput& input, AnalysisResult& 
 // The version this build's analyzers write to tracks.analysis_version. 1 = P2-12 (duration, sample rate);
 // 2 = P2-13 beat tracker v1 (BPM, beatgrid); 3 = P2-15 key detection (key, confidence); 4 = beat tracker v2
 // (variable-tempo grids, steady grids refitted); 5 = P2-16 loudness (BS.1770 integrated LUFS); 6 = P2-24 Track
-// Matcher features (energy windows, sound vector, groove); 7 = P6-06 phrases.
-constexpr int kAnalysisVersion = 7;
+// Matcher features (energy windows, sound vector, groove); 7 = P6-06 phrases; 8 = P6-10 intro / outro sound vectors.
+constexpr int kAnalysisVersion = 8;
 
 // The analysis service (P2-12): a queue of track ids and a pool of workers (cores - 1, at most 4) at the
 // lowest thread priority, so playing decks never wait for it. Per track: read its path from the library,

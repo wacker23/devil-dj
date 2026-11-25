@@ -22,8 +22,8 @@ enum class FeatureId
     Energy,
     Sound,
     Groove,
-    Vocal,   // Phase 6
-    Mix,     // Phase 6
+    Vocal,   // P6-10
+    Mix,     // P6-10
     Tags,
     History,
     Rating,
@@ -64,6 +64,12 @@ struct TrackInfo
     std::vector<std::string> tags; // genre + custom tags
     int rating = 0;
     int playsLast30Days = 0;
+    // P6-10 (from phrases, mix points, the energy curve, the region sound vectors, vocal presence; none: not known):
+    std::optional<double> energyIn, energyOut;    // over the mix-in / mix-out region (util/MixRegions)
+    std::vector<float> soundIntro, soundOutro;    // library-normalized, empty if none
+    std::optional<double> vocalIntro, vocalOutro; // P6-09
+    int introBars = 0, outroBars = 0;             // the first / last phrase (0: unknown)
+    double outStartSeconds = -1.0;                // where its mix-out region starts (-1: unknown)
 };
 
 enum class KeyPolicy
@@ -83,6 +89,8 @@ enum class PlayedPolicy
 struct Context
 {
     TrackInfo a;
+    // P6-10: A's playhead is in its mix-out region: its energy and sound are the region's, not the whole track's.
+    bool aInOutro = false;
     double aBpmNow = 0.0; // A's tempo as heard
     bool keyLockOff = false; // on the target deck: B's key moves with its stretch
     bool allowKeyShift = false;

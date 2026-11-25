@@ -49,6 +49,22 @@ Feature soundFit(std::span<const float> a, std::span<const float> b, double c10,
 // §4.5 Groove similarity: cosine of the 48-d groove profiles, mapped to [0, 1].
 Feature grooveFit(std::span<const float> a, std::span<const float> b);
 
+// §4.6 Vocal clash (P6-10): 1 - 0.8 x vocal(A's mix-out) x vocal(B's mix-in); none if either is unknown.
+Feature vocalFit(std::optional<double> vocalOutA, std::optional<double> vocalInB);
+
+// §4.7 Mixability (P6-10): 0.5 introQuality(B) + 0.5 outroQuality(A). A region's quality: 0.4 x its length (16 bars
+// or more = 1) + 0.3 x sparse (its energy under the track's) + 0.3 x little vocal. A side without phrases counts
+// 0.5; none if both are unknown.
+struct RegionShape
+{
+    int bars = 0;                      // 0: unknown
+    std::optional<double> energy;      // the region's
+    std::optional<double> trackEnergy; // the whole track's
+    std::optional<double> vocal;
+};
+double regionQuality(const RegionShape& r) noexcept;
+Feature mixFit(const RegionShape& outroA, const RegionShape& introB);
+
 // §4.8 Tags and genre: Jaccard overlap (case-insensitive).
 Feature tagsFit(const std::vector<std::string>& a, const std::vector<std::string>& b);
 

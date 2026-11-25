@@ -1,6 +1,7 @@
 #include "matcher/Scorer.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
@@ -142,11 +143,18 @@ Scored score(const Context& c, const TrackInfo& b, const Weights& weights)
     double stretch = 0.0;
     f[static_cast<std::size_t>(FeatureId::Tempo)] = tempoFit(c.aBpmNow, b.bpm, &stretch);
     f[static_cast<std::size_t>(FeatureId::Key)] = keyFit(c.a.key, b.key, c.harmonic, stretch, c.keyLockOff, c.allowKeyShift);
-    f[static_cast<std::size_t>(FeatureId::Energy)] =
-        energyFit(c.a.energyOutro ? c.a.energyOutro : c.a.energy, b.energyIntro ? b.energyIntro : b.energy, c.intent);
-    f[static_cast<std::size_t>(FeatureId::Sound)] = soundFit(c.a.sound, b.sound, c.c10, c.c90, c.intent);
+    // P6-10: B over its mix-in region; A over its mix-out region once its playhead is there (before, the DJ could
+    // mix out anywhere: the whole track).
+    const auto eA = c.aInOutro && c.a.energyOut ? c.a.energyOut : c.a.energy;
+    const auto eB = b.energyIn ? b.energyIn : b.energyIntro ? b.energyIntro : b.energy;
+    f[static_cast<std::size_t>(FeatureId::Energy)] = energyFit(eA, eB, c.intent);
+    const auto& soundA = c.aInOutro && !c.a.soundOutro.empty() ? c.a.soundOutro : c.a.sound;
+    const auto& soundB = !b.soundIntro.empty() ? b.soundIntro : b.sound;
+    f[static_cast<std::size_t>(FeatureId::Sound)] = soundFit(soundA, soundB, c.c10, c.c90, c.intent);
     f[static_cast<std::size_t>(FeatureId::Groove)] = grooveFit(c.a.groove, b.groove);
-    // Vocal and Mix: Phase 6 (no data: skipped).
+    f[static_cast<std::size_t>(FeatureId::Vocal)] = vocalFit(c.a.vocalOutro, b.vocalIntro);
+    f[static_cast<std::size_t>(FeatureId::Mix)] =
+        mixFit({c.a.outroBars, c.a.energyOut, c.a.energy, c.a.vocalOutro}, {b.introBars, b.energyIn, b.energy, b.vocalIntro});
     f[static_cast<std::size_t>(FeatureId::Tags)] = tagsFit(c.a.tags, b.tags);
     {
         const auto pair = c.pairCounts.find(b.id);
@@ -160,7 +168,8 @@ Scored score(const Context& c, const TrackInfo& b, const Weights& weights)
 
     // Weighted mean over the features that have data; intent switch: tags count 0, sound half.
     double sum = 0.0, total = 0.0;
-    std::vector<std::pair<double, std::string>> contributions;
+    std::array<std::pair<double, int>, kFeatureCount> contributions{}; // (weighted value, feature): no string copies
+    int contributing = 0;
     for (int i = 0; i < kFeatureCount; ++i)
     {
         const auto id = static_cast<FeatureId>(i);
@@ -175,7 +184,7 @@ Scored score(const Context& c, const TrackInfo& b, const Weights& weights)
         sum += w * *feature.value;
         total += w;
         if (w > 0.0 && !feature.reason.empty())
-            contributions.emplace_back(w * *feature.value, feature.reason);
+            contributions[static_cast<std::size_t>(contributing++)] = {w * *feature.value, i};
     }
     s.score = total > 0.0 ? sum / total : 0.0;
     // Penalties (§4.11).
@@ -193,14 +202,10 @@ Scored score(const Context& c, const TrackInfo& b, const Weights& weights)
         s.reasons.push_back("Played earlier tonight");
     }
     s.score -= s.penalty;
-    std::stable_sort(contributions.begin(), contributions.end(),
+    std::stable_sort(contributions.begin(), contributions.begin() + contributing,
                      [](const auto& x, const auto& y) { return x.first > y.first; });
-    for (const auto& [_, reason] : contributions)
-    {
-        if (s.reasons.size() >= 4)
-            break;
-        s.reasons.push_back(reason);
-    }
+    for (int k = 0; k < contributing && s.reasons.size() < 4; ++k)
+        s.reasons.push_back(f[static_cast<std::size_t>(contributions[static_cast<std::size_t>(k)].second)].reason);
     return s;
 }
 

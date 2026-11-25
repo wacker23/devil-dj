@@ -3,6 +3,7 @@
 #include "PhraseEval.h"
 #include "TestData.h"
 #include "analysis/AnalysisService.h"
+#include "analysis/TrackFeatures.h"
 #include "analysis/WaveformCache.h"
 #include "engine/AudioDeviceService.h"
 #include "engine/AudioEngine.h"
@@ -455,4 +456,9 @@ TEST_CASE("Analysis service: the phrase analyzer works on the beat analyzer's gr
     REQUIRE(r.phrases);
     REQUIRE(r.phrases->size() >= 4);
     CHECK(std::abs(r.phrases->front().startSeconds - t.grid.sampleAt(0.0) / t.rate) < 1e-3);
+    // P6-10: the mix-in and mix-out regions' sound vectors.
+    REQUIRE(r.soundIntro);
+    REQUIRE(r.soundOutro);
+    CHECK(analysis::unpackFloats(*r.soundIntro).size() == 32);
+    CHECK(*r.soundIntro != *r.soundOutro);
 }
