@@ -48,6 +48,7 @@ struct Suggestion
     bool wildcard = false;
     std::vector<std::string> reasons;
     std::array<std::optional<double>, kFeatureCount> features{};
+    std::optional<double> energyDelta; // P6-11: for the choice log's interaction terms
     // For the Next Track panel (P3-24): up to 4 chips - key, tempo, energy, then sound / groove / history - each its
     // reason and the feature's value (how good); and every feature as "name  value x weight" lines.
     std::vector<std::pair<std::string, double>> chips;
@@ -57,6 +58,7 @@ struct Suggestion
 struct MatchResult
 {
     std::int64_t contextTrackId = 0;
+    MatchRequest request; // P6-11: what these answer (the choice log records intent, preset, scope)
     std::vector<Suggestion> suggestions;
     int candidates = 0;   // after the SQL prefilter
     double milliseconds = 0.0;
@@ -76,6 +78,10 @@ public:
     std::function<void(const MatchResult&)> onResult;
     // Synchronous, on the caller's thread with the caller's connection (tests, the evaluation tool).
     static MatchResult run(library::Connection& db, const MatchRequest& r, const std::vector<Preset>& presets);
+    // P6-11: one track scored against the request's context (a chosen track that wasn't in the list); none if A or
+    // B isn't analyzed. Features and energy delta only.
+    static std::optional<Suggestion> scoreOne(library::Connection& db, const MatchRequest& r, std::int64_t trackId,
+                                              const std::vector<Preset>& presets);
 
 private:
     void loop();

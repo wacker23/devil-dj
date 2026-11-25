@@ -122,6 +122,9 @@ struct Scored
     std::vector<std::string> reasons;
 };
 
+// The energy change the energy feature looks at (B's in - A's out, as the scorer takes them; P6-11 logs it).
+std::optional<double> energyDelta(const Context& context, const TrackInfo& b);
+
 // §3 in memory (after the SQL prefilter): tempo reachable, key policy, not A, not a duplicate of A, session policy,
 // rating.
 bool passesFilters(const Context& context, const TrackInfo& b);

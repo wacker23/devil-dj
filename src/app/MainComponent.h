@@ -28,6 +28,7 @@
 #include "app/CodeBuffers.h"
 #include "app/CodeDeckProducer.h"
 #include "app/BeatRender.h"
+#include "app/ChoiceTracker.h"
 #include "app/SmartCues.h"
 #include "app/VocalPresence.h"
 #include "library/PhraseRepository.h"
@@ -286,6 +287,13 @@ private:
     std::vector<double> energyHistory;
     std::int64_t lastMasterTrack = 0;
     std::vector<matcher::Preset> matcherPresets = matcher::defaultPresets();
+    // P6-11: the choice log - what was shown, what was chosen, how it went.
+    ChoiceTracker choiceTracker;
+    bool choiceLogging = true;
+    std::int64_t choiceSession = 0, nextChoiceId = 1;
+    std::optional<matcher::MatchRequest> suggestionsRequest; // what the shown suggestions answer
+    std::unique_ptr<juce::FileChooser> choiceExportChooser;
+    void logChoice(engine::DeckId deck); // a track loaded on `deck`
     void showSuggestions();
     void previewSuggestion(bool down);
     struct Preview
@@ -532,6 +540,9 @@ public:
     // P4-20: Spotify sign-in (the Client ID and port from the settings).
     void setSpotifyApp(const juce::String& clientId, int redirectPort);
     void spotifyMenu(int op); // 0 the Client ID (asks), 1 sign in, 2 sign out, 3 import playlists (P4-21)
+    // P6-11: the choice log - logging on / off (from the settings), 1 export CSV, 2 export JSON, 3 delete (asks).
+    void setChoiceLogging(bool on) noexcept { choiceLogging = on; }
+    void choiceLogMenu(int op);
     void showSpotifyImport();
     std::function<void(const juce::String& clientId)> onSpotifyClientIdChanged;
     std::function<void()> onSpotifyStateChanged; // signed in / out: the menu follows

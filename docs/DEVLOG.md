@@ -11,6 +11,27 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-26 · P6-11 Choice logging + thumbs
+- What changed:
+  - `matcher/ChoiceLog`: x(A, B) is the 11 features plus 3 intent interactions (14 values, null when missing). It stores the `choice_log` rows (the table was already in schema v2) and exports CSV (one row per shown track) and JSON.
+  - Each suggestion now carries its energy delta. A result remembers its request. `MatcherService::scoreOne` scores a chosen track that wasn't in the list.
+  - `app/ChoiceTracker`, the outcomes: 60 s played = mixed; replaced before that = ejected; thumbs up/down go to the last impression heard.
+  - App:
+    - An impression is logged when a library track goes on the idle deck while the other deck plays (not during Automix), with the shown list for that A.
+    - The `'` / `Shift+'` keys (bound earlier but unhandled) and new check/cross buttons in the Next Track panel give the thumbs.
+    - Options > Track Matcher log: on/off (kept in the settings), export CSV/JSON, delete (asks first).
+    - Ids are handed out by the app so the writes stay in the background.
+  - `tools/check_choice_export.py` checks an export with pandas.
+- Tests / measurements:
+  - x(A, B) per intent, and the shown_json round trip (nulls kept).
+  - Done-when check: a session of 3 loads gives the right rows. One was replaced after 30 s (ejected); one played 70 s and got thumbs up, then down (the last one counts); one was not from the list (no rank, scored on the spot). A load with logging off writes nothing.
+  - Exports: CSV quoting and JSON escaping; delete clears the log.
+  - pandas 2.2.1 reads both exports: 6 rows in 2 impressions, one chosen per impression, all 14 dimensions.
+  - The panel's buttons call the thumbs.
+- Notes / follow-ups:
+  - Model version is "rules" until P6-12's personal ranker.
+  - "Mixed" counts any play of the deck, even with its fader down.
+
 ## 2026-11-25 · P6-10 Matcher v2 features
 - What changed:
   - `util::mixRegions`: the mix-in region (32 beats from the MIX IN, else the first phrase) and the mix-out region (32 beats before the MIX OUT, else before the outro phrase, else before the end), shared by analysis, matcher and app.

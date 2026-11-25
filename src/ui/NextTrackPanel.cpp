@@ -44,6 +44,21 @@ NextTrackPanel::NextTrackPanel()
     keyPolicy.setTooltip("How strictly the keys must fit (Alt+Shift+N)");
     for (auto* c : {&scope, &preset, &keyPolicy})
         addAndMakeVisible(*c);
+    for (auto* b : {&thumbsUp, &thumbsDown}) // P6-11
+    {
+        const bool up = b == &thumbsUp;
+        b->setColour(juce::TextButton::buttonColourId, kPanel);
+        b->setColour(juce::TextButton::textColourOffId, up ? juce::Colour(0xff3cc46a) : juce::Colour(0xffe0483c));
+        b->setTooltip(up ? "The last transition was good (') - the Track Matcher learns from it"
+                         : "The last transition was bad (Shift+') - the Track Matcher learns from it");
+        b->setWantsKeyboardFocus(false);
+        b->onClick = [this, up]
+        {
+            if (onThumbs)
+                onThumbs(up);
+        };
+        addAndMakeVisible(*b);
+    }
     const char* names[] = {"\xe2\x86\x93 DOWN", "\xe2\x86\x92 HOLD", "\xe2\x86\x91 UP", "\xe2\xa4\xa8 SWITCH"};
     for (int i = 0; i < 4; ++i)
     {
@@ -120,6 +135,9 @@ void NextTrackPanel::resized()
     keyPolicy.setBounds(top.reduced(1, 0));
     area.removeFromTop(4);
     auto row = area.removeFromTop(24);
+    thumbsDown.setBounds(row.removeFromRight(28).reduced(1, 0)); // P6-11
+    thumbsUp.setBounds(row.removeFromRight(28).reduced(1, 0));
+    row.removeFromRight(4);
     const int w = row.getWidth() / 4;
     for (auto& b : intents)
         b.setBounds(row.removeFromLeft(w).reduced(1, 0));

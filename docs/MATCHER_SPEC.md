@@ -183,6 +183,8 @@ An **impression** is recorded when a track is loaded into the idle deck while th
 
 Logging can be turned off in settings; logs can be deleted or exported (CSV/JSON) for the owner's own research.
 
+As built (P6-11): `matcher/ChoiceLog` (x(A, B) = the 11 features, null when missing, then energy delta x [intent up], energy delta x [intent down], sound x [intent switch]; the `choice_log` rows; CSV in long format - one row per shown track with its x - and JSON) and `app/ChoiceTracker` (the outcomes). A load counts when a library track goes on the idle deck while the other deck plays another, and Automix isn't running; the shown list is the last suggestions for that A, and a chosen track not among them is scored on the spot (`MatcherService::scoreOne`). Outcomes: 60 s played in all = mixed; the deck loaded again before that = ejected; ' / Shift+' (or the Next Track panel's check / cross) = thumbs up / down on the last impression heard. The app hands out the ids and writes in the background. Options > Track Matcher log: on / off (setting `logChoices`), export CSV / JSON, delete (asks). `tools/check_choice_export.py` reads both exports with pandas.
+
 ### 7.2 Model v1 — pairwise logistic ranker (on-device)
 
 Feature vector x(A,B) = the 11 features of §4 plus 3 interaction terms (energy delta × intent up, energy delta × intent down, sound × intent switch) = 14 dims.

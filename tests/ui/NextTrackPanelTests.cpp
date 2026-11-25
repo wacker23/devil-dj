@@ -163,3 +163,17 @@ TEST_CASE("Next Track: a new request (a load, an intent change) is answered with
     std::error_code ec;
     fs::remove_all(dir, ec);
 }
+
+TEST_CASE("Next Track panel: the thumbs buttons rate the last transition (P6-11)", "[ui][matcher][choicelog]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    devildj::ui::NextTrackPanel panel;
+    panel.setBounds(0, 0, 360, 600);
+    std::vector<bool> got;
+    panel.onThumbs = [&](bool up) { got.push_back(up); };
+    panel.thumbsButton(true).onClick(); // what a click (mouse or touch) runs
+    panel.thumbsButton(false).onClick();
+    CHECK(got == std::vector<bool>{true, false});
+    CHECK(panel.thumbsButton(true).getBounds().getRight() <= panel.thumbsButton(false).getX());
+    CHECK(panel.thumbsButton(false).getRight() <= 360);
+}

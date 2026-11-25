@@ -138,6 +138,14 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
         spotify.addSeparator();
         spotify.addItem(SpotifyImport, "Import playlists (matched to your own files)...", spotifySignedIn);
         menu.addSubMenu("Spotify", spotify);
+        juce::PopupMenu choices; // P6-11: what the Track Matcher learns from (kept on this computer)
+        choices.addItem(ChoiceLogToggle, "Log my choices (for the personal ranker)", true, choiceLogging);
+        choices.addSeparator();
+        choices.addItem(ChoiceLogExportCsv, "Export as CSV...");
+        choices.addItem(ChoiceLogExportJson, "Export as JSON...");
+        choices.addSeparator();
+        choices.addItem(ChoiceLogDelete, "Delete the log...");
+        menu.addSubMenu("Track Matcher log", choices);
         menu.addSeparator();
         juce::PopupMenu keyMenu;
         keyMenu.addItem(KeyMusical, "Musical (Am, F#)", true, keyNotation == 0);
@@ -373,6 +381,13 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
                 onHighQualityResampling(highQuality);
             break;
 
+        case ChoiceLogToggle:
+        case ChoiceLogExportCsv:
+        case ChoiceLogExportJson:
+        case ChoiceLogDelete:
+            if (onChoiceLog)
+                onChoiceLog(menuItemID - ChoiceLogToggle);
+            break;
         case SpotifyClientId:
         case SpotifySignIn:
         case SpotifySignOut:

@@ -59,11 +59,53 @@ void MatcherService::loop()
     }
 }
 
+namespace
+{
+Context contextFor(library::Connection& db, const MatchRequest& r, const TrackInfo& a)
+{
+    Context c;
+    c.a = a;
+    c.aInOutro = r.aInOutro;
+    c.aBpmNow = r.aBpmNow > 0.0 ? r.aBpmNow : a.bpm;
+    c.keyLockOff = r.keyLockOff;
+    c.allowKeyShift = r.allowKeyShift;
+    c.intent = r.intent;
+    c.maxStretch = r.maxStretch;
+    c.keyPolicy = r.keyPolicy;
+    c.playedPolicy = r.playedPolicy;
+    c.playedThisSession = r.playedThisSession;
+    c.lastArtists = r.lastArtists;
+    c.minRating = r.minRating;
+    loadHistory(db, c, r.nowUnixSeconds);
+    return c;
+}
+} // namespace
+
+std::optional<Suggestion> MatcherService::scoreOne(library::Connection& db, const MatchRequest& r, std::int64_t trackId,
+                                                    const std::vector<Preset>& presets)
+{
+    const auto a = loadTrack(db, r.contextTrackId, r.nowUnixSeconds);
+    const auto b = loadTrack(db, trackId, r.nowUnixSeconds);
+    if (!a || !b)
+        return std::nullopt;
+    const auto c = contextFor(db, r, *a);
+    const auto* preset = findPreset(presets, r.preset);
+    const auto s = score(c, *b, preset != nullptr ? preset->weights : defaultPresets().front().weights);
+    Suggestion out;
+    out.trackId = trackId;
+    out.score = s.score;
+    for (std::size_t i = 0; i < out.features.size(); ++i)
+        out.features[i] = s.features[i].value;
+    out.energyDelta = energyDelta(c, *b);
+    return out;
+}
+
 MatchResult MatcherService::run(library::Connection& db, const MatchRequest& r, const std::vector<Preset>& presets)
 {
     const auto t0 = std::chrono::steady_clock::now();
     MatchResult result;
     result.contextTrackId = r.contextTrackId;
+    result.request = r;
     const auto a = loadTrack(db, r.contextTrackId, r.nowUnixSeconds);
     if (!a)
         return result;
@@ -97,6 +139,7 @@ MatchResult MatcherService::run(library::Connection& db, const MatchRequest& r, 
         out.reasons = s.reasons;
         for (std::size_t i = 0; i < out.features.size(); ++i)
             out.features[i] = s.features[i].value;
+        out.energyDelta = energyDelta(c, *s.track);
         for (const auto id : {FeatureId::Key, FeatureId::Tempo, FeatureId::Energy, FeatureId::Sound, FeatureId::Groove,
                               FeatureId::History})
         {

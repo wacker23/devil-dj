@@ -59,6 +59,8 @@ target_sources(devildj_app_core INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/PlayTracker.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/Settings.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/SoakTest.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ChoiceTracker.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ChoiceTracker.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/SmartCues.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/VocalPresence.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/VocalPresence.h"

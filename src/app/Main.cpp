@@ -257,6 +257,22 @@ public:
             menu->menuItemsChanged();
         };
         menu->setSpotifyState(mainComponent->spotifyHasClientId(), mainComponent->spotifySignedIn());
+        // P6-11: the choice log - on / off kept in the settings; export / delete in the app.
+        mainComponent->setChoiceLogging(settings->get(keys::logChoices));
+        menu->setChoiceLogging(settings->get(keys::logChoices));
+        menu->onChoiceLog = [this](int op)
+        {
+            if (op == 0)
+            {
+                const bool on = !settings->get(keys::logChoices);
+                settings->set(keys::logChoices, on);
+                mainComponent->setChoiceLogging(on);
+                menu->setChoiceLogging(on);
+                menu->menuItemsChanged();
+                return;
+            }
+            mainComponent->choiceLogMenu(op);
+        };
         menu->onNextTrackPanel = [this](bool show)
         {
             settings->set(keys::nextTrackPanel, show);

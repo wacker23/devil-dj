@@ -135,6 +135,15 @@ bool passesFilters(const Context& c, const TrackInfo& b)
     return true;
 }
 
+std::optional<double> energyDelta(const Context& c, const TrackInfo& b)
+{
+    const auto eA = c.aInOutro && c.a.energyOut ? c.a.energyOut : c.a.energy;
+    const auto eB = b.energyIn ? b.energyIn : b.energyIntro ? b.energyIntro : b.energy;
+    if (!eA || !eB)
+        return std::nullopt;
+    return *eB - *eA;
+}
+
 Scored score(const Context& c, const TrackInfo& b, const Weights& weights)
 {
     Scored s;

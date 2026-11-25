@@ -86,6 +86,9 @@ public:
     std::function<void(bool show)> onNextTrackPanel; // P3-24
     // P4-20: Spotify - 0 the Client ID, 1 sign in, 2 sign out, 3 import playlists (P4-21).
     std::function<void(int op)> onSpotify;
+    // P6-11: the Track Matcher's choice log - 0 logging on / off, 1 export CSV, 2 export JSON, 3 delete it.
+    std::function<void(int op)> onChoiceLog;
+    void setChoiceLogging(bool on) noexcept { choiceLogging = on; }
     void setSpotifyState(bool hasClientId, bool signedIn) noexcept
     {
         spotifyHasClientId = hasClientId;
@@ -156,6 +159,10 @@ private:
         SpotifySignIn,
         SpotifySignOut,
         SpotifyImport,
+        ChoiceLogToggle,
+        ChoiceLogExportCsv,
+        ChoiceLogExportJson,
+        ChoiceLogDelete,
         ReloadKeymap,
         EditKeymap,
         OpenKeymapFolder,
@@ -198,6 +205,7 @@ private:
     bool layoutBigBrowser = false;
     bool layoutNextTrack = true;
     bool spotifyHasClientId = false, spotifySignedIn = false;
+    bool choiceLogging = true;
     int keyNotation = 0;
     bool autoGain = true;
     int autoGainTarget = -10;

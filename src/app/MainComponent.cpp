@@ -26,6 +26,7 @@
 #include "util/MixRegions.h"
 #include "library/CueFeedbackRepository.h"
 #include "library/CueRepository.h"
+#include "matcher/ChoiceLog.h"
 #include "MainLayout.h"
 #include "RecordingSheets.h"
 #include "util/Log.h"
@@ -363,11 +364,32 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
                         return;
                     safe->suggestions = r.suggestions;
                     safe->suggestionsFor = r.contextTrackId;
+                    safe->suggestionsRequest = r.request; // P6-11
                     safe->suggestionHighlight = 0;
                     safe->showSuggestions();
                     util::logInfo("Matcher: {} suggestions from {} candidates in {:.1f} ms", r.suggestions.size(),
                                   r.candidates, r.milliseconds);
                 });
+        };
+        // P6-11: the choice log - ids handed out here (after the table's last), written in the background.
+        choiceSession = static_cast<std::int64_t>(juce::Time::currentTimeMillis() / 1000);
+        if (gridReader != nullptr)
+            nextChoiceId = gridReader->queryInt("SELECT coalesce(max(id), 0) + 1 FROM choice_log").value_or(1);
+        choiceTracker.add = [this](const matcher::Impression& m) -> std::optional<std::int64_t>
+        {
+            auto copy = m;
+            copy.id = nextChoiceId++;
+            libraryDb->write([copy](library::Connection& c)
+                             {
+                                 if (!matcher::ChoiceLogRepository(c).add(copy))
+                                     util::logWarning("Choice log: {}", c.lastError());
+                             });
+            return copy.id;
+        };
+        choiceTracker.setOutcome = [this](std::int64_t id, matcher::Outcome outcome)
+        {
+            libraryDb->write([id, outcome](library::Connection& c) { matcher::ChoiceLogRepository(c).setOutcome(id, outcome); });
+            util::logInfo("Choice log: impression {} {}", id, matcher::outcomeName(outcome));
         };
         matcherTimer = std::make_unique<juce::TimedCallback>([this] { askMatcher(); });
         matcherTimer->startTimerHz(10);
@@ -777,6 +799,7 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     loader.callbacks.onLoaded = [this](engine::DeckId deck, const engine::TrackBuffer& t)
     {
         loadGridFor(deck, t.file, t.sampleRate); // P2-14
+        logChoice(deck);                         // P6-11 (after the grid: the deck's library id is known)
         loadStemsFor(deck, t);                   // P6-04
         juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this)]
                                         { if (safe != nullptr) safe->askMatcher(true); }); // P3-24: at once
@@ -1135,6 +1158,19 @@ void MainComponent::registerActions()
         showSuggestions();
         askMatcher(true);
     };
+    // P6-11: thumbs up / down on the last transition (the choice log), keys and the Next Track panel's buttons.
+    nextTrackPanel.onThumbs = [this](bool up)
+    { actions.perform(ui::globalCommand(up ? GA::RateTransitionUp : GA::RateTransitionDown), ui::ActionPhase::Press); };
+    for (const bool up : {true, false})
+        onPress(ui::globalCommand(up ? GA::RateTransitionUp : GA::RateTransitionDown), [this, up]
+                {
+                    if (!choiceLogging)
+                        libraryBrowser->setStatus("The Track Matcher log is off (Options > Track Matcher log)");
+                    else if (choiceTracker.thumbs(up))
+                        libraryBrowser->setStatus(up ? "Thumbs up on the last transition" : "Thumbs down on the last transition");
+                    else
+                        libraryBrowser->setStatus("Nothing to rate yet: load a track on the idle deck and mix it in");
+                });
     onPress(ui::globalCommand(GA::CycleIntent), [this, matcherChanged] { matcherIntent = (matcherIntent + 1) % 4; matcherChanged(); });
     onPress(ui::globalCommand(GA::MatcherPreset),
             [this, matcherChanged] { matcherPreset = (matcherPreset + 1) % static_cast<int>(matcherPresets.size()); matcherChanged(); });
@@ -2192,6 +2228,104 @@ void MainComponent::askMatcher(bool now)
     r.scope.playlistId = matcherScope == 1 ? libraryBrowser->shownPlaylist() : 0;
     r.preset = matcherPresets[static_cast<std::size_t>(std::clamp(matcherPreset, 0, static_cast<int>(matcherPresets.size()) - 1))].name;
     matcherService->request(std::move(r));
+}
+
+void MainComponent::logChoice(engine::DeckId deck)
+{
+    if (deck >= 2 || libraryDb == nullptr)
+        return;
+    const auto& s = engine.readState();
+    const auto other = static_cast<engine::DeckId>(1 - deck);
+    const auto a = deckTrackId(other), b = deckTrackId(deck);
+    std::optional<matcher::Impression> impression;
+    // An owner's choice: a library track on the idle deck while the other plays another (Automix's aren't).
+    if (choiceLogging && !automix.running() && a != 0 && b != 0 && a != b && s.decks[other].playing)
+    {
+        matcher::Impression m;
+        m.sessionId = choiceSession;
+        m.createdAt = static_cast<std::int64_t>(juce::Time::currentTimeMillis() / 1000);
+        m.contextTrack = a;
+        m.chosenTrack = b;
+        matcher::MatchRequest request;
+        if (suggestionsRequest && suggestionsFor == a)
+            request = *suggestionsRequest;
+        else
+        {
+            request.contextTrackId = a;
+            request.preset = matcherPresets[static_cast<std::size_t>(std::clamp(matcherPreset, 0, static_cast<int>(matcherPresets.size()) - 1))].name;
+            request.nowUnixSeconds = m.createdAt;
+        }
+        m.intent = request.intent;
+        m.preset = request.preset;
+        m.scope = request.scope.playlistId != 0 ? "playlist:" + std::to_string(request.scope.playlistId) : "library";
+        m.modelVersion = "rules"; // the preset's weights (P6-12 brings the personal ranker)
+        if (suggestionsFor == a)
+            for (std::size_t i = 0; i < suggestions.size(); ++i)
+            {
+                const auto& g = suggestions[i];
+                const bool chosen = g.trackId == b;
+                m.shown.push_back({g.trackId, static_cast<int>(i) + 1, chosen, matcher::choiceVector(g.features, g.energyDelta, m.intent)});
+                if (chosen)
+                    m.chosenRank = static_cast<int>(i) + 1;
+            }
+        if (!m.chosenRank) // not from the list: scored on the spot
+        {
+            matcher::ShownItem item{b, std::nullopt, true, {}};
+            if (gridReader != nullptr)
+                if (const auto one = matcher::MatcherService::scoreOne(*gridReader, request, b, matcherPresets))
+                    item.x = matcher::choiceVector(one->features, one->energyDelta, m.intent);
+            m.shown.push_back(item);
+        }
+        impression = std::move(m);
+    }
+    choiceTracker.loaded(static_cast<int>(deck), std::move(impression));
+}
+
+void MainComponent::choiceLogMenu(int op)
+{
+    if (libraryDb == nullptr || gridReader == nullptr)
+        return;
+    if (op == 3)
+    {
+        const int n = matcher::ChoiceLogRepository(*gridReader).count();
+        juce::AlertWindow::showOkCancelBox(
+            juce::MessageBoxIconType::WarningIcon, "Delete the Track Matcher log",
+            "Delete all " + juce::String(n) + " logged choices? The personal ranker starts again from nothing. This "
+                                              "can't be undone (export it first to keep a copy).",
+            "Delete", "Keep", nullptr,
+            juce::ModalCallbackFunction::create(
+                [safe = juce::Component::SafePointer<MainComponent>(this)](int result)
+                {
+                    if (safe == nullptr || result == 0)
+                        return;
+                    safe->libraryDb->write([](library::Connection& c) { matcher::ChoiceLogRepository(c).clear(); });
+                    safe->choiceTracker.clear(); // nothing pending any more (the callbacks stay)
+                    safe->libraryBrowser->setStatus("Track Matcher log deleted");
+                    util::logInfo("Choice log: deleted");
+                }));
+        return;
+    }
+    const bool csv = op == 1;
+    const auto folder = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("Devil-DJ");
+    folder.createDirectory();
+    const auto name = "choice-log " + juce::Time::getCurrentTime().formatted("%Y-%m-%d") + (csv ? ".csv" : ".json");
+    choiceExportChooser = std::make_unique<juce::FileChooser>("Export the Track Matcher log", folder.getChildFile(name),
+                                                              csv ? "*.csv" : "*.json");
+    choiceExportChooser->launchAsync(
+        juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
+        [this, csv](const juce::FileChooser& fc)
+        {
+            auto file = fc.getResult();
+            if (file == juce::File() || gridReader == nullptr)
+                return;
+            if (!file.hasFileExtension(csv ? "csv" : "json"))
+                file = file.withFileExtension(csv ? "csv" : "json");
+            const auto rows = matcher::ChoiceLogRepository(*gridReader).all();
+            const std::filesystem::path path(file.getFullPathName().toWideCharPointer());
+            const auto error = csv ? matcher::exportCsv(rows, path) : matcher::exportJson(rows, path);
+            libraryBrowser->setStatus(error ? "Export failed: " + juce::String(*error)
+                                            : juce::String(rows.size()) + " choices exported to " + file.getFullPathName());
+        });
 }
 
 std::optional<double> MainComponent::energyOf(std::int64_t trackId)
@@ -3688,6 +3822,7 @@ void MainComponent::trackHistory()
     for (engine::DeckId d = 0; d < 2; ++d)
     {
         const auto& deck = s.decks[d];
+        choiceTracker.played(d, deck.playing && !deck.cuePreview ? elapsed : 0.0); // P6-11
         const auto played = playTracker.update(d, deck.playing && !deck.cuePreview, elapsed);
         if (!played)
             continue;

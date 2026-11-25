@@ -52,6 +52,7 @@ public:
     const State& state() const noexcept { return current; }
 
     std::function<void(int)> onScope, onPreset, onIntent, onKeyPolicy, onHighlight, onLoad;
+    std::function<void(bool up)> onThumbs; // P6-11: the last transition, good / bad (' and Shift+')
 
     void resized() override;
     void paint(juce::Graphics& g) override;
@@ -63,6 +64,7 @@ public:
     juce::ComboBox& presetBox() noexcept { return preset; }
     juce::ComboBox& keyBox() noexcept { return keyPolicy; }
     juce::TextButton& intentButton(int i) noexcept { return intents[static_cast<std::size_t>(i)]; }
+    juce::TextButton& thumbsButton(bool up) noexcept { return up ? thumbsUp : thumbsDown; }
     int rowAt(juce::Point<int> p) const;
     static int chipLevel(double value); // 0 >= 0.7, 1 >= 0.4, else 2
 
@@ -70,6 +72,8 @@ private:
     State current;
     juce::ComboBox scope, preset, keyPolicy;
     std::array<juce::TextButton, 4> intents;
+    juce::TextButton thumbsUp{juce::String(juce::CharPointer_UTF8("\xe2\x9c\x93"))};   // check mark (P6-11)
+    juce::TextButton thumbsDown{juce::String(juce::CharPointer_UTF8("\xe2\x9c\x97"))}; // ballot x
     juce::Rectangle<int> listArea, miniArea;
     static constexpr int kRowHeight = 34;
 };

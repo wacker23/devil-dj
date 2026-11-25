@@ -2,6 +2,7 @@
 # Pure C++ over the library; no JUCE.
 add_library(devildj_matcher STATIC
     Camelot.cpp
+    ChoiceLog.cpp
     CandidateQuery.cpp
     Features.cpp
     MatcherService.cpp
@@ -13,6 +14,7 @@ target_sources(devildj_matcher PUBLIC
     BASE_DIRS "${PROJECT_SOURCE_DIR}/src"
     FILES
         Camelot.h
+        ChoiceLog.h
         CandidateQuery.h
         Features.h
         MatcherService.h
