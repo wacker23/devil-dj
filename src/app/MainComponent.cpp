@@ -742,6 +742,8 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
             util::logInfo("Stems: jobs cancelled");
         };
         libraryBrowser->stemsBusy = [this] { return !stemService->status().idle(); };
+        juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this)]
+                                        { if (safe != nullptr) safe->backfillVocals(); }); // P6-09
         libraryBrowser->stemsFolder = [this](std::int64_t id) -> juce::File
         {
             if (gridReader == nullptr)
@@ -3775,7 +3777,11 @@ void MainComponent::showStemProgress()
     stemsDone = s.done;
     stemsFailed = s.failed;
     if (finished)
+    {
         loadMissingStems(); // a track on a deck may have just been separated
+        if (s.lastDoneTrack != 0)
+            refreshVocals({{s.lastDoneTrack, s.lastDoneHash}}); // P6-09
+    }
 }
 
 void MainComponent::loadStemsFor(engine::DeckId deck, const engine::TrackBuffer& track)
@@ -3789,6 +3795,8 @@ void MainComponent::loadStemsFor(engine::DeckId deck, const engine::TrackBuffer&
         return;
     }
     stemLoader->request(deck, registry.find(&track), stemService->folderFor(hash));
+    if (deck < 2 && deckGrids[deck].trackId != 0)
+        refreshVocals({{deckGrids[deck].trackId, hash}}); // P6-09: its vocal presence on the waveform
 }
 
 void MainComponent::loadMissingStems()
@@ -4363,6 +4371,7 @@ void MainComponent::loadGridFor(engine::DeckId deck, const juce::File& file, dou
             }
             s->reset();
         }
+    d.vocals.reset();                    // P6-09: until its stems say
     showPhrases(deck);                   // none until the library says (P6-06)
     loadMixPoints(deck);                 // P6-08
     playTracker.loaded(deck, d.trackId); // P2-23: the history counts library tracks
@@ -4531,6 +4540,73 @@ void MainComponent::reloadGrid(engine::DeckId deck)
         return;
     d.grid = grid;
     sendGrid(deck);
+}
+
+// ---- vocal presence (P6-09) ----
+
+void MainComponent::refreshVocals(std::vector<std::pair<std::int64_t, std::string>> tracks)
+{
+    if (libraryDb == nullptr || stemService == nullptr || tracks.empty())
+        return;
+    auto reader = libraryDb->openReader();
+    if (!reader)
+        return;
+    std::shared_ptr<library::Connection> connection = std::move(reader).value();
+    std::vector<std::pair<std::int64_t, juce::File>> work;
+    for (const auto& [id, hash] : tracks)
+        if (!hash.empty() && stemService->ready(hash))
+            work.push_back({id, stemService->folderFor(hash)});
+    if (work.empty())
+        return;
+    const auto safe = juce::Component::SafePointer<MainComponent>(this);
+    juce::Thread::launch(
+        [safe, connection, work]
+        {
+            int stored = 0;
+            for (const auto& [id, folder] : work)
+            {
+                auto curve = ensureVocalCurve(folder);
+                if (!curve)
+                    continue;
+                const auto ends = vocalEnds(vocalPerPhrase(*curve, library::PhraseRepository(*connection).get(id).phrases));
+                stored += ends ? 1 : 0;
+                auto shared = std::make_shared<const VocalCurve>(std::move(*curve));
+                juce::MessageManager::callAsync(
+                    [safe, id = id, shared, ends]
+                    {
+                        if (safe == nullptr)
+                            return;
+                        if (ends && safe->libraryDb != nullptr) // written from here: the app is still there
+                            safe->libraryDb->write([id, e = *ends](library::Connection& c) { storeVocalEnds(c, id, e); });
+                        for (engine::DeckId d = 0; d < 2; ++d)
+                            if (safe->deckGrids[d].trackId == id)
+                            {
+                                safe->deckGrids[d].vocals = shared;
+                                safe->showPhrases(d);
+                            }
+                    });
+            }
+            if (work.size() > 1)
+                util::logInfo("Vocal presence: {} of {} separated tracks stored", stored, work.size());
+        });
+}
+
+void MainComponent::backfillVocals()
+{
+    // Separated tracks (their stems in the cache) with phrases but no vocal presence yet.
+    if (gridReader == nullptr || stemService == nullptr)
+        return;
+    std::vector<std::pair<std::int64_t, std::string>> tracks;
+    if (auto* s = gridReader->prepare("SELECT t.id, t.content_hash FROM tracks t LEFT JOIN track_features f ON "
+                                      "f.track_id = t.id WHERE f.vocal_intro IS NULL AND t.content_hash IS NOT NULL "
+                                      "AND EXISTS (SELECT 1 FROM phrases p WHERE p.track_id = t.id)"))
+    {
+        while (s->step())
+            if (auto hash = s->getText(1); stemService->ready(hash))
+                tracks.push_back({s->getInt(0), std::move(hash)});
+        s->reset();
+    }
+    refreshVocals(std::move(tracks));
 }
 
 // ---- mix points (P6-08) ----
@@ -4755,6 +4831,11 @@ void MainComponent::showPhrases(engine::DeckId deck)
         for (const auto& p : d.phrases.phrases)
             marks.push_back({p.startSeconds * d.bufferRate, p.bars, static_cast<float>(p.energy)});
     (deck == 0 ? waveA : waveB).setPhrases(std::move(marks), d.phrases.edited);
+    std::vector<float> vox; // P6-09
+    if (d.vocals != nullptr)
+        for (const double v : vocalPerPhrase(*d.vocals, d.phrases.phrases))
+            vox.push_back(static_cast<float>(v));
+    (deck == 0 ? waveA : waveB).setVocals(std::move(vox));
     updateCueSuggestions(deck); // P6-07: they come from the phrases
 }
 
@@ -4768,6 +4849,9 @@ void MainComponent::savePhrases(engine::DeckId deck, std::vector<library::Stored
     d.phrases = {phrases, true};
     showPhrases(deck);
     const auto id = d.trackId;
+    if (d.vocals != nullptr) // P6-09: the first / last phrase may have changed
+        if (const auto ends = vocalEnds(vocalPerPhrase(*d.vocals, phrases)))
+            libraryDb->write([id, e = *ends](library::Connection& c) { storeVocalEnds(c, id, e); });
     libraryDb->write([id, phrases](library::Connection& c) { library::PhraseRepository(c).set(id, phrases, true); });
 }
 

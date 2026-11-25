@@ -217,6 +217,20 @@ void WaveformView::paint(juce::Graphics& g)
                 const float h = 3.0f + 9.0f * std::clamp(p.energy, 0.0f, 1.0f);
                 g.setColour(phraseColour.withAlpha(0.15f + 0.45f * p.energy));
                 g.fillRect(juce::Rectangle<float>(x0, area.getBottom() - h, x1 - x0, h).getIntersection(area));
+                if (i < vocals.size() && vocals[i] > 0.02f) // vocal presence (P6-09)
+                {
+                    const auto vox = juce::Colour(0xffd05ad0);
+                    const auto strip = juce::Rectangle<float>(x0, area.getY(), x1 - x0, 9.0f).getIntersection(area);
+                    g.setColour(vox.withAlpha(0.2f + 0.7f * vocals[i]));
+                    g.fillRect(strip);
+                    if (vocals[i] >= 0.5f && strip.getWidth() > 30.0f)
+                    {
+                        g.setColour(juce::Colours::black);
+                        g.setFont(juce::FontOptions(8.5f, juce::Font::bold));
+                        g.drawText("VOX", strip.withTrimmedLeft(4.0f), juce::Justification::centredLeft);
+                        g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+                    }
+                }
                 g.setColour(phraseColour.withAlpha(phrasesEdited ? 0.95f : 0.75f));
                 g.fillRect(x0 - 1.0f, area.getY() + 12.0f, 2.0f, area.getHeight() - 12.0f);
                 g.drawText(juce::String(p.bars), juce::Rectangle<float>(x0 + 3.0f, area.getY() + 12.0f, 30.0f, 12.0f),

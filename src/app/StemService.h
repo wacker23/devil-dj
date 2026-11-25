@@ -67,6 +67,8 @@ public:
         double progress = 0.0; // of the running one, 0..1
         int done = 0, failed = 0;
         juce::String lastError, lastDone; // the last failure's reason; the last finished track's title
+        std::int64_t lastDoneTrack = 0;   // P6-09: the last finished track (its vocal presence is made next)
+        std::string lastDoneHash;
         double lastSeconds = 0.0;         // how long the last one took
         bool idle() const noexcept { return queued == 0 && !running; }
     };

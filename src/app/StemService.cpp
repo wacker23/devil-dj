@@ -1,5 +1,6 @@
 #include "app/StemService.h"
 
+#include "app/VocalPresence.h"
 #include "dsp/SincResampler.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -144,8 +145,11 @@ void StemService::process(const StemRequest& r)
         final.deleteRecursively();
         if (part.moveFileTo(final))
         {
+            ensureVocalCurve(final); // P6-09: vocal.json beside the stems
             ++state.done;
             state.lastDone = r.title;
+            state.lastDoneTrack = r.trackId;
+            state.lastDoneHash = r.contentHash;
             state.lastSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
             return;
         }

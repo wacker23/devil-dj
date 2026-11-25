@@ -146,6 +146,9 @@ TEST_CASE("Stems: a track becomes four 16-bit stereo FLACs at 44.1 kHz that add 
     CHECK(s.lastDone == "Track 1");
     REQUIRE(service.ready("h1"));
     CHECK(!t.dir.getChildFile("stems").getChildFile("h1.part").exists());
+    CHECK(service.folderFor("h1").getChildFile("vocal.json").existsAsFile()); // P6-09: the vocal curve too
+    CHECK(service.status().lastDoneTrack == 1);
+    CHECK(service.status().lastDoneHash == "h1");
 
     const auto json = juce::JSON::parse(service.folderFor("h1").getChildFile("stems.json"));
     CHECK(json["model"].toString() == "htdemucs");

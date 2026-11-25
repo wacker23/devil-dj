@@ -11,6 +11,25 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-25 · P6-09 Vocal presence
+- What changed:
+  - `app/VocalPresence`: the vocal stem's level per 0.1 s window, cached as `vocal.json` beside the stems. A window counts as vocal above -40 dBFS and within 18 dB of the track's loud vocals (95th percentile), so separation bleed and instrumentals read as no vocals.
+  - Per phrase: the share of vocal windows. `track_features.vocal_intro` / `vocal_outro` are the first and last phrase's; the columns were already in schema v2.
+  - When it runs:
+    - the stem service writes `vocal.json` after each separation and reports which track finished, and the app then stores that track's intro/outro;
+    - a separated track loaded on a deck;
+    - after a phrase edit;
+    - once at start for separated tracks that have none yet.
+  - The waveform draws a magenta strip per phrase along its top (stronger with more vocals, "VOX" from half up).
+- Tests / measurements:
+  - Curve from a vocal stem: sung windows read at the sine's RMS level and bleed at -50 dB.
+  - About 40 active windows for 4 s of singing. An instrumental's -48 dB bleed reads as none.
+  - Per phrase: 0, 0.75 and 0.25 as built. Intro/outro come from the first and last phrase.
+  - `vocal.json` is made once and read back (to 0.1 dB).
+  - Storage creates the row when missing, keeps the analysis columns, and survives the analysis writing its features later. The stem service writes `vocal.json` after a separation.
+- Notes / follow-ups:
+  - Only separated tracks get vocal presence. The owner's real tracks aren't checked yet; none has been separated in my test cache.
+
 ## 2026-11-25 · P6-08 Mix points
 - What changed:
   - MIX IN / MIX OUT per track, stored as `cues` rows of kind MixIn / MixOut (already in the schema). Set at the bar nearest the playhead: Alt+X / Alt+C on deck A, Alt+, / Alt+. on deck B, and Alt+Shift clears. Also from the waveform's right-click menu at a bar.

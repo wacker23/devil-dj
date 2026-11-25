@@ -29,6 +29,7 @@
 #include "app/CodeDeckProducer.h"
 #include "app/BeatRender.h"
 #include "app/SmartCues.h"
+#include "app/VocalPresence.h"
 #include "library/PhraseRepository.h"
 #include "app/DrumSwapBank.h"
 #include "app/StemDeckLoader.h"
@@ -367,7 +368,12 @@ private:
         float autoGainTrim = 0.0f;    // the trim Auto Gain set (a later analysis result only replaces that)
         library::StoredPhrases phrases; // P6-06 (seconds)
         std::optional<double> mixIn, mixOut; // P6-08 (buffer samples)
+        std::shared_ptr<const VocalCurve> vocals; // P6-09 (from the stems)
     };
+    // Vocal presence (P6-09): made from a track's vocal stem in the background - stored (vocal_intro / outro) and,
+    // for a track on a deck, drawn per phrase on its waveform. At start, every separated track without them.
+    void refreshVocals(std::vector<std::pair<std::int64_t, std::string>> tracks);
+    void backfillVocals();
     // Mix points (P6-08): loaded with the track, set at a bar (keys, right-click the waveform), shown on the waveform,
     // used by Auto (the plan) and Automix.
     void loadMixPoints(engine::DeckId deck);

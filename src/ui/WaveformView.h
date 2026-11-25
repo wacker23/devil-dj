@@ -65,6 +65,12 @@ public:
         repaint();
     }
     const std::vector<PhraseMark>& phraseMarks() const noexcept { return phrases; }
+    // Vocal presence (P6-09): per phrase (the same order), 0..1; a strip along the top ("VOX" from half up).
+    void setVocals(std::vector<float> perPhrase)
+    {
+        vocals = std::move(perPhrase);
+        repaint();
+    }
     // Mix points (P6-08): MIX IN / MIX OUT (buffer samples; none: not marked).
     void setMixPoints(std::optional<double> in, std::optional<double> out)
     {
@@ -130,6 +136,7 @@ private:
     std::array<std::uint32_t, 16> hotCueColours{};
     std::vector<std::pair<double, std::uint32_t>> memoryCues;
     std::vector<PhraseMark> phrases;
+    std::vector<float> vocals; // P6-09
     std::vector<std::pair<double, juce::String>> suggestions;
     std::optional<double> mixIn, mixOut;
     bool phrasesEdited = false;
