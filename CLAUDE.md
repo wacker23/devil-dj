@@ -20,6 +20,7 @@ Everything must be playable **without a DJ controller**: keyboard, mouse, touchs
 | `docs/KEYMAP.md` | Default keyboard / mouse bindings. |
 | `docs/LICENSES.md` | Dependency policy. Check it before adding any library. |
 | `docs/DEVLOG.md` | Append one short entry per finished task. |
+| `docs/TESTPLAN.md` | The owner's full manual test (end of Phase 6); their results come back as fixes. |
 
 ## How to pick and finish work
 

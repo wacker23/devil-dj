@@ -40,6 +40,7 @@ add_subdirectory(src/beatmaker)
 add_subdirectory(src/codebeat)
 add_subdirectory(src/ui)
 add_subdirectory(src/app)
+add_subdirectory(tools/matcher_eval)
 
 enable_testing()
 add_subdirectory(tests)

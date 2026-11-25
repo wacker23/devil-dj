@@ -249,6 +249,8 @@ Algorithm: beam search (width 16) to build a sequence, then local search with or
 
 Product metrics shown in the debug overlay: acceptance rate (share of loads taken from the top 10), mean rank of chosen track, 👍 rate. Targets are set after the first report, not guessed up front.
 
+As built (P6-13): `matcher/Evaluation` + `tools/matcher_eval` (`matcher_eval.exe [--library] [--out] [--no-tune] [--write-presets]`). Replay: B ranked by its score among the tracks in the library at the time (date_added), not A itself, with the default filters (tempo within 8 %, keys relaxed; B filtered = a miss); the history features from history before the transition only (pairs after A, artist pairs, plays in the 30 days before), so nothing is seen from hindsight; ties count as the middle of the tie. Each candidate's features are computed once per transition and only re-weighted per weight set (presets, the personal blend, Balanced without each feature). Tuning: coordinate ascent of Balanced's weights (x 0 / 0.5 / 1 / 1.5 / 2 / 3, two passes) on MRR - in-sample, a suggestion. The report also has the choice log's metrics (share taken from the list, mean chosen rank, outcomes, thumbs) and the personal model's weights. `--write-presets` adds "Tuned" to `Documents\Devil-DJ\Matcher\presets.json`, which the app now reads at start (presets otherwise built in). Smart Sort orderings: with Smart Sort (Phase 7).
+
 ## 11. Data model additions (schema v2)
 
 ```sql

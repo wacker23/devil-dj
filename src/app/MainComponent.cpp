@@ -354,7 +354,16 @@ MainComponent::MainComponent(engine::AudioEngine& audioEngine, engine::AudioDevi
     // Track Matcher (P3-19).
     if (libraryDb != nullptr)
     {
-        matcherService = std::make_unique<matcher::MatcherService>(*libraryDb);
+        // P6-13: presets from Documents\Devil-DJ\Matcher\presets.json when there is one (matcher_eval can add a
+        // tuned one there), else the built-in ones.
+        if (const auto file = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+                                  .getChildFile("Devil-DJ/Matcher/presets.json");
+            file.existsAsFile())
+        {
+            matcherPresets = matcher::presetsFromJson(file.loadFileAsString().toStdString());
+            util::logInfo("Matcher: {} presets from {}", matcherPresets.size(), file.getFullPathName().toStdString());
+        }
+        matcherService = std::make_unique<matcher::MatcherService>(*libraryDb, matcherPresets);
         matcherService->onResult = [safe = juce::Component::SafePointer<MainComponent>(this)](const matcher::MatchResult& r)
         {
             juce::MessageManager::callAsync(

@@ -11,6 +11,23 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-26 · P6-13 Matcher evaluation tool (built; the real report is the owner's)
+- Owner decision: build P6-13 now. After Phase 6 the owner logs sets and runs a full manual test that I wrote: `docs/TESTPLAN.md`.
+- What changed:
+  - `matcher/Evaluation` (offline replay): for every transition in the history, B is ranked among the library as it was then, with history and play counts from before it only.
+  - It reports HitRate@1/5/10, MRR and misses per preset, for the personal ranker's blend, and for Balanced with each feature left out (ablation).
+  - It tunes the weights by coordinate ascent on MRR, adds the choice-log metrics, and writes a markdown report.
+  - `tools/matcher_eval` is the command-line tool (Windows; it finds the app's library and the Documents folder itself). It writes `docs/reports/matcher-<date>.md`, and `--write-presets` adds a "Tuned" preset.
+  - The app now reads `Documents\Devil-DJ\Matcher\presets.json` when it exists.
+  - `docs/TESTPLAN.md`: the full manual test of Phases 0-6 (Parts A-I, 112 numbered steps plus the 5-point MVP checklist), the two logged sets, the evaluation run, the phase-gate checklists and a results form.
+- Tests / measurements:
+  - Ranks with ties and misses, HitRate and MRR by hand; the weight sets; tuning finds a groove-led owner (MRR to 1.0).
+  - The replay sees nothing from later: history 0 before the first a->b and above 0 at the second; a track added later is left out; A itself is never a candidate. The report's sections are checked.
+  - Run end to end on the library my tools can see: 32 tracks, no history, so the report says so.
+- Notes / follow-ups:
+  - Done-when ("first report from the owner's real history; presets retuned from it") is TESTPLAN H4-H6, so the PLAN box stays open until the owner's report.
+  - Smart Sort orderings come with Smart Sort (Phase 7).
+
 ## 2026-11-26 · P6-12 Personal ranker v1
 - What changed:
   - `matcher/Ranker`: pairs from the choice log, weighted and turned round by the outcome. A pairwise logistic loss plus a pull toward the preset (λ = 20), trained by Adam with weights kept non-negative.

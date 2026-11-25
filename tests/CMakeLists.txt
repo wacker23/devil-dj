@@ -121,6 +121,7 @@ target_sources(DevilDJTests PRIVATE
     matcher/MatcherTests.cpp
     matcher/MatcherV2Tests.cpp
     matcher/RankerTests.cpp
+    matcher/EvaluationTests.cpp
     ui/UiSmokeTests.cpp
     ui/DeckViewTests.cpp
     ui/PadModeTests.cpp
