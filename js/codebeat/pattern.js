@@ -60,7 +60,13 @@ export class Pattern {
 
     // Splits each query at cycle boundaries, so the inner query never spans two cycles.
     splitQueries() {
-        return new Pattern((state) => state.span.spanCycles().flatMap((span) => this.query(state.setSpan(span))));
+        return new Pattern((state) => {
+            const parts = state.span.spanCycles();
+            // Within one cycle (most queries): the query as it is.
+            return parts.length === 1 && parts[0] === state.span
+                ? this.query(state)
+                : parts.flatMap((span) => this.query(state.setSpan(span)));
+        });
     }
 
     // --- changing time and values ---
@@ -260,15 +266,17 @@ export class Pattern {
         if (b.eq(e))
             return silence;
         const width = e.sub(b);
+        const inverse = F(1).div(width);
         const pat = this;
         return new Pattern((state) => {
             const cycle = state.span.begin.sam();
-            const window = new Span(cycle.add(b), cycle.add(e));
+            const start = cycle.add(b);
+            const window = new Span(start, cycle.add(e));
             const span = state.span.intersection(window);
             if (span === null)
                 return [];
-            const toInner = (t) => cycle.add(t.sub(cycle).sub(b).div(width));
-            const toOuter = (t) => cycle.add(b).add(t.sub(cycle).mul(width));
+            const toInner = (t) => t.sub(start).mul(inverse).add(cycle);
+            const toOuter = (t) => t.sub(cycle).mul(width).add(start);
             return pat
                 .query(state.setSpan(span.withTime(toInner)))
                 .map((ev) => ev.withSpan((s) => s.withTime(toOuter)));
@@ -373,15 +381,32 @@ export function timecat(...steps) {
     if (items.length === 0 || total.n === 0)
         return silence;
     let at = F(0);
-    const parts = [];
+    const parts = []; // [begin, end, compressed pattern]: begin and end as numbers (cycle positions)
     for (const [w, p] of items) {
         if (w.n < 0)
             throw new RangeError(`A step weight can't be negative (${w})`);
         const next = at.add(w);
-        parts.push(p.compress(at.div(total), next.div(total)));
+        const b = at.div(total), e = next.div(total);
+        if (!b.eq(e)) // a zero-width step is silent
+            parts.push([b.valueOf(), e.valueOf(), p.compress(b, e)]);
         at = next;
     }
-    return stack(...parts);
+    // Only the steps near the query are asked (a 16-step rhythm queried for 25 ms asks one or two, not all 16).
+    // A quick float test with a margin, so it can only let through too many: each step's compress makes the exact
+    // test ([b, e) meets the span, or holds it when the span is a point in time) and gives nothing when it doesn't.
+    const kMargin = 1e-9;
+    return new Pattern((state) => {
+        const span = state.span;
+        const cycle = span.begin.floor();
+        const lo = span.begin.valueOf() - cycle - kMargin, hi = span.end.valueOf() - cycle + kMargin;
+        const out = [];
+        for (const [b, e, pat] of parts) {
+            if (b <= hi && lo <= e)
+                for (const ev of pat.query(state))
+                    out.push(ev);
+        }
+        return out;
+    }).splitQueries();
 }
 
 export const seq = fastcat;

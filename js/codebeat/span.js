@@ -2,10 +2,19 @@
 
 import { F, Fraction } from "./fraction.js";
 
+// A Span from two Fractions already known to be in order (begin <= end) - the checks are not repeated for the
+// spans queries make by the thousand (P5 performance pass).
+function ordered(begin, end) {
+    const s = Object.create(Span.prototype);
+    s.begin = begin;
+    s.end = end;
+    return Object.freeze(s);
+}
+
 export class Span {
     constructor(begin, end) {
-        this.begin = F(begin);
-        this.end = F(end);
+        this.begin = begin instanceof Fraction ? begin : F(begin);
+        this.end = end instanceof Fraction ? end : F(end);
         if (this.end.lt(this.begin))
             throw new RangeError(`Span ends before it begins: [${this.begin}, ${this.end})`);
         Object.freeze(this);
@@ -37,20 +46,23 @@ export class Span {
     spanCycles() {
         if (this.isZeroWidth())
             return [this];
-        const out = [];
         let begin = this.begin;
+        let next = begin.nextSam();
+        if (this.end.lte(next)) // within one cycle (most queries): the span itself
+            return [this];
+        const out = [];
         while (begin.lt(this.end)) {
-            const next = begin.nextSam();
             const end = next.lt(this.end) ? next : this.end;
-            out.push(new Span(begin, end));
+            out.push(ordered(begin, end));
             begin = end;
+            next = begin.nextSam();
         }
         return out;
     }
 
     // The whole cycle the span begins in: [floor(begin), floor(begin) + 1).
     wholeCycle() {
-        return new Span(this.begin.sam(), this.begin.nextSam());
+        return ordered(this.begin.sam(), this.begin.nextSam());
     }
 
     // The span moved into cycle 0 (both ends shifted by the begin's cycle); used to look up per-cycle structure.
@@ -85,7 +97,7 @@ export class Span {
     // The overlap, or null when they do not overlap. Spans that only touch do not overlap, except that a
     // zero-width span at the begin of (or inside) the other one does: that is how a point in time is queried.
     intersection(other) {
-        const { begin, end } = this.sect(other);
+        const begin = this.begin.max(other.begin), end = this.end.min(other.end);
         if (begin.gt(end))
             return null;
         if (begin.eq(end)) {
@@ -96,9 +108,9 @@ export class Span {
             const wide = point === this ? other : this;
             if (wide.isZeroWidth() ? !wide.begin.eq(point.begin) : !wide.contains(point.begin))
                 return null;
-            return new Span(begin, end);
+            return ordered(begin, end);
         }
-        return new Span(begin, end);
+        return ordered(begin, end);
     }
 
     toString() {

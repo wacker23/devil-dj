@@ -8,6 +8,8 @@
 function gcd(a, b) {
     a = Math.abs(a);
     b = Math.abs(b);
+    if (a === 1 || b === 1)
+        return 1; // the common case (whole numbers, coprime parts): no loop
     while (b !== 0) {
         const t = a % b;
         a = b;
@@ -22,6 +24,21 @@ function checked(x, what) {
     return x;
 }
 
+// A Fraction from parts already checked (safe integers, d > 0) - only reduced. Queries make many of these
+// (P5 performance pass), so the constructor's checks are not repeated for results of exact arithmetic.
+function reduced(n, d) {
+    const f = Object.create(Fraction.prototype);
+    if (d === 1) {
+        f.n = n + 0;
+        f.d = 1;
+    } else {
+        const g = gcd(n, d) || 1;
+        f.n = n / g + 0; // + 0 turns -0 into 0
+        f.d = d / g;
+    }
+    return Object.freeze(f);
+}
+
 export class Fraction {
     constructor(n, d = 1) {
         if (!Number.isSafeInteger(n) || !Number.isSafeInteger(d))
@@ -32,7 +49,7 @@ export class Fraction {
             n = -n;
             d = -d;
         }
-        const g = gcd(n, d) || 1;
+        const g = d === 1 ? 1 : gcd(n, d) || 1;
         this.n = n / g + 0; // + 0 turns -0 into 0
         this.d = d / g;
         Object.freeze(this);
@@ -41,23 +58,28 @@ export class Fraction {
     // --- arithmetic (each argument may be anything F() accepts) ---
 
     add(other) {
-        const o = F(other);
+        const o = other instanceof Fraction ? other : F(other);
+        if (this.d === o.d) // whole numbers and same-denominator times: no cross products
+            return reduced(checked(this.n + o.n, "add"), this.d);
         const g = gcd(this.d, o.d);
         const a = checked(this.n * (o.d / g), "add");
         const b = checked(o.n * (this.d / g), "add");
-        return new Fraction(checked(a + b, "add"), checked((this.d / g) * o.d, "add"));
+        return reduced(checked(a + b, "add"), checked((this.d / g) * o.d, "add"));
     }
 
     sub(other) {
-        return this.add(F(other).neg());
+        const o = other instanceof Fraction ? other : F(other);
+        if (this.d === o.d)
+            return reduced(checked(this.n - o.n, "sub"), this.d);
+        return this.add(o.neg());
     }
 
     mul(other) {
-        const o = F(other);
-        // Cross-reduce first so the products stay small.
+        const o = other instanceof Fraction ? other : F(other);
+        // Cross-reduce first so the products stay small (the result is then already in lowest terms).
         const g1 = gcd(this.n, o.d) || 1;
         const g2 = gcd(o.n, this.d) || 1;
-        return new Fraction(checked((this.n / g1) * (o.n / g2), "mul"), checked((this.d / g2) * (o.d / g1), "mul"));
+        return reduced(checked((this.n / g1) * (o.n / g2), "mul"), checked((this.d / g2) * (o.d / g1), "mul"));
     }
 
     div(other) {
@@ -68,7 +90,7 @@ export class Fraction {
     }
 
     neg() {
-        return new Fraction(-this.n, this.d);
+        return reduced(-this.n, this.d);
     }
 
     abs() {
@@ -78,7 +100,7 @@ export class Fraction {
     // --- comparison ---
 
     compare(other) {
-        const o = F(other);
+        const o = other instanceof Fraction ? other : F(other);
         if (this.d === o.d)
             return Math.sign(this.n - o.n);
         const g = gcd(this.d, o.d);
@@ -94,7 +116,7 @@ export class Fraction {
     }
 
     eq(other) {
-        const o = F(other);
+        const o = other instanceof Fraction ? other : F(other);
         return this.n === o.n && this.d === o.d;
     }
 
@@ -127,6 +149,8 @@ export class Fraction {
     // --- cycles ---
 
     floor() {
+        if (this.d === 1)
+            return this.n;
         // Exact (no float division): n = q * d + r with the remainder taken towards negative infinity.
         const r = this.n % this.d;
         return (this.n - r) / this.d - (r < 0 ? 1 : 0);
@@ -138,12 +162,12 @@ export class Fraction {
 
     // The start of the cycle this time is in, as a Fraction ("sam").
     sam() {
-        return new Fraction(this.floor());
+        return this.d === 1 ? this : reduced(this.floor(), 1);
     }
 
     // The start of the next cycle.
     nextSam() {
-        return new Fraction(this.floor() + 1);
+        return reduced(checked(this.floor() + 1, "nextSam"), 1);
     }
 
     // The position inside the cycle, 0 <= x < 1.

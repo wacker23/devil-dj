@@ -11,6 +11,20 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-28 · Code Beat query speed (owner request, outside the plan)
+- Why: the producer gives each ~25 ms window 5 ms (Release) and drops the window's sound past it. Ordinary 7-9 part patterns averaged ~2 ms per window in QuickJS, so GC pauses pushed some windows over (found while writing two 3-minute test songs).
+- What changed (js/codebeat; same events, same results):
+  - `Fraction`: no gcd for whole numbers and coprime parts; add / sub on equal denominators without cross products; results of exact arithmetic built without the constructor's re-checks; `instanceof` before `F()`; `floor` / `sam` fast for whole numbers.
+  - `Span`: spans whose order is already known built without the check; a query within one cycle is not split (`spanCycles`, `splitQueries`).
+  - `timecat` (every mini-notation sequence): only the steps near the query are asked - a float pre-test with a margin, so it can only let too many through; each step's `compress` still makes the exact test. `compress` maps times with one operation fewer.
+- Measured:
+  - The new test (a 7-part pattern, 25 ms windows over 32 bars, QuickJS Release): mean 2.03 ms before, 1.08 ms after; worst ~6 ms before, ~3 ms after; windows over 5 ms 1-2 before, 0 after.
+  - The two 3-minute songs (Node, interpreted): 0.72 -> 0.37 ms per window.
+- Checked:
+  - Every onset of the 12 help examples, the two loops and the two songs, over windows of 1, 1/3, 1/7, 1/16 and 1/66 bar, plus whole events over odd spans (209 checks), is the same as the old engine's.
+  - Within a window the order of events can differ when a query crosses a cycle line. After the engine's stable sort by time it is the same.
+  - JS tests 120/120, Release and Debug suites.
+
 ## 2026-11-28 · Program icon (owner request, outside the plan)
 - The owner's `devil_dj.ico` (16-256 px) is embedded in the exe through `src/app/DevilDJ.rc` (Windows only). Explorer, the taskbar and the window title bar use it (JUCE takes the exe's first icon for its windows).
 - Checked: Release and Debug build; the icon read back from the Release exe is the owner's.
