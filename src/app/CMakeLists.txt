@@ -94,7 +94,8 @@ target_sources(DevilDJ PRIVATE
     MainComponent.cpp
     MainComponent.h
     MainWindow.cpp
-    MainWindow.h)
+    MainWindow.h
+    $<$<PLATFORM_ID:Windows>:${CMAKE_CURRENT_SOURCE_DIR}/DevilDJ.rc>) # the program icon (devil_dj.ico)
 
 target_compile_definitions(DevilDJ PRIVATE
     JUCE_WEB_BROWSER=0

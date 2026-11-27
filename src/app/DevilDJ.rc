@@ -1,0 +1,2 @@
+// The program icon (the exe in Explorer, the taskbar and the window title bar - JUCE takes the exe's first icon).
+1 ICON "../../devil_dj.ico"

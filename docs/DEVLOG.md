@@ -11,6 +11,10 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-28 · Program icon (owner request, outside the plan)
+- The owner's `devil_dj.ico` (16-256 px) is embedded in the exe through `src/app/DevilDJ.rc` (Windows only). Explorer, the taskbar and the window title bar use it (JUCE takes the exe's first icon for its windows).
+- Checked: Release and Debug build; the icon read back from the Release exe is the owner's.
+
 ## 2026-11-26 · P6-13 Matcher evaluation tool (built; the real report is the owner's)
 - Owner decision: build P6-13 now. After Phase 6 the owner logs sets and runs a full manual test that I wrote: `docs/TESTPLAN.md`.
 - What changed:
