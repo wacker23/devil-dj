@@ -173,6 +173,7 @@ juce::PopupMenu AppMenu::getMenuForIndex(int /*topLevelMenuIndex*/, const juce::
         menu.addItem(OpenKeymapFolder, "Open keymap folder (keymap.json)");
         menu.addItem(ReloadKeymap, "Reload keymap");
         menu.addItem(-1, "Hold Ctrl + / to see the keyboard map", false);
+        menu.addItem(TouchpadTip, "Touchpad and keyboard pads together...");
         menu.addSeparator();
         juce::PopupMenu soakMenu;
         soakMenu.addItem(Soak60, "Run for 60 minutes");
@@ -365,6 +366,11 @@ void AppMenu::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
         case EditKeymap:
             if (onEditKeymap)
                 onEditKeymap();
+            break;
+
+        case TouchpadTip:
+            if (onTouchpadTip)
+                onTouchpadTip();
             break;
 
         case ReloadKeymap:

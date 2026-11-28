@@ -44,6 +44,7 @@ target_sources(DevilDJTests PRIVATE
     app/DrumSwapBankTests.cpp
     app/PhraseEditTests.cpp
     app/SmartCueTests.cpp
+    app/TouchpadCheckTests.cpp
     app/VocalPresenceTests.cpp
     app/ChoiceLogTests.cpp
     app/CodeRenderTests.cpp

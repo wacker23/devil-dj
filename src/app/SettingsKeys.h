@@ -32,6 +32,9 @@ inline const SettingKey<int> crossfaderAssignB{"crossfaderAssignB", 2};
 // Show the Debug menu (crash tests, log folder) in Release builds too. Debug builds always show it.
 inline const SettingKey<bool> showDebugMenu{"showDebugMenu", false};
 
+// The touchpad tip at start ("Don't show again"): Windows mutes the touchpad while keys are pressed.
+inline const SettingKey<bool> touchpadTipDismissed{"touchpadTipDismissed", false};
+
 // Folder shown in the temporary file browser (P1-18). Empty = the Music folder.
 inline const SettingKey<juce::String> browserFolder{"browserFolder", {}};
 

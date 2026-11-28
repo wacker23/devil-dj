@@ -23,6 +23,8 @@ target_sources(devildj_app_core INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/AutoTransition.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/TransitionStore.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/TransitionStore.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/TouchpadCheck.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/TouchpadCheck.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/TransitionPresets.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/TransitionPresets.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/PlaylistMatch.cpp"

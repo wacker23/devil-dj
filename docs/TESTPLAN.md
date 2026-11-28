@@ -18,6 +18,7 @@ A step-by-step test of everything built in Phases 0–6, for the owner to run on
 - [ ] **0.2** Have ready: your headphones (and, for one test, a second audio device such as a USB headset); the music folder `C:\Users\sophi\Music\DJ_collection`; a short M3U playlist file if you have one; an XML library export from other DJ software if you have one; 30 minutes of quiet for the listening tests.
 - [ ] **0.3** Back up your library first: start the app, Options > **Back up library now...**, note where it saved. (Part B tests restore; this is your safety copy.)
 - [ ] **0.4** The stem model is in `Documents\Devil-DJ\Models\htdemucs_core.onnx` (I copied it there in P6-03). Check the file is there (about 174 MB).
+- [ ] **0.5** If you use the laptop's touchpad: Windows mutes it for a moment after every key press, so it seems dead while you play pads from the keyboard. At start the app says so ("Touchpad and keyboard pads"); set Windows Settings > Bluetooth & devices > Touchpad > Taps > **Touchpad sensitivity: Most sensitive** (or use a USB mouse). Then check: hold a pad key and move / tap the touchpad at the same time - both work. The tip is also under Options > **Touchpad and keyboard pads together...**
 
 ## Part A — Start-up and settings (Phases 0–1)
 

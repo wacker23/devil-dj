@@ -11,6 +11,17 @@ Template:
 - Notes / follow-ups:
 ```
 
+## 2026-11-28 · Touchpad tip (owner report from the manual test, outside the plan)
+- Report: while playing pads and keys, the touchpad didn't work.
+- Cause: not the app. Windows' precision-touchpad palm rejection ("Touchpad sensitivity", AAPThreshold) mutes the touchpad for a moment after every key press. The owner's laptop is at Medium, the Windows default. Devil-DJ's keyboard hook (WH_KEYBOARD, this thread) only sees keys, and the pads take mouse and keys side by side.
+- What changed:
+  - `app/TouchpadCheck` reads the setting: 0 Most sensitive, 1 High, 2 Medium, 3 Low; none = no precision touchpad.
+  - At start, when the touchpad is muted while typing, a tip says so and how to change it. It has three buttons: Open touchpad settings (`ms-settings:devices-touchpad`), Don't show again (setting `touchpadTipDismissed`) and OK. It isn't shown for `--soak` / `--import` runs.
+  - Options > Touchpad and keyboard pads together... shows it at any time.
+  - TESTPLAN 0.5.
+- Checked: unit tests for when it shows and for its text; this computer's setting reads without failing; seen in my own instance of the app (Medium, all three buttons).
+- Also: the query-speed timing test failed once in a full run on a busy machine (it judged a single pass against 1.6 ms). It now runs three passes and judges the fastest against 1.8 ms. The old engine measured 2.03 ms at full speed and still fails it; this one is 1.1-1.3 ms depending on the laptop's power state.
+
 ## 2026-11-28 · Code Beat query speed (owner request, outside the plan)
 - Why: the producer gives each ~25 ms window 5 ms (Release) and drops the window's sound past it. Ordinary 7-9 part patterns averaged ~2 ms per window in QuickJS, so GC pauses pushed some windows over (found while writing two 3-minute test songs).
 - What changed (js/codebeat; same events, same results):

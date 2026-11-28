@@ -5,6 +5,7 @@
 #include "MainWindow.h"
 #include "Settings.h"
 #include "SettingsKeys.h"
+#include "TouchpadCheck.h"
 
 #include "engine/AudioDeviceService.h"
 #include "engine/AudioEngine.h"
@@ -285,6 +286,7 @@ public:
         };
         menu->onReloadKeymap = [this] { mainComponent->reloadKeymap(); };
         menu->onEditKeymap = [this] { mainComponent->editKeymap(); };
+        menu->onTouchpadTip = [this] { showTouchpadTip(false); };
         menu->onSoakTest = [this](double minutes)
         {
             if (minutes <= 0.0)
@@ -306,6 +308,37 @@ public:
         if (restored.isNotEmpty())
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "Library restored", restored);
         startAutomaticBackup();
+        // Not for unattended runs (a soak test or an import from the command line).
+        if (!commandLine.contains("--soak") && !commandLine.contains("--import") &&
+            touchpad::showAtStart(touchpad::readSensitivity(), settings->get(keys::touchpadTipDismissed)))
+            juce::Timer::callAfterDelay(1500, [this] { showTouchpadTip(true); });
+    }
+
+    // Windows mutes a precision touchpad for a moment after each key press, so it seems dead while pads are played
+    // from the keyboard. Said once at start (until "Don't show again") and from Options at any time.
+    void showTouchpadTip(bool atStart)
+    {
+        if (mainWindow == nullptr)
+            return;
+        const auto sensitivity = touchpad::readSensitivity();
+        const bool muted = touchpad::mutesWhileTyping(sensitivity);
+        auto* box = new juce::AlertWindow("Touchpad and keyboard pads", touchpad::tipText(sensitivity),
+                                          juce::MessageBoxIconType::InfoIcon, mainWindow.get());
+        constexpr int kOk = 0, kOpenSettings = 1, kDontShow = 2;
+        if (muted)
+            box->addButton("Open touchpad settings", kOpenSettings);
+        if (atStart)
+            box->addButton("Don't show again", kDontShow);
+        box->addButton("OK", kOk, juce::KeyPress(juce::KeyPress::returnKey), juce::KeyPress(juce::KeyPress::escapeKey));
+        box->enterModalState(true, juce::ModalCallbackFunction::create(
+                                       [this](int result)
+                                       {
+                                           if (result == kOpenSettings)
+                                               juce::Process::openDocument(touchpad::kSettingsUri, {});
+                                           else if (result == kDontShow && settings != nullptr)
+                                               settings->set(keys::touchpadTipDismissed, true);
+                                       }),
+                             true);
     }
 
     // P2-11: once a day, in the background, a backup into the backups folder (the newest 7 automatic ones kept).
